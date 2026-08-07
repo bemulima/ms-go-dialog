@@ -1,0 +1,19 @@
+schema_version: 1
+status: backend_contract_implemented_frontend_planned
+source_of_truth: docs/frontend-backend-contract-map.md
+message_loading:
+    initial: GET /api/v1/message/window around first unread
+    older: GET /api/v1/message/list with before_cursor
+    newer: GET /api/v1/message/list with after_cursor
+    order: ascending message_sequence
+read_state:
+    owner: one dialog_member row per user and dialog
+    visible_batch: PUT /api/v1/dialog/read/{dialogID}
+    read_all: PUT /api/v1/dialog/read-all/{dialogID}
+    rule: loading does not mark read; only contiguous read-through mutates state
+realtime:
+    scope: one user and one space per connection
+    recovery: compare connection.ready dialog high-water marks and reconcile through REST
+    deduplication: event_id
+attachments:
+    flow: upload temporary attachment, bind IDs on message create, wait for ready event, request signed URL

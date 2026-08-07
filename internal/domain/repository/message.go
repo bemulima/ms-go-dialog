@@ -46,4 +46,5 @@ type MessageRepository interface {
 	UpdateContent(ctx context.Context, message domain.Message, expectedVersion int) error
 	MarkDeleted(ctx context.Context, message domain.Message, expectedVersion int) error
 	AdvanceEvent(ctx context.Context, messageID uuid.UUID, eventSequence int64) (domain.Message, error)
+	UpdateModerationStatus(ctx context.Context, message domain.Message, expectedStatus domain.MessageStatus, expectedVersion int) error
 }

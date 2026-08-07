@@ -25,8 +25,12 @@ func classifyError(err error) (int, string, string) {
 	switch {
 	case errors.Is(err, domain.ErrAuthentication):
 		return http.StatusUnauthorized, "authentication_required", "authenticated user is required"
+	case errors.Is(err, domain.ErrRateLimited):
+		return http.StatusTooManyRequests, "rate_limited", "request rate limit exceeded"
 	case errors.Is(err, domain.ErrDialogNotFound):
 		return http.StatusNotFound, "dialog_not_found", "dialog was not found"
+	case errors.Is(err, domain.ErrSpaceNotFound):
+		return http.StatusNotFound, "space_not_found", "space was not found"
 	case errors.Is(err, domain.ErrMessageNotFound):
 		return http.StatusNotFound, "message_not_found", "message was not found"
 	case errors.Is(err, domain.ErrMemberNotFound):
@@ -43,6 +47,8 @@ func classifyError(err error) (int, string, string) {
 		return http.StatusConflict, "last_owner_required", "group must retain an active owner"
 	case errors.Is(err, domain.ErrMessageConflict), errors.Is(err, domain.ErrIdempotencyConflict), errors.Is(err, domain.ErrAlreadyExists):
 		return http.StatusConflict, "conflict", "request conflicts with current state"
+	case errors.Is(err, domain.ErrModerationConflict):
+		return http.StatusConflict, "moderation_conflict", "resource cannot transition to requested moderation state"
 	case errors.Is(err, domain.ErrInvalidReadSequence):
 		return http.StatusBadRequest, "invalid_read_sequence", "read sequence is invalid"
 	case errors.Is(err, domain.ErrLinksDisabled):

@@ -57,11 +57,43 @@ type ChangeRoleInput struct {
 	Role     domain.MemberRole
 }
 
+type UpdateGroupInput struct {
+	DialogID        uuid.UUID
+	Title           string
+	ExpectedVersion int
+}
+
 type View struct {
 	Dialog        domain.Dialog
 	Space         domain.Space
 	Members       []domain.Member
 	CurrentMember domain.Member
+}
+
+func (s Service) BlockUser(ctx context.Context, actor domain.Actor, userID uuid.UUID) error {
+	if err := actor.Validate(); err != nil {
+		return err
+	}
+	block := domain.UserBlock{BlockerID: actor.UserID, BlockedID: userID, CreatedAt: s.now()}
+	if err := block.Validate(); err != nil {
+		return err
+	}
+	if s.Blocks == nil {
+		return fmt.Errorf("block repository is not configured")
+	}
+	return s.Blocks.Block(ctx, actor.UserID, userID)
+}
+func (s Service) UnblockUser(ctx context.Context, actor domain.Actor, userID uuid.UUID) error {
+	if err := actor.Validate(); err != nil {
+		return err
+	}
+	if userID == uuid.Nil || userID == actor.UserID {
+		return domain.ErrValidation
+	}
+	if s.Blocks == nil {
+		return fmt.Errorf("block repository is not configured")
+	}
+	return s.Blocks.Unblock(ctx, actor.UserID, userID)
 }
 
 type EnsureResult struct {
@@ -230,6 +262,52 @@ func (s Service) Get(ctx context.Context, actor domain.Actor, dialogID uuid.UUID
 		return View{}, domain.ErrDialogNotFound
 	}
 	return s.buildView(ctx, actor.UserID, space, item)
+}
+
+func (s Service) UpdateGroup(ctx context.Context, actor domain.Actor, in UpdateGroupInput) (View, error) {
+	if err := actor.Validate(); err != nil {
+		return View{}, err
+	}
+	title := strings.TrimSpace(in.Title)
+	if in.DialogID == uuid.Nil || in.ExpectedVersion < 1 || title == "" || len([]rune(title)) > 200 {
+		return View{}, domain.ErrValidation
+	}
+	var result View
+	err := s.Tx.WithinTransaction(ctx, func(txCtx context.Context) error {
+		item, space, current, err := s.loadGroupForManagement(txCtx, actor, in.DialogID)
+		if err != nil {
+			return err
+		}
+		if current.Role != domain.MemberRoleOwner && current.Role != domain.MemberRoleAdmin {
+			return domain.ErrForbidden
+		}
+		if item.Version != in.ExpectedVersion {
+			return domain.ErrMessageConflict
+		}
+		if item.Title == title {
+			result, err = s.buildView(txCtx, actor.UserID, space, item)
+			return err
+		}
+		now := s.now()
+		item.Title = title
+		item.MaxEventSequence++
+		item.Version++
+		item.UpdatedAt = now
+		if err := s.Dialogs.UpdateState(txCtx, item, in.ExpectedVersion); err != nil {
+			return err
+		}
+		eventID := s.newID()
+		payload, err := json.Marshal(map[string]any{"schema_version": 1, "event_id": eventID, "occurred_at": now, "dialog_id": item.ID, "space_id": item.SpaceID, "event_sequence": item.MaxEventSequence, "title": item.Title, "version": item.Version, "actor_id": actor.UserID})
+		if err != nil {
+			return err
+		}
+		if err = s.Outbox.Add(txCtx, domain.OutboxEvent{ID: eventID, DialogID: item.ID, AggregateType: "dialog", AggregateID: item.ID, Subject: domain.EventDialogUpdated, EventSequence: item.MaxEventSequence, SchemaVersion: 1, Payload: payload, NextAttemptAt: now, CreatedAt: now}); err != nil {
+			return err
+		}
+		result, err = s.buildView(txCtx, actor.UserID, space, item)
+		return err
+	})
+	return result, err
 }
 
 func (s Service) List(ctx context.Context, actor domain.Actor, query repository.DialogListQuery) ([]repository.DialogListItem, error) {

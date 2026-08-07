@@ -161,6 +161,18 @@ version=version+1,last_event_sequence=$2,updated_at=NOW()
 WHERE id=$1 AND status=1 RETURNING `+messageColumns, messageID, eventSequence))
 }
 
+func (r MessageRepository) UpdateModerationStatus(ctx context.Context, item domain.Message, expectedStatus domain.MessageStatus, expectedVersion int) error {
+	command, err := runner(ctx, r.Pool).Exec(ctx, `UPDATE dialog_message SET status=$1,version=$2,last_event_sequence=$3,updated_at=$4
+WHERE id=$5 AND status=$6 AND version=$7`, item.Status, item.Version, item.LastEventSequence, item.UpdatedAt, item.ID, expectedStatus, expectedVersion)
+	if err != nil {
+		return mapError(err)
+	}
+	if command.RowsAffected() == 0 {
+		return domain.ErrMessageConflict
+	}
+	return nil
+}
+
 func reverseMessages(items []domain.Message) {
 	sort.SliceStable(items, func(i, j int) bool {
 		if items[i].MessageSequence == items[j].MessageSequence {

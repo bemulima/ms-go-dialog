@@ -95,6 +95,35 @@ last_message_at=$9, updated_at=$10 WHERE id=$11 AND version=$12`,
 	return nil
 }
 
+func (r DialogRepository) ListAdmin(ctx context.Context, query repository.AdminDialogListQuery) ([]domain.Dialog, error) {
+	base := `SELECT ` + dialogColumns + ` FROM dialog WHERE true`
+	args := []any{}
+	if query.SpaceID != nil {
+		args = append(args, *query.SpaceID)
+		base += fmt.Sprintf(" AND space_id=$%d", len(args))
+	}
+	if query.Status != nil {
+		args = append(args, *query.Status)
+		base += fmt.Sprintf(" AND status=$%d", len(args))
+	}
+	args = append(args, query.Limit, query.Offset)
+	base += fmt.Sprintf(" ORDER BY updated_at DESC,id DESC LIMIT $%d OFFSET $%d", len(args)-1, len(args))
+	rows, err := runner(ctx, r.Pool).Query(ctx, base, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]domain.Dialog, 0)
+	for rows.Next() {
+		item, err := scanDialog(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
 func scanDialogAndMember(row interface{ Scan(...any) error }) (domain.Dialog, domain.Member, error) {
 	var item domain.Dialog
 	var member domain.Member

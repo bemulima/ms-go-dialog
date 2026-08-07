@@ -56,11 +56,14 @@ contracts:
     - .ai/contracts/http.yaml
     - .ai/contracts/websocket.yaml
     - .ai/contracts/events.yaml
+    - .ai/contracts/frontend.yaml
 instructions:
     - AGENTS.md
     - prompts/git-workflow.md
     - docs/domain-map.md
     - docs/agent-contract-map.md
+    - docs/frontend-backend-contract-map.md
+    - docs/integration-contract.md
 commands:
     - format
     - dependencies

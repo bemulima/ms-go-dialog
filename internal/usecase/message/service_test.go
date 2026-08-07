@@ -101,6 +101,8 @@ func (f fakeSpaces) GetByKey(_ context.Context, key string) (domain.Space, error
 	}
 	return f.item, nil
 }
+func (f fakeSpaces) Update(context.Context, domain.Space) error             { return nil }
+func (f fakeSpaces) List(context.Context, int, int) ([]domain.Space, error) { return nil, nil }
 
 type fakeDialogs struct{ item domain.Dialog }
 
@@ -119,6 +121,9 @@ func (f *fakeDialogs) FindPersonalByKey(context.Context, uuid.UUID, []byte) (dom
 }
 func (f *fakeDialogs) LockPersonalKey(context.Context, uuid.UUID, []byte) error { return nil }
 func (f *fakeDialogs) ListForUser(context.Context, repository.DialogListQuery) ([]repository.DialogListItem, error) {
+	return nil, nil
+}
+func (f *fakeDialogs) ListAdmin(context.Context, repository.AdminDialogListQuery) ([]domain.Dialog, error) {
 	return nil, nil
 }
 func (f *fakeDialogs) UpdateState(_ context.Context, item domain.Dialog, expected int) error {
@@ -164,6 +169,9 @@ func (f *fakeMembers) IncrementUnreadRecipients(context.Context, uuid.UUID, uuid
 func (f *fakeMembers) DecrementUnreadForDeletedMessage(context.Context, uuid.UUID, uuid.UUID, int64, int64) error {
 	return nil
 }
+func (f *fakeMembers) IncrementUnreadForRestoredMessage(context.Context, uuid.UUID, uuid.UUID, int64, int64) error {
+	return nil
+}
 func (f *fakeMembers) CountActiveOwners(context.Context, uuid.UUID) (int, error) { return 1, nil }
 func (f *fakeMembers) ListActiveDialogSequencesForUser(context.Context, uuid.UUID, uuid.UUID) (map[uuid.UUID]int64, error) {
 	return nil, nil
@@ -204,6 +212,9 @@ func (*fakeMessages) UpdateContent(context.Context, domain.Message, int) error {
 func (*fakeMessages) MarkDeleted(context.Context, domain.Message, int) error   { return nil }
 func (*fakeMessages) AdvanceEvent(context.Context, uuid.UUID, int64) (domain.Message, error) {
 	return domain.Message{}, domain.ErrNotFound
+}
+func (*fakeMessages) UpdateModerationStatus(context.Context, domain.Message, domain.MessageStatus, int) error {
+	return nil
 }
 
 type fakeOutbox struct{ items []domain.OutboxEvent }

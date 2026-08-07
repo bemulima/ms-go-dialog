@@ -14,6 +14,10 @@ type Config struct {
 	HTTPWriteTimeoutSeconds      int    `envconfig:"HTTP_WRITE_TIMEOUT_SECONDS" default:"120"`
 	HTTPIdleTimeoutSeconds       int    `envconfig:"HTTP_IDLE_TIMEOUT_SECONDS" default:"60"`
 	HTTPMaxHeaderBytes           int    `envconfig:"HTTP_MAX_HEADER_BYTES" default:"32768"`
+	HTTPUserRateLimitRPS         int    `envconfig:"HTTP_USER_RATE_LIMIT_RPS" default:"20"`
+	HTTPUserRateLimitBurst       int    `envconfig:"HTTP_USER_RATE_LIMIT_BURST" default:"40"`
+	HTTPUserRateLimitMaxActors   int    `envconfig:"HTTP_USER_RATE_LIMIT_MAX_ACTORS" default:"10000"`
+	HTTPUserRateLimitIdleSeconds int    `envconfig:"HTTP_USER_RATE_LIMIT_IDLE_SECONDS" default:"300"`
 	DatabaseURL                  string `envconfig:"DATABASE_URL" default:"postgres://postgres:postgres@localhost:5444/ms_dialog?sslmode=disable"`
 	NATSURL                      string `envconfig:"NATS_URL" default:"nats://localhost:4222"`
 	FileStorageServiceBaseURL    string `envconfig:"FILESTORAGE_SERVICE_BASE_URL" default:"http://localhost:8088"`
@@ -60,6 +64,9 @@ func (c Config) Validate() error {
 		c.HTTPReadTimeoutSeconds < 1 || c.HTTPWriteTimeoutSeconds < 1 || c.HTTPIdleTimeoutSeconds < 1 ||
 		c.HTTPMaxHeaderBytes < 4096 || c.HTTPMaxHeaderBytes > 1<<20 {
 		return fmt.Errorf("HTTP and database configuration is invalid")
+	}
+	if c.HTTPUserRateLimitRPS < 1 || c.HTTPUserRateLimitBurst < 1 || c.HTTPUserRateLimitMaxActors < 1 || c.HTTPUserRateLimitIdleSeconds < 1 {
+		return fmt.Errorf("HTTP rate limit configuration is invalid")
 	}
 	if c.RealtimeTicketTTLSeconds < 1 || c.RealtimeTicketTTLSeconds > 30 ||
 		c.RealtimeTicketCleanupSeconds < 1 || c.WSMaxConnectionsPerUser < 1 || c.WSQueueSize < 1 || c.WSMaxFrameBytes < 1024 {

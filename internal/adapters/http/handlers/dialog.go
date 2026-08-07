@@ -15,6 +15,58 @@ import (
 
 type DialogHandler struct{ Service *dialoguc.Service }
 
+func (h DialogHandler) BlockUser(w http.ResponseWriter, r *http.Request) {
+	userID, ok := pathUUID(w, r, "userID")
+	if !ok {
+		return
+	}
+	if decodeOptionalEmptyBody(r) != nil {
+		WriteError(w, r, domain.ErrValidation)
+		return
+	}
+	if err := h.Service.BlockUser(r.Context(), middleware.Actor(r), userID); err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+func (h DialogHandler) UnblockUser(w http.ResponseWriter, r *http.Request) {
+	userID, ok := pathUUID(w, r, "userID")
+	if !ok {
+		return
+	}
+	if decodeOptionalEmptyBody(r) != nil {
+		WriteError(w, r, domain.ErrValidation)
+		return
+	}
+	if err := h.Service.UnblockUser(r.Context(), middleware.Actor(r), userID); err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h DialogHandler) Update(w http.ResponseWriter, r *http.Request) {
+	dialogID, ok := pathUUID(w, r, "dialogID")
+	if !ok {
+		return
+	}
+	var request struct {
+		Title   string `json:"title"`
+		Version int    `json:"version"`
+	}
+	if decodeJSON(w, r, &request) != nil {
+		WriteError(w, r, domain.ErrValidation)
+		return
+	}
+	view, err := h.Service.UpdateGroup(r.Context(), middleware.Actor(r), dialoguc.UpdateGroupInput{DialogID: dialogID, Title: request.Title, ExpectedVersion: request.Version})
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, newDialogResponse(view, true))
+}
+
 func (h DialogHandler) EnsurePersonal(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		SpaceKey      string    `json:"space_key"`

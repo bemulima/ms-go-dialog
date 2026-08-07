@@ -14,10 +14,12 @@ import (
 	"github.com/bemulima/ms-go-dialog/internal/adapters/filescan"
 	"github.com/bemulima/ms-go-dialog/internal/adapters/filestorage"
 	httpadapter "github.com/bemulima/ms-go-dialog/internal/adapters/http"
+	httpmiddleware "github.com/bemulima/ms-go-dialog/internal/adapters/http/middleware"
 	natsadapter "github.com/bemulima/ms-go-dialog/internal/adapters/nats"
 	"github.com/bemulima/ms-go-dialog/internal/adapters/postgres"
 	websocketadapter "github.com/bemulima/ms-go-dialog/internal/adapters/websocket"
 	"github.com/bemulima/ms-go-dialog/internal/config"
+	adminuc "github.com/bemulima/ms-go-dialog/internal/usecase/admin"
 	attachmentuc "github.com/bemulima/ms-go-dialog/internal/usecase/attachment"
 	dialoguc "github.com/bemulima/ms-go-dialog/internal/usecase/dialog"
 	messageuc "github.com/bemulima/ms-go-dialog/internal/usecase/message"
@@ -67,11 +69,17 @@ func run() error {
 	messageService := &messageuc.Service{
 		Spaces: spaces, Dialogs: dialogs, Members: members, Messages: messages,
 		Attachments: attachments, Outbox: outbox, Tx: tx,
+		Blocks: blocks,
 	}
 	attachmentService := &attachmentuc.Service{Spaces: spaces, Dialogs: dialogs, Members: members, Messages: messages, Attachments: attachments, Outbox: outbox, Tx: tx,
 		Files: &filestorage.Client{BaseURL: cfg.FileStorageServiceBaseURL}, Scanner: &filescan.ClamAV{Address: cfg.ClamAVAddress, Timeout: time.Duration(cfg.ClamAVTimeoutSeconds) * time.Second}, TTLMinutes: cfg.AttachmentTTLMinutes, SignedURLMinutes: cfg.AttachmentSignedURLMinutes, ActivationMaxAttempts: cfg.AttachmentActivationAttempts}
+	adminService := &adminuc.Service{Spaces: spaces, Dialogs: dialogs, Members: members, Messages: messages, Attachments: attachments, Outbox: outbox, Tx: tx}
 	realtimeService := &realtimeuc.TicketService{Spaces: spaces, Members: members, Tickets: tickets, TTL: time.Duration(cfg.RealtimeTicketTTLSeconds) * time.Second}
 	dispatcher := &realtimeuc.Dispatcher{Outbox: outbox, Lease: time.Duration(cfg.OutboxLeaseSeconds) * time.Second}
+	rateLimiter, err := httpmiddleware.NewActorRateLimiter(cfg.HTTPUserRateLimitRPS, cfg.HTTPUserRateLimitBurst, cfg.HTTPUserRateLimitMaxActors, time.Duration(cfg.HTTPUserRateLimitIdleSeconds)*time.Second)
+	if err != nil {
+		return fmt.Errorf("configure HTTP rate limiter: %w", err)
+	}
 
 	var natsConnection interface{ Drain() error }
 	var natsClient *natsadapter.Client
@@ -106,6 +114,8 @@ func run() error {
 		dependencies.MessageService = messageService
 		dependencies.AttachmentService = attachmentService
 		dependencies.RealtimeService = realtimeService
+		dependencies.AdminService = adminService
+		dependencies.UserRateLimiter = rateLimiter
 	}
 	if modeHasRealtime(cfg.ServiceMode) {
 		dependencies.WebSocketHandler = websocketHandler

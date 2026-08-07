@@ -93,6 +93,12 @@ AND last_read_message_sequence<$3 AND unread_count>0`, dialogID, senderID, messa
 	return mapError(err)
 }
 
+func (r MemberRepository) IncrementUnreadForRestoredMessage(ctx context.Context, dialogID, senderID uuid.UUID, messageSequence, eventSequence int64) error {
+	_, err := runner(ctx, r.Pool).Exec(ctx, `UPDATE dialog_member SET unread_count=unread_count+1,last_event_sequence=$4,updated_at=NOW()
+WHERE dialog_id=$1 AND user_id<>$2 AND status=1 AND last_read_message_sequence<$3`, dialogID, senderID, messageSequence, eventSequence)
+	return mapError(err)
+}
+
 func (r MemberRepository) CountActiveOwners(ctx context.Context, dialogID uuid.UUID) (int, error) {
 	var count int
 	err := runner(ctx, r.Pool).QueryRow(ctx, `SELECT COUNT(*) FROM dialog_member

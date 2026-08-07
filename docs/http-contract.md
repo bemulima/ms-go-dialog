@@ -22,6 +22,8 @@ POST   /api/v1/dialog/leave/{dialogID}
 POST   /api/v1/dialog-member/add/{dialogID}
 DELETE /api/v1/dialog-member/remove/{dialogID}/{userID}
 PUT    /api/v1/dialog-member/role/{dialogID}/{userID}
+PUT    /api/v1/user-block/{userID}
+DELETE /api/v1/user-block/{userID}
 GET    /api/v1/message/window
 GET    /api/v1/message/list
 GET    /api/v1/message/get/{messageID}

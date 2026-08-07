@@ -6,6 +6,7 @@ import (
 
 	"github.com/bemulima/ms-go-dialog/internal/adapters/http/handlers"
 	"github.com/bemulima/ms-go-dialog/internal/adapters/http/middleware"
+	adminuc "github.com/bemulima/ms-go-dialog/internal/usecase/admin"
 	attachmentuc "github.com/bemulima/ms-go-dialog/internal/usecase/attachment"
 	dialoguc "github.com/bemulima/ms-go-dialog/internal/usecase/dialog"
 	messageuc "github.com/bemulima/ms-go-dialog/internal/usecase/message"
@@ -14,11 +15,13 @@ import (
 )
 
 type RouterDependencies struct {
+	AdminService      *adminuc.Service
 	DialogService     *dialoguc.Service
 	MessageService    *messageuc.Service
 	AttachmentService *attachmentuc.Service
 	RealtimeService   *realtimeuc.TicketService
 	WebSocketHandler  http.Handler
+	UserRateLimiter   middleware.ActorLimiter
 }
 
 func NewRouter(deps RouterDependencies) http.Handler {
@@ -29,19 +32,42 @@ func NewRouter(deps RouterDependencies) http.Handler {
 	router.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "service": "ms-go-dialog"})
 	})
+	if deps.AdminService != nil {
+		router.Route("/admin/v1", func(admin chi.Router) {
+			admin.Use(middleware.RequireActor(handlers.WriteError))
+			if deps.UserRateLimiter != nil {
+				admin.Use(middleware.RateLimitActor(deps.UserRateLimiter, handlers.WriteError))
+			}
+			handler := handlers.AdminHandler{Service: deps.AdminService}
+			admin.Post("/space/create", handler.CreateSpace)
+			admin.Get("/space/list", handler.ListSpaces)
+			admin.Put("/space/update/{spaceID}", handler.UpdateSpace)
+			admin.Get("/dialog/list", handler.ListDialogs)
+			admin.Put("/dialog/close/{dialogID}", handler.CloseDialog)
+			admin.Put("/dialog/reopen/{dialogID}", handler.ReopenDialog)
+			admin.Put("/message/hide/{messageID}", handler.HideMessage)
+			admin.Put("/message/restore/{messageID}", handler.RestoreMessage)
+		})
+	}
 
 	router.Route("/api/v1", func(api chi.Router) {
 		api.Use(middleware.RequireActor(handlers.WriteError))
+		if deps.UserRateLimiter != nil {
+			api.Use(middleware.RateLimitActor(deps.UserRateLimiter, handlers.WriteError))
+		}
 		if deps.DialogService != nil {
 			handler := handlers.DialogHandler{Service: deps.DialogService}
 			api.Put("/dialog/personal/ensure", handler.EnsurePersonal)
 			api.Post("/dialog/group/create", handler.CreateGroup)
 			api.Get("/dialog/list", handler.List)
 			api.Get("/dialog/get/{dialogID}", handler.Get)
+			api.Put("/dialog/update/{dialogID}", handler.Update)
 			api.Post("/dialog/leave/{dialogID}", handler.Leave)
 			api.Post("/dialog-member/add/{dialogID}", handler.AddMember)
 			api.Delete("/dialog-member/remove/{dialogID}/{userID}", handler.RemoveMember)
 			api.Put("/dialog-member/role/{dialogID}/{userID}", handler.ChangeRole)
+			api.Put("/user-block/{userID}", handler.BlockUser)
+			api.Delete("/user-block/{userID}", handler.UnblockUser)
 		}
 		if deps.MessageService != nil {
 			handler := handlers.MessageHandler{Service: deps.MessageService}

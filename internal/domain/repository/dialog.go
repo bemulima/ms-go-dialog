@@ -24,6 +24,11 @@ type DialogListItem struct {
 	Dialog domain.Dialog
 	Member domain.Member
 }
+type AdminDialogListQuery struct {
+	SpaceID       *uuid.UUID
+	Status        *domain.DialogStatus
+	Limit, Offset int
+}
 
 type DialogRepository interface {
 	Create(ctx context.Context, dialog domain.Dialog) error
@@ -33,4 +38,5 @@ type DialogRepository interface {
 	LockPersonalKey(ctx context.Context, spaceID uuid.UUID, key []byte) error
 	ListForUser(ctx context.Context, query DialogListQuery) ([]DialogListItem, error)
 	UpdateState(ctx context.Context, dialog domain.Dialog, expectedVersion int) error
+	ListAdmin(ctx context.Context, query AdminDialogListQuery) ([]domain.Dialog, error)
 }

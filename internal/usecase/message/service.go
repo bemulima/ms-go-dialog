@@ -25,6 +25,7 @@ type Service struct {
 	Messages    repository.MessageRepository
 	Attachments repository.AttachmentRepository
 	Outbox      repository.OutboxRepository
+	Blocks      repository.BlockRepository
 	Tx          repository.TransactionManager
 	Now         func() time.Time
 	NewID       func() uuid.UUID
@@ -100,6 +101,24 @@ func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput)
 		dialogItem, space, _, err := s.loadWritableContext(txCtx, actor, in.DialogID, true)
 		if err != nil {
 			return err
+		}
+		if dialogItem.Type == domain.DialogTypePersonal && s.Blocks != nil {
+			members, err := s.Members.ListActive(txCtx, dialogItem.ID)
+			if err != nil {
+				return err
+			}
+			for _, member := range members {
+				if member.UserID == actor.UserID {
+					continue
+				}
+				blocked, err := s.Blocks.ExistsEitherDirection(txCtx, actor.UserID, member.UserID)
+				if err != nil {
+					return err
+				}
+				if blocked {
+					return domain.ErrBlocked
+				}
+			}
 		}
 		attachments, imageCount, fileCount, err := s.bindableAttachments(txCtx, actor.UserID, in.DialogID, in.AttachmentIDs, space.Policy)
 		if err != nil {

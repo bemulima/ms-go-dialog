@@ -1,5 +1,5 @@
 schema_version: 1
-status: planned
+status: implemented
 source_of_truth: docs/database-contract.md
 owned_tables:
     - dialog_space

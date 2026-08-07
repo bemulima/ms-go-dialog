@@ -53,6 +53,11 @@ layers:
         - temporary upload
         - idempotent activation/deletion
         - signed URL requests
+    - name: filescan_adapter
+      source_path: internal/adapters/filescan
+      responsibilities:
+        - ClamAV INSTREAM protocol
+        - fail-closed generic file scanning
 domain_ownership:
     - DialogSpace
     - Dialog

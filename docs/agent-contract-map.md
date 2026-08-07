@@ -10,6 +10,9 @@ This map is the final navigation source for the current backend release. Until i
 | Attachment bytes | `ms-go-filestorage` | local binding and authorization metadata |
 | Durable delivery | PostgreSQL outbox + NATS JetStream | at-least-once, event-ID deduplication |
 | Browser realtime | Dialog WebSocket | ticket-authenticated projection |
+| Malware decision | ClamAV | fail-closed synchronous scan for generic files |
+
+Integration boundaries are specified in `docs/integration-contract.md`. The future frontend must follow `docs/frontend-backend-contract-map.md`; in particular, loading is not reading and only an explicit contiguous read-through or read-all command mutates one member's counters.
 
 Change routing:
 
@@ -20,3 +23,4 @@ Change routing:
 - persistence: reversible migrations, postgres adapter, database contract;
 - event: domain subject, outbox, events contract and consumer rules;
 - attachment: attachment use case, FileStorage adapter, lifecycle contract.
+- frontend/read UX: frontend/backend map, message window query, per-member read transaction, `read.updated` event.

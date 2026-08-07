@@ -1,5 +1,5 @@
 schema_version: 1
-status: planned
+status: implemented
 source_of_truth: docs/http-contract.md
 route_groups:
     - prefix: /api/v1
@@ -16,6 +16,8 @@ route_groups:
         - POST /dialog-member/add/{dialogID}
         - DELETE /dialog-member/remove/{dialogID}/{userID}
         - PUT /dialog-member/role/{dialogID}/{userID}
+        - PUT /user-block/{userID}
+        - DELETE /user-block/{userID}
         - GET /message/window
         - GET /message/list
         - GET /message/get/{messageID}
