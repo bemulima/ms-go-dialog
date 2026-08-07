@@ -29,16 +29,16 @@ capabilities:
       status: implemented
       source_path: AGENTS.md
     - name: personal_and_group_dialogs
-      status: planned
+      status: implemented
       source_path: docs/domain-map.md
     - name: per_member_read_state
-      status: planned
+      status: implemented
       source_path: docs/business-rules.md
     - name: files_and_images
-      status: planned
+      status: implemented
       source_path: docs/attachment-lifecycle.md
     - name: user_scoped_realtime
-      status: planned
+      status: implemented
       source_path: docs/websocket-contract.md
 relations:
     - name: depends_on

@@ -446,7 +446,7 @@ func (s Service) addMemberEvent(ctx context.Context, item domain.Dialog, member 
 	payload, err := json.Marshal(map[string]any{
 		"schema_version": 1, "event_id": eventID, "occurred_at": now,
 		"dialog_id": item.ID, "event_sequence": item.MaxEventSequence,
-		"user_id": member.UserID, "role": member.Role, "status": member.Status, "actor_id": actorID,
+		"space_id": item.SpaceID, "user_id": member.UserID, "role": member.Role, "status": member.Status, "actor_id": actorID,
 	})
 	if err != nil {
 		return err
@@ -492,7 +492,7 @@ func (s Service) addCreatedEvent(ctx context.Context, item domain.Dialog, member
 	payload, err := json.Marshal(map[string]any{
 		"schema_version": 1, "event_id": s.newID(), "occurred_at": now,
 		"dialog_id": item.ID, "event_sequence": int64(1), "type": item.Type,
-		"created_by": item.CreatedBy, "participant_ids": ids,
+		"space_id": item.SpaceID, "created_by": item.CreatedBy, "participant_ids": ids,
 	})
 	if err != nil {
 		return err

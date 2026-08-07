@@ -17,4 +17,5 @@ type MemberRepository interface {
 	IncrementUnreadRecipients(ctx context.Context, dialogID, senderID uuid.UUID, eventSequence int64) error
 	DecrementUnreadForDeletedMessage(ctx context.Context, dialogID, senderID uuid.UUID, messageSequence, eventSequence int64) error
 	CountActiveOwners(ctx context.Context, dialogID uuid.UUID) (int, error)
+	ListActiveDialogSequencesForUser(ctx context.Context, spaceID, userID uuid.UUID) (map[uuid.UUID]int64, error)
 }

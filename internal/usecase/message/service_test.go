@@ -165,6 +165,9 @@ func (f *fakeMembers) DecrementUnreadForDeletedMessage(context.Context, uuid.UUI
 	return nil
 }
 func (f *fakeMembers) CountActiveOwners(context.Context, uuid.UUID) (int, error) { return 1, nil }
+func (f *fakeMembers) ListActiveDialogSequencesForUser(context.Context, uuid.UUID, uuid.UUID) (map[uuid.UUID]int64, error) {
+	return nil, nil
+}
 
 type fakeMessages struct{}
 

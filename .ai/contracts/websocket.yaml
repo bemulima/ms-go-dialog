@@ -1,5 +1,5 @@
 schema_version: 1
-status: planned
+status: implemented
 source_of_truth: docs/websocket-contract.md
 endpoint: GET /api/v1/ws
 protocol: dialog.v1
@@ -23,7 +23,6 @@ server_events:
         - connection.ready
         - typing.started
         - typing.stopped
-        - resync_required
         - error
         - ping
 client_events:

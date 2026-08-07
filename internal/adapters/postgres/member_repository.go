@@ -100,4 +100,24 @@ WHERE dialog_id=$1 AND status=1 AND role=1`, dialogID).Scan(&count)
 	return count, err
 }
 
+func (r MemberRepository) ListActiveDialogSequencesForUser(ctx context.Context, spaceID, userID uuid.UUID) (map[uuid.UUID]int64, error) {
+	rows, err := runner(ctx, r.Pool).Query(ctx, `SELECT d.id,d.max_event_sequence
+FROM dialog d JOIN dialog_member m ON m.dialog_id=d.id
+WHERE d.space_id=$1 AND d.status<>3 AND m.user_id=$2 AND m.status=1`, spaceID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[uuid.UUID]int64)
+	for rows.Next() {
+		var id uuid.UUID
+		var sequence int64
+		if err := rows.Scan(&id, &sequence); err != nil {
+			return nil, err
+		}
+		result[id] = sequence
+	}
+	return result, rows.Err()
+}
+
 var _ repository.MemberRepository = (*MemberRepository)(nil)

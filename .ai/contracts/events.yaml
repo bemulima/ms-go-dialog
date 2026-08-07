@@ -1,5 +1,5 @@
 schema_version: 1
-status: planned
+status: implemented
 source_of_truth: docs/realtime-delivery.md
 delivery:
     durable_transport: NATS JetStream
