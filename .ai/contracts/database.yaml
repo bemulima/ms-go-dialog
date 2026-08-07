@@ -1,0 +1,23 @@
+schema_version: 1
+status: planned
+source_of_truth: docs/database-contract.md
+owned_tables:
+    - dialog_space
+    - dialog
+    - dialog_member
+    - dialog_message
+    - dialog_attachment
+    - dialog_outbox
+    - dialog_ws_ticket
+    - dialog_user_block
+invariants:
+    - personal dialog is unique per unordered pair inside a space
+    - every member owns an independent monotonic read cursor and unread count
+    - message sequence is immutable and separate from event sequence
+    - message mutation and outbox evidence commit atomically
+    - attachment binding never crosses sender or dialog ownership
+migration_policy:
+    directory: db/migrations
+    format: ordered reversible up/down pairs
+    destructive_change_requires: .ai/workflows/change-contract.yaml
+repository_ports: internal/domain/repository

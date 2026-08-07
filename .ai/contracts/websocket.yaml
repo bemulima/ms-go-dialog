@@ -1,0 +1,36 @@
+schema_version: 1
+status: planned
+source_of_truth: docs/websocket-contract.md
+endpoint: GET /api/v1/ws
+protocol: dialog.v1
+authentication:
+    mechanism: short-lived single-use opaque ticket
+    transport: Sec-WebSocket-Protocol ticket.<opaque>
+    maximum_ttl_seconds: 30
+    query_credentials: forbidden
+server_events:
+    durable:
+        - dialog.updated
+        - member.added
+        - member.removed
+        - message.created
+        - message.updated
+        - message.deleted
+        - read.updated
+        - attachment.ready
+        - attachment.failed
+    ephemeral:
+        - connection.ready
+        - typing.started
+        - typing.stopped
+        - resync_required
+        - error
+        - ping
+client_events:
+    - typing.start
+    - typing.stop
+    - pong
+limits:
+    default_max_frame_bytes: 16384
+    default_connections_per_user: 5
+    default_outbound_queue_frames: 64

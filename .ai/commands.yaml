@@ -1,0 +1,52 @@
+schema_version: 1
+commands:
+    - name: format
+      run: gofmt -w cmd internal test
+      source_path: Makefile
+      requires_approval: false
+      risk: formatting
+    - name: dependencies
+      run: XDG_CACHE_HOME=$PWD/.cache GOMODCACHE=$PWD/.cache/gomod go mod download all
+      source_path: Makefile
+      requires_approval: false
+      risk: dependency_state
+    - name: tidy
+      run: XDG_CACHE_HOME=$PWD/.cache GOMODCACHE=$PWD/.cache/gomod go mod tidy
+      source_path: Makefile
+      requires_approval: false
+      risk: dependency_state
+    - name: test
+      run: XDG_CACHE_HOME=$PWD/.cache GOCACHE=$PWD/.cache/go-build GOMODCACHE=$PWD/.cache/gomod go test ./...
+      source_path: Makefile
+      requires_approval: false
+      risk: verification
+    - name: lint
+      run: $PWD/.cache/bin/golangci-lint run ./...
+      source_path: Makefile
+      requires_approval: false
+      risk: verification
+    - name: validate_contracts
+      run: make validate-contracts
+      source_path: Makefile
+      requires_approval: false
+      risk: verification
+    - name: migrate_local
+      run: make migrate
+      source_path: Makefile
+      requires_approval: true
+      risk: database_change
+    - name: run_local
+      run: go run ./cmd/ms-dialog-service
+      source_path: Taskfile.yml
+      requires_approval: true
+      risk: lifecycle
+    - name: start_local_stack
+      run: docker compose up -d --build
+      source_path: Taskfile.yml
+      requires_approval: true
+      risk: external_runtime
+    - name: stop_local_stack
+      run: docker compose down -v
+      source_path: Taskfile.yml
+      requires_approval: true
+      risk: state_change

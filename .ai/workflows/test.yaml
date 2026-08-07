@@ -1,0 +1,7 @@
+schema_version: 1
+name: test
+requires_approval: false
+steps:
+    - XDG_CACHE_HOME=$PWD/.cache GOCACHE=$PWD/.cache/go-build GOMODCACHE=$PWD/.cache/gomod go test ./...
+    - $PWD/.cache/bin/golangci-lint run ./...
+    - make validate-contracts

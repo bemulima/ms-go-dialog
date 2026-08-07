@@ -1,0 +1,8 @@
+schema_version: 1
+name: implement-feature
+requires_approval: true
+steps:
+    - read .ai/service.yaml and linked instructions
+    - implement within approved write scope
+    - run .ai/workflows/test.yaml when present
+    - request independent review

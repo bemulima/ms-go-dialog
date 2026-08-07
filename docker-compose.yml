@@ -1,0 +1,46 @@
+services:
+  postgres:
+    container_name: ms-dialog-postgres
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-ms_dialog}
+    ports:
+      - "${POSTGRES_PORT:-5444}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-ms_dialog}"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  ms-dialog-service:
+    container_name: ms-dialog-service
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    environment:
+      HTTP_PORT: "8080"
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-ms_dialog}?sslmode=disable
+      NATS_URL: nats://nats:4222
+      FILESTORAGE_SERVICE_BASE_URL: http://ms-filestorage:8080
+      USER_SERVICE_BASE_URL: http://ms-user-service:8080
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-change-me}
+      SERVICE_MODE: all
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${DIALOG_PORT:-8093}:8080"
+    networks:
+      - default
+      - ms-net
+
+volumes:
+  pgdata:
+
+networks:
+  ms-net:
+    external: true

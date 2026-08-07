@@ -1,0 +1,76 @@
+schema_version: 1
+style: clean_architecture
+entrypoints:
+    - name: ms-dialog-service
+      source_path: cmd/ms-dialog-service/main.go
+      responsibilities:
+        - process lifecycle
+        - dependency composition
+        - graceful shutdown
+layers:
+    - name: domain
+      source_path: internal/domain
+      responsibilities:
+        - entities and value objects
+        - invariants and stable errors
+        - repository and event ports
+      dependency_rule: imports no adapters
+    - name: usecase
+      source_path: internal/usecase
+      responsibilities:
+        - membership authorization
+        - transaction-scoped business processes
+        - message/event sequence and outbox orchestration
+      dependency_rule: depends on domain ports, not concrete adapters
+    - name: http_adapter
+      source_path: internal/adapters/http
+      responsibilities:
+        - route groups and middleware
+        - strict request/response mapping
+        - trusted gateway actor extraction
+      dependency_rule: handlers remain thin and call use cases
+    - name: websocket_adapter
+      source_path: internal/adapters/websocket
+      responsibilities:
+        - ticket consumption
+        - connection and subscription lifecycle
+        - event and typing projection
+      dependency_rule: does not duplicate durable message business rules
+    - name: postgres_adapter
+      source_path: internal/adapters/postgres
+      responsibilities:
+        - pgx repositories
+        - transaction manager
+        - outbox claiming
+    - name: nats_adapter
+      source_path: internal/adapters/nats
+      responsibilities:
+        - JetStream publication and subscription
+        - Core NATS typing fan-out
+    - name: filestorage_adapter
+      source_path: internal/adapters/filestorage
+      responsibilities:
+        - temporary upload
+        - idempotent activation/deletion
+        - signed URL requests
+domain_ownership:
+    - DialogSpace
+    - Dialog
+    - DialogMember
+    - DialogMessage
+    - DialogAttachment
+    - OutboxEvent
+    - RealtimeTicket
+    - UserBlock
+external_ownership:
+    - name: user_identity_and_profile
+      owner: ms-go-auth/ms-go-user
+      local_reference: UUID without cross-database FK
+    - name: attachment_bytes
+      owner: ms-go-filestorage
+      local_reference: filestorage_id
+runtime_modes:
+    - all
+    - api
+    - realtime
+    - worker

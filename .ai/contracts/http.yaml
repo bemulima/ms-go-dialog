@@ -1,0 +1,45 @@
+schema_version: 1
+status: planned
+source_of_truth: docs/http-contract.md
+route_groups:
+    - prefix: /api/v1
+      authentication: required gateway identity and active membership where dialog-scoped
+      routes:
+        - PUT /dialog/personal/ensure
+        - POST /dialog/group/create
+        - GET /dialog/list
+        - GET /dialog/get/{dialogID}
+        - PUT /dialog/update/{dialogID}
+        - PUT /dialog/read/{dialogID}
+        - PUT /dialog/read-all/{dialogID}
+        - POST /dialog/leave/{dialogID}
+        - POST /dialog-member/add/{dialogID}
+        - DELETE /dialog-member/remove/{dialogID}/{userID}
+        - PUT /dialog-member/role/{dialogID}/{userID}
+        - GET /message/window
+        - GET /message/list
+        - GET /message/get/{messageID}
+        - GET /message/changes
+        - POST /message/create
+        - PUT /message/update/{messageID}
+        - DELETE /message/delete/{messageID}
+        - POST /message-attachment/upload
+        - GET /message-attachment/signed-url/{attachmentID}
+        - DELETE /message-attachment/delete/{attachmentID}
+        - POST /realtime/ticket
+        - GET /ws
+    - prefix: /admin/v1
+      authentication: ADMIN configuration; ADMIN or MODERATOR explicit moderation
+      routes:
+        - POST /space/create
+        - GET /space/list
+        - PUT /space/update/{spaceID}
+        - GET /dialog/list
+        - PUT /dialog/close/{dialogID}
+        - PUT /dialog/reopen/{dialogID}
+        - PUT /message/hide/{messageID}
+        - PUT /message/restore/{messageID}
+pagination:
+    message_order: message_sequence
+    cursor: opaque and dialog scoped
+error_contract: docs/error-contract.md

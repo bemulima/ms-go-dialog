@@ -1,0 +1,25 @@
+version: '3'
+
+dotenv: ['.env']
+
+tasks:
+  fmt:
+    cmds: [gofmt -w cmd internal test]
+  deps:
+    cmds: [XDG_CACHE_HOME=$PWD/.cache GOMODCACHE=$PWD/.cache/gomod go mod download all]
+  tidy:
+    cmds: [XDG_CACHE_HOME=$PWD/.cache GOMODCACHE=$PWD/.cache/gomod go mod tidy]
+  run:
+    cmds: [go run ./cmd/ms-dialog-service]
+  test:
+    cmds: [XDG_CACHE_HOME=$PWD/.cache GOCACHE=$PWD/.cache/go-build GOMODCACHE=$PWD/.cache/gomod go test ./...]
+  lint:
+    cmds: [$PWD/.cache/bin/golangci-lint run ./...]
+  validate-contracts:
+    cmds: [make validate-contracts]
+  migrate:
+    cmds: [make migrate]
+  up:
+    cmds: [docker compose up -d --build]
+  down:
+    cmds: [docker compose down -v]

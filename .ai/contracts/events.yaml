@@ -1,0 +1,36 @@
+schema_version: 1
+status: planned
+source_of_truth: docs/realtime-delivery.md
+delivery:
+    durable_transport: NATS JetStream
+    persistence_boundary: PostgreSQL transactional outbox
+    semantics: at-least-once
+    deduplication_key: event_id
+subjects:
+    - dialog.created
+    - dialog.updated
+    - dialog.closed
+    - dialog.member.added
+    - dialog.member.removed
+    - dialog.member.role_updated
+    - dialog.message.created
+    - dialog.message.updated
+    - dialog.message.deleted
+    - dialog.message.hidden
+    - dialog.message.restored
+    - dialog.attachment.ready
+    - dialog.attachment.failed
+    - dialog.read.updated
+required_envelope_fields:
+    - schema_version
+    - event_id
+    - occurred_at
+    - dialog_id
+    - event_sequence
+consumer_rules:
+    - deduplicate by event_id
+    - compare event_sequence independently per dialog
+    - reconcile gaps through REST snapshots and message changes
+ephemeral:
+    transport: Core NATS
+    subject: dialog.realtime.typing.<dialog_uuid>

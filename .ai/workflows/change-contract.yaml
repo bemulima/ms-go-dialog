@@ -1,0 +1,9 @@
+schema_version: 1
+name: change-contract
+requires_approval: true
+steps:
+    - identify producers and consumers
+    - update versioned contract evidence
+    - check compatibility and drift
+    - run repository verification
+    - request independent review
