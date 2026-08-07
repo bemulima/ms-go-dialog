@@ -17,4 +17,11 @@ type AttachmentRepository interface {
 	BindToMessage(ctx context.Context, attachmentID, dialogID, messageID, uploaderID uuid.UUID) error
 	MarkMessageAttachmentsDeleted(ctx context.Context, dialogID, messageID uuid.UUID, now time.Time) error
 	UpdateStatus(ctx context.Context, attachment domain.Attachment) error
+	ListExpired(ctx context.Context, before time.Time, limit int) ([]domain.Attachment, error)
+	ListForActivation(ctx context.Context, now time.Time, limit int) ([]domain.Attachment, error)
+	MarkReadyIfProcessing(ctx context.Context, id uuid.UUID, now time.Time) (domain.Attachment, bool, error)
+	RecordActivationFailure(ctx context.Context, id uuid.UUID, next time.Time, message string, maxAttempts int) (domain.Attachment, bool, error)
+	ListForDeletion(ctx context.Context, now time.Time, limit int) ([]domain.Attachment, error)
+	MarkStorageDeleted(ctx context.Context, id uuid.UUID, now time.Time) error
+	RecordDeleteFailure(ctx context.Context, id uuid.UUID, next time.Time, message string) error
 }

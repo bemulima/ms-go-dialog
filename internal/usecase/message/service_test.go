@@ -199,6 +199,9 @@ func (*fakeMessages) CountUnreadIncoming(_ context.Context, _ uuid.UUID, _ uuid.
 }
 func (*fakeMessages) UpdateContent(context.Context, domain.Message, int) error { return nil }
 func (*fakeMessages) MarkDeleted(context.Context, domain.Message, int) error   { return nil }
+func (*fakeMessages) AdvanceEvent(context.Context, uuid.UUID, int64) (domain.Message, error) {
+	return domain.Message{}, domain.ErrNotFound
+}
 
 type fakeOutbox struct{ items []domain.OutboxEvent }
 

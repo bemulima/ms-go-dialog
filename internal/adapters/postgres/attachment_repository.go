@@ -100,4 +100,106 @@ last_error=$8, storage_deleted_at=$9, updated_at=$10 WHERE id=$11`,
 	return nil
 }
 
+func (r AttachmentRepository) ListExpired(ctx context.Context, before time.Time, limit int) ([]domain.Attachment, error) {
+	rows, err := runner(ctx, r.Pool).Query(ctx, `SELECT `+attachmentColumns+`
+FROM dialog_attachment WHERE status=1 AND expires_at<$1 ORDER BY expires_at,id LIMIT $2`, before, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanAttachmentRows(rows)
+}
+
+func (r AttachmentRepository) ListForActivation(ctx context.Context, now time.Time, limit int) ([]domain.Attachment, error) {
+	rows, err := runner(ctx, r.Pool).Query(ctx, `SELECT `+attachmentColumns+`
+FROM dialog_attachment WHERE status=3
+AND (activation_next_attempt_at IS NULL OR activation_next_attempt_at<=$1)
+ORDER BY activation_next_attempt_at NULLS FIRST,id LIMIT $2`, now, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanAttachmentRows(rows)
+}
+
+func (r AttachmentRepository) MarkReadyIfProcessing(ctx context.Context, id uuid.UUID, now time.Time) (domain.Attachment, bool, error) {
+	item, err := scanAttachment(runner(ctx, r.Pool).QueryRow(ctx, `UPDATE dialog_attachment SET
+status=4,activated_at=$2,activation_next_attempt_at=NULL,last_error=NULL,updated_at=$2
+WHERE id=$1 AND status=3 RETURNING `+attachmentColumns, id, now))
+	if err == domain.ErrNotFound {
+		return domain.Attachment{}, false, nil
+	}
+	return item, err == nil, err
+}
+
+func (r AttachmentRepository) RecordActivationFailure(ctx context.Context, id uuid.UUID, next time.Time, message string, maxAttempts int) (domain.Attachment, bool, error) {
+	item, err := scanAttachment(runner(ctx, r.Pool).QueryRow(ctx, `UPDATE dialog_attachment SET
+activation_attempts=activation_attempts+1,
+status=CASE WHEN activation_attempts+1 >= $4 THEN 5 ELSE 3 END,
+activation_next_attempt_at=CASE WHEN activation_attempts+1 >= $4 THEN NULL ELSE $2 END,
+last_error=left($3,1000),updated_at=NOW()
+WHERE id=$1 AND status=3 RETURNING `+attachmentColumns, id, next, message, maxAttempts))
+	if err == domain.ErrNotFound {
+		return domain.Attachment{}, false, nil
+	}
+	if err != nil {
+		return domain.Attachment{}, false, err
+	}
+	return item, item.Status == domain.AttachmentStatusFailed, nil
+}
+
+func (r AttachmentRepository) ListForDeletion(ctx context.Context, now time.Time, limit int) ([]domain.Attachment, error) {
+	rows, err := runner(ctx, r.Pool).Query(ctx, `SELECT `+attachmentColumns+`
+FROM dialog_attachment WHERE status=6 AND storage_deleted_at IS NULL
+AND (delete_next_attempt_at IS NULL OR delete_next_attempt_at<=$1)
+ORDER BY delete_next_attempt_at NULLS FIRST,id LIMIT $2`, now, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanAttachmentRows(rows)
+}
+
+func (r AttachmentRepository) MarkStorageDeleted(ctx context.Context, id uuid.UUID, now time.Time) error {
+	command, err := runner(ctx, r.Pool).Exec(ctx, `UPDATE dialog_attachment SET
+storage_deleted_at=$2,delete_next_attempt_at=NULL,last_error=NULL,updated_at=$2
+WHERE id=$1 AND status=6 AND storage_deleted_at IS NULL`, id, now)
+	if err != nil {
+		return mapError(err)
+	}
+	if command.RowsAffected() == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
+func (r AttachmentRepository) RecordDeleteFailure(ctx context.Context, id uuid.UUID, next time.Time, message string) error {
+	command, err := runner(ctx, r.Pool).Exec(ctx, `UPDATE dialog_attachment SET
+delete_attempts=delete_attempts+1,delete_next_attempt_at=$2,last_error=left($3,1000),updated_at=NOW()
+WHERE id=$1 AND status=6 AND storage_deleted_at IS NULL`, id, next, message)
+	if err != nil {
+		return mapError(err)
+	}
+	if command.RowsAffected() == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
+func scanAttachmentRows(rows interface {
+	Next() bool
+	Scan(...any) error
+	Err() error
+}) ([]domain.Attachment, error) {
+	items := make([]domain.Attachment, 0)
+	for rows.Next() {
+		item, err := scanAttachment(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
 var _ repository.AttachmentRepository = (*AttachmentRepository)(nil)

@@ -13,6 +13,7 @@ func TestConfig_ValidateModesAndTicketTTL(t *testing.T) {
 		AttachmentWorkerBatch: 50, AttachmentActivationAttempts: 5,
 		OutboxWorkerIntervalMS: 500, OutboxWorkerBatch: 100, OutboxLeaseSeconds: 30,
 		ShutdownTimeoutSeconds: 10,
+		ClamAVTimeoutSeconds:   30,
 	}
 	if err := valid.Validate(); err != nil {
 		t.Fatalf("valid config rejected: %v", err)

@@ -53,6 +53,14 @@ func classifyError(err error) (int, string, string) {
 		return http.StatusBadRequest, "files_disabled", "files are disabled"
 	case errors.Is(err, domain.ErrInvalidAttachment):
 		return http.StatusBadRequest, "attachment_invalid", "attachment is invalid"
+	case errors.Is(err, domain.ErrAttachmentNotFound):
+		return http.StatusNotFound, "attachment_not_found", "attachment was not found"
+	case errors.Is(err, domain.ErrAttachmentNotReady):
+		return http.StatusConflict, "attachment_not_ready", "attachment is not ready"
+	case errors.Is(err, domain.ErrFileInfected):
+		return http.StatusUnprocessableEntity, "file_infected", "file did not pass malware scanning"
+	case errors.Is(err, domain.ErrFileScanUnavailable):
+		return http.StatusServiceUnavailable, "file_scan_unavailable", "file scanning is temporarily unavailable"
 	case errors.Is(err, domain.ErrValidation), errors.Is(err, domain.ErrInvalidContent):
 		return http.StatusBadRequest, "invalid_request", "request is invalid"
 	default:

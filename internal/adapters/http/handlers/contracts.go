@@ -79,6 +79,10 @@ type attachmentResponse struct {
 	OriginalFilename string                  `json:"original_filename"`
 }
 
+func newAttachmentResponse(item domain.Attachment) attachmentResponse {
+	return attachmentResponse{ID: item.ID, Kind: item.Kind, Status: item.Status, MIMEType: item.MIMEType, SizeBytes: item.SizeBytes, Width: item.Width, Height: item.Height, OriginalFilename: item.OriginalFilename}
+}
+
 type messageResponse struct {
 	ID                uuid.UUID            `json:"id"`
 	DialogID          uuid.UUID            `json:"dialog_id"`
@@ -100,10 +104,7 @@ type messageResponse struct {
 func newMessageResponse(view message.View) messageResponse {
 	attachments := make([]attachmentResponse, 0, len(view.Attachments))
 	for _, item := range view.Attachments {
-		attachments = append(attachments, attachmentResponse{
-			ID: item.ID, Kind: item.Kind, Status: item.Status, MIMEType: item.MIMEType,
-			SizeBytes: item.SizeBytes, Width: item.Width, Height: item.Height, OriginalFilename: item.OriginalFilename,
-		})
+		attachments = append(attachments, newAttachmentResponse(item))
 	}
 	return messageResponse{
 		ID: view.Message.ID, DialogID: view.Message.DialogID, SenderID: view.Message.SenderID,

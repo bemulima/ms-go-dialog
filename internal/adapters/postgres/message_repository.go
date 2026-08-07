@@ -155,6 +155,12 @@ deleted_at=$4, updated_at=$5 WHERE id=$6 AND version=$7 AND status=1`,
 	return nil
 }
 
+func (r MessageRepository) AdvanceEvent(ctx context.Context, messageID uuid.UUID, eventSequence int64) (domain.Message, error) {
+	return scanMessage(runner(ctx, r.Pool).QueryRow(ctx, `UPDATE dialog_message SET
+version=version+1,last_event_sequence=$2,updated_at=NOW()
+WHERE id=$1 AND status=1 RETURNING `+messageColumns, messageID, eventSequence))
+}
+
 func reverseMessages(items []domain.Message) {
 	sort.SliceStable(items, func(i, j int) bool {
 		if items[i].MessageSequence == items[j].MessageSequence {

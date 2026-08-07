@@ -6,15 +6,17 @@ import (
 
 	"github.com/bemulima/ms-go-dialog/internal/adapters/http/handlers"
 	"github.com/bemulima/ms-go-dialog/internal/adapters/http/middleware"
+	attachmentuc "github.com/bemulima/ms-go-dialog/internal/usecase/attachment"
 	dialoguc "github.com/bemulima/ms-go-dialog/internal/usecase/dialog"
 	messageuc "github.com/bemulima/ms-go-dialog/internal/usecase/message"
 	"github.com/go-chi/chi/v5"
 )
 
 type RouterDependencies struct {
-	DialogService    *dialoguc.Service
-	MessageService   *messageuc.Service
-	WebSocketHandler http.Handler
+	DialogService     *dialoguc.Service
+	MessageService    *messageuc.Service
+	AttachmentService *attachmentuc.Service
+	WebSocketHandler  http.Handler
 }
 
 func NewRouter(deps RouterDependencies) http.Handler {
@@ -50,6 +52,12 @@ func NewRouter(deps RouterDependencies) http.Handler {
 			api.Delete("/message/delete/{messageID}", handler.Delete)
 			api.Put("/dialog/read/{dialogID}", handler.Read)
 			api.Put("/dialog/read-all/{dialogID}", handler.ReadAll)
+		}
+		if deps.AttachmentService != nil {
+			handler := handlers.AttachmentHandler{Service: deps.AttachmentService}
+			api.Post("/message-attachment/upload", handler.Upload)
+			api.Get("/message-attachment/signed-url/{attachmentID}", handler.SignedURL)
+			api.Delete("/message-attachment/delete/{attachmentID}", handler.Delete)
 		}
 	})
 	if deps.WebSocketHandler != nil {

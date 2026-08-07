@@ -17,6 +17,8 @@ type Config struct {
 	DatabaseURL                  string `envconfig:"DATABASE_URL" default:"postgres://postgres:postgres@localhost:5444/ms_dialog?sslmode=disable"`
 	NATSURL                      string `envconfig:"NATS_URL" default:"nats://localhost:4222"`
 	FileStorageServiceBaseURL    string `envconfig:"FILESTORAGE_SERVICE_BASE_URL" default:"http://localhost:8088"`
+	ClamAVAddress                string `envconfig:"CLAMAV_ADDRESS" default:"localhost:3310"`
+	ClamAVTimeoutSeconds         int    `envconfig:"CLAMAV_TIMEOUT_SECONDS" default:"30"`
 	UserServiceBaseURL           string `envconfig:"USER_SERVICE_BASE_URL" default:"http://localhost:8082"`
 	InternalAPIToken             string `envconfig:"INTERNAL_API_TOKEN" default:"change-me"`
 	ServiceMode                  string `envconfig:"SERVICE_MODE" default:"all"`
@@ -67,6 +69,9 @@ func (c Config) Validate() error {
 		c.AttachmentWorkerBatch < 1 || c.AttachmentActivationAttempts < 1 ||
 		c.OutboxWorkerIntervalMS < 1 || c.OutboxWorkerBatch < 1 || c.OutboxLeaseSeconds < 1 || c.ShutdownTimeoutSeconds < 1 {
 		return fmt.Errorf("worker configuration is invalid")
+	}
+	if c.ClamAVTimeoutSeconds < 1 || c.ClamAVTimeoutSeconds > 300 {
+		return fmt.Errorf("file scan configuration is invalid")
 	}
 	return nil
 }

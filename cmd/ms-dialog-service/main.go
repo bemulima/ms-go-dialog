@@ -10,9 +10,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/bemulima/ms-go-dialog/internal/adapters/filescan"
+	"github.com/bemulima/ms-go-dialog/internal/adapters/filestorage"
 	httpadapter "github.com/bemulima/ms-go-dialog/internal/adapters/http"
 	"github.com/bemulima/ms-go-dialog/internal/adapters/postgres"
 	"github.com/bemulima/ms-go-dialog/internal/config"
+	attachmentuc "github.com/bemulima/ms-go-dialog/internal/usecase/attachment"
 	dialoguc "github.com/bemulima/ms-go-dialog/internal/usecase/dialog"
 	messageuc "github.com/bemulima/ms-go-dialog/internal/usecase/message"
 	"go.uber.org/zap"
@@ -60,7 +63,9 @@ func run() error {
 		Spaces: spaces, Dialogs: dialogs, Members: members, Messages: messages,
 		Attachments: attachments, Outbox: outbox, Tx: tx,
 	}
-	router := httpadapter.NewRouter(httpadapter.RouterDependencies{DialogService: dialogService, MessageService: messageService})
+	attachmentService := &attachmentuc.Service{Spaces: spaces, Dialogs: dialogs, Members: members, Messages: messages, Attachments: attachments, Outbox: outbox, Tx: tx,
+		Files: &filestorage.Client{BaseURL: cfg.FileStorageServiceBaseURL}, Scanner: &filescan.ClamAV{Address: cfg.ClamAVAddress, Timeout: time.Duration(cfg.ClamAVTimeoutSeconds) * time.Second}, TTLMinutes: cfg.AttachmentTTLMinutes, SignedURLMinutes: cfg.AttachmentSignedURLMinutes, ActivationMaxAttempts: cfg.AttachmentActivationAttempts}
+	router := httpadapter.NewRouter(httpadapter.RouterDependencies{DialogService: dialogService, MessageService: messageService, AttachmentService: attachmentService})
 	server := &http.Server{
 		Addr:              ":" + cfg.HTTPPort,
 		Handler:           router,

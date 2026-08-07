@@ -45,4 +45,5 @@ type MessageRepository interface {
 	CountUnreadIncoming(ctx context.Context, dialogID, readerID uuid.UUID, afterExclusive, throughInclusive int64) (int64, error)
 	UpdateContent(ctx context.Context, message domain.Message, expectedVersion int) error
 	MarkDeleted(ctx context.Context, message domain.Message, expectedVersion int) error
+	AdvanceEvent(ctx context.Context, messageID uuid.UUID, eventSequence int64) (domain.Message, error)
 }
