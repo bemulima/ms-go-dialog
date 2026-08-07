@@ -3,6 +3,8 @@ package domain
 import "errors"
 
 var (
+	ErrNotFound            = errors.New("not found")
+	ErrAlreadyExists       = errors.New("already exists")
 	ErrValidation          = errors.New("validation failed")
 	ErrAuthentication      = errors.New("authentication required")
 	ErrForbidden           = errors.New("dialog forbidden")

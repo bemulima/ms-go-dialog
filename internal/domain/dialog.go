@@ -88,7 +88,7 @@ func (d Dialog) Validate() error {
 			return fmt.Errorf("%w: invalid personal dialog shape", ErrValidation)
 		}
 	case DialogTypeGroup:
-		if len(d.PersonalKey) != 0 || d.MemberCount < 2 || d.MemberCount > HardMaxGroupMembers || len([]rune(strings.TrimSpace(d.Title))) > 200 || strings.TrimSpace(d.Title) == "" {
+		if len(d.PersonalKey) != 0 || d.MemberCount < 1 || d.MemberCount > HardMaxGroupMembers || len([]rune(strings.TrimSpace(d.Title))) > 200 || strings.TrimSpace(d.Title) == "" {
 			return fmt.Errorf("%w: invalid group dialog shape", ErrValidation)
 		}
 	default:
