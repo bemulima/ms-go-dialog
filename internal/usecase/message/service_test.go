@@ -80,6 +80,21 @@ func TestReadAll_UsesCurrentDialogMaximumForOneMember(t *testing.T) {
 	}
 }
 
+func TestWindow_AppliesMemberHistoryBoundary(t *testing.T) {
+	now := time.Now().UTC()
+	dialogID, spaceID, userID := uuid.New(), uuid.New(), uuid.New()
+	messages := &fakeMessages{}
+	member := activeMember(dialogID, userID, 50, 0, now)
+	member.HistoryFromMessageSequence = 51
+	service := Service{Spaces: fakeSpaces{item: domain.Space{ID: spaceID, Key: "platform", Name: "Platform", Status: domain.SpaceStatusActive, Policy: domain.DefaultPolicy(), CreatedBy: userID, CreatedAt: now, UpdatedAt: now}}, Dialogs: &fakeDialogs{item: domain.Dialog{ID: dialogID, SpaceID: spaceID, Type: domain.DialogTypeGroup, Status: domain.DialogStatusActive, Title: "Group", CreatedBy: userID, Version: 1, MemberCount: 1, MessageCount: 50, MaxMessageSequence: 50, MaxEventSequence: 50, CreatedAt: now, UpdatedAt: now}}, Members: &fakeMembers{items: map[uuid.UUID]domain.Member{userID: member}}, Messages: messages}
+	if _, err := service.Window(context.Background(), domain.Actor{UserID: userID, Role: "USER"}, dialogID, 10, 10); err != nil {
+		t.Fatal(err)
+	}
+	if messages.lastWindow.FromSequence != 51 {
+		t.Fatalf("history boundary=%d", messages.lastWindow.FromSequence)
+	}
+}
+
 type fakeTx struct{}
 
 func (fakeTx) WithinTransaction(ctx context.Context, fn func(context.Context) error) error {
@@ -177,7 +192,11 @@ func (f *fakeMembers) ListActiveDialogSequencesForUser(context.Context, uuid.UUI
 	return nil, nil
 }
 
-type fakeMessages struct{}
+type fakeMessages struct {
+	lastList    repository.MessageListQuery
+	lastWindow  repository.MessageWindowQuery
+	lastChanges repository.MessageChangeQuery
+}
 
 func (*fakeMessages) Create(context.Context, domain.Message) error { return nil }
 func (*fakeMessages) GetByID(context.Context, uuid.UUID) (domain.Message, error) {
@@ -190,13 +209,16 @@ func (*fakeMessages) GetByIdempotencyKey(context.Context, uuid.UUID, uuid.UUID) 
 	return domain.Message{}, domain.ErrNotFound
 }
 func (*fakeMessages) LockIdempotencyKey(context.Context, uuid.UUID, uuid.UUID) error { return nil }
-func (*fakeMessages) List(context.Context, repository.MessageListQuery) ([]domain.Message, error) {
+func (f *fakeMessages) List(_ context.Context, q repository.MessageListQuery) ([]domain.Message, error) {
+	f.lastList = q
 	return nil, nil
 }
-func (*fakeMessages) Window(context.Context, repository.MessageWindowQuery) ([]domain.Message, error) {
+func (f *fakeMessages) Window(_ context.Context, q repository.MessageWindowQuery) ([]domain.Message, error) {
+	f.lastWindow = q
 	return nil, nil
 }
-func (*fakeMessages) ListChanges(context.Context, repository.MessageChangeQuery) ([]domain.Message, error) {
+func (f *fakeMessages) ListChanges(_ context.Context, q repository.MessageChangeQuery) ([]domain.Message, error) {
+	f.lastChanges = q
 	return nil, nil
 }
 func (*fakeMessages) FirstUnreadIncoming(_ context.Context, _ uuid.UUID, _ uuid.UUID, after int64) (int64, error) {

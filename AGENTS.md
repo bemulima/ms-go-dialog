@@ -56,7 +56,7 @@ git-backed repositories under `/Users/marat/Developments/microservices`.
 - `test`: cross-layer contract and migration tests.
 
 ## Build, Test, and Development Commands
-- `task up` or `docker-compose up --build`: start service + Postgres + NATS locally.
+- `task up` or `docker compose up --build`: start service + Postgres + ClamAV; NATS, FileStorage, and User are shared services on `ms-net`.
 - `make up`: same as above but detached.
 - `task migrate` or `make migrate`: apply SQL migrations inside the Postgres container (sorted order).
 - `task test` or `go test ./...`: run Go unit/integration tests with local build cache `.cache/go-build`.
@@ -83,7 +83,7 @@ git-backed repositories under `/Users/marat/Developments/microservices`.
 - Link issues if applicable; add screenshots or curl examples when altering HTTP endpoints.
 
 ## Security & Configuration Tips
-- Keep `INTERNAL_API_TOKEN` secret; it is accepted only on explicitly registered `/internal/v1/*` routes.
+- Keep `INTERNAL_API_TOKEN` secret for future explicitly registered `/internal/v1/*` routes; the current release exposes no internal route.
 - Trust `X-User-ID` and `X-User-Role` only behind the configured gateway; never expose the service container to untrusted traffic.
 - Never accept raw HTML. Treat message bodies, links, filenames, and attachment metadata as untrusted input.
 - Default envs are in README; avoid committing overrides. Migrations are ordered and reversible; avoid out-of-band schema changes.

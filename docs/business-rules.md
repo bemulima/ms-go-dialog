@@ -25,7 +25,7 @@
 - A read cursor is monotonic and cannot exceed the dialog's current message sequence.
 - New messages increment unread count for active recipients only, never for the sender.
 - `read-all` takes the current maximum message sequence inside its transaction and sets only the actor's unread count to zero.
-- A new group member defaults to history beginning after the current last message.
+- A new group member defaults to history beginning after the current last message. That boundary is enforced by window/list/changes/get/reply and attachment download authorization, not only stored as metadata.
 
 ## Delivery
 

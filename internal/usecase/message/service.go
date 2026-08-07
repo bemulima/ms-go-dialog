@@ -98,7 +98,7 @@ func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput)
 			return err
 		}
 
-		dialogItem, space, _, err := s.loadWritableContext(txCtx, actor, in.DialogID, true)
+		dialogItem, space, currentMember, err := s.loadWritableContext(txCtx, actor, in.DialogID, true)
 		if err != nil {
 			return err
 		}
@@ -130,7 +130,7 @@ func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput)
 		}
 		if in.ReplyToMessageID != nil {
 			reply, err := s.Messages.GetByID(txCtx, *in.ReplyToMessageID)
-			if err != nil || reply.DialogID != in.DialogID || reply.Status == domain.MessageStatusHidden {
+			if err != nil || reply.DialogID != in.DialogID || reply.Status == domain.MessageStatusHidden || reply.MessageSequence < currentMember.HistoryFromMessageSequence {
 				return domain.ErrMessageNotFound
 			}
 		}
@@ -362,7 +362,7 @@ func (s Service) Window(ctx context.Context, actor domain.Actor, dialogID uuid.U
 			return Window{}, err
 		}
 	}
-	items, err := s.Messages.Window(ctx, repository.MessageWindowQuery{DialogID: dialogID, AnchorSequence: anchor, Before: before, After: after})
+	items, err := s.Messages.Window(ctx, repository.MessageWindowQuery{DialogID: dialogID, FromSequence: member.HistoryFromMessageSequence, AnchorSequence: anchor, Before: before, After: after})
 	if err != nil {
 		return Window{}, err
 	}
@@ -381,9 +381,11 @@ func (s Service) List(ctx context.Context, actor domain.Actor, query repository.
 	if query.Limit < 1 || query.Limit > MaxPageLimit+1 {
 		return nil, fmt.Errorf("%w: invalid page limit", domain.ErrValidation)
 	}
-	if _, _, _, err := s.loadReadableContext(ctx, actor, query.DialogID); err != nil {
+	_, _, member, err := s.loadReadableContext(ctx, actor, query.DialogID)
+	if err != nil {
 		return nil, err
 	}
+	query.FromSequence = member.HistoryFromMessageSequence
 	items, err := s.Messages.List(ctx, query)
 	if err != nil {
 		return nil, err
@@ -398,9 +400,11 @@ func (s Service) ListChanges(ctx context.Context, actor domain.Actor, query repo
 	if query.AfterEventSequence < 0 || query.Limit < 1 || query.Limit > MaxPageLimit+1 {
 		return nil, fmt.Errorf("%w: invalid changes cursor or limit", domain.ErrValidation)
 	}
-	if _, _, _, err := s.loadReadableContext(ctx, actor, query.DialogID); err != nil {
+	_, _, member, err := s.loadReadableContext(ctx, actor, query.DialogID)
+	if err != nil {
 		return nil, err
 	}
+	query.FromSequence = member.HistoryFromMessageSequence
 	items, err := s.Messages.ListChanges(ctx, query)
 	if err != nil {
 		return nil, err
@@ -416,8 +420,12 @@ func (s Service) Get(ctx context.Context, actor domain.Actor, messageID uuid.UUI
 	if err != nil || item.Status == domain.MessageStatusHidden {
 		return View{}, domain.ErrMessageNotFound
 	}
-	if _, _, _, err := s.loadReadableContext(ctx, actor, item.DialogID); err != nil {
+	_, _, member, err := s.loadReadableContext(ctx, actor, item.DialogID)
+	if err != nil {
 		return View{}, err
+	}
+	if item.MessageSequence < member.HistoryFromMessageSequence {
+		return View{}, domain.ErrMessageNotFound
 	}
 	attachments, err := s.listAttachments(ctx, item.DialogID, item.ID)
 	return View{Message: item, Attachments: attachments}, err

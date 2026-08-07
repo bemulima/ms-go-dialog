@@ -77,7 +77,7 @@ func (s Service) Upload(ctx context.Context, actor domain.Actor, input UploadInp
 	if s.Files == nil {
 		return domain.Attachment{}, errors.New("filestorage adapter is not configured")
 	}
-	_, space, err := s.readContext(ctx, actor, input.DialogID)
+	_, space, _, err := s.readContext(ctx, actor, input.DialogID)
 	if err != nil {
 		return domain.Attachment{}, err
 	}
@@ -137,8 +137,12 @@ func (s Service) GetSignedURL(ctx context.Context, actor domain.Actor, id uuid.U
 	if err != nil || message.Status != domain.MessageStatusActive {
 		return SignedURL{}, domain.ErrAttachmentNotFound
 	}
-	if _, _, err := s.readContext(ctx, actor, item.DialogID); err != nil {
+	_, _, member, err := s.readContext(ctx, actor, item.DialogID)
+	if err != nil {
 		return SignedURL{}, err
+	}
+	if message.MessageSequence < member.HistoryFromMessageSequence {
+		return SignedURL{}, domain.ErrAttachmentNotFound
 	}
 	minutes := s.signedMinutes()
 	url, err := s.Files.SignedGETURL(ctx, item.FileStorageID, minutes)
@@ -161,7 +165,7 @@ func (s Service) Delete(ctx context.Context, actor domain.Actor, id uuid.UUID) (
 		if item.UploaderID != actor.UserID {
 			return domain.ErrForbidden
 		}
-		if _, _, err := s.readContext(txCtx, actor, item.DialogID); err != nil {
+		if _, _, _, err := s.readContext(txCtx, actor, item.DialogID); err != nil {
 			return err
 		}
 		if item.Status == domain.AttachmentStatusDeleted {
@@ -333,20 +337,20 @@ func (s Service) emitLifecycle(ctx context.Context, item domain.Attachment, subj
 	}
 	return s.Outbox.Add(ctx, domain.OutboxEvent{ID: eventID, DialogID: item.DialogID, AggregateType: "attachment", AggregateID: item.ID, Subject: subject, EventSequence: eventSequence, SchemaVersion: 1, Payload: payload, NextAttemptAt: s.now(), CreatedAt: s.now()})
 }
-func (s Service) readContext(ctx context.Context, actor domain.Actor, dialogID uuid.UUID) (domain.Dialog, domain.Space, error) {
+func (s Service) readContext(ctx context.Context, actor domain.Actor, dialogID uuid.UUID) (domain.Dialog, domain.Space, domain.Member, error) {
 	item, err := s.Dialogs.GetByID(ctx, dialogID)
 	if err != nil || item.Status == domain.DialogStatusHidden {
-		return domain.Dialog{}, domain.Space{}, domain.ErrDialogNotFound
+		return domain.Dialog{}, domain.Space{}, domain.Member{}, domain.ErrDialogNotFound
 	}
 	space, err := s.Spaces.GetByID(ctx, item.SpaceID)
 	if err != nil || space.Status != domain.SpaceStatusActive {
-		return domain.Dialog{}, domain.Space{}, domain.ErrDialogNotFound
+		return domain.Dialog{}, domain.Space{}, domain.Member{}, domain.ErrDialogNotFound
 	}
 	member, err := s.Members.Get(ctx, dialogID, actor.UserID)
 	if err != nil || member.Status != domain.MemberStatusActive {
-		return domain.Dialog{}, domain.Space{}, domain.ErrForbidden
+		return domain.Dialog{}, domain.Space{}, domain.Member{}, domain.ErrForbidden
 	}
-	return item, space, nil
+	return item, space, member, nil
 }
 func (s Service) now() time.Time {
 	if s.Now != nil {

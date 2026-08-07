@@ -48,19 +48,19 @@ func (r MessageRepository) LockIdempotencyKey(ctx context.Context, senderID, key
 }
 
 func (r MessageRepository) List(ctx context.Context, query repository.MessageListQuery) ([]domain.Message, error) {
-	base := `SELECT ` + messageColumns + ` FROM dialog_message WHERE dialog_id=$1 AND status<>3`
-	args := []any{query.DialogID}
+	base := `SELECT ` + messageColumns + ` FROM dialog_message WHERE dialog_id=$1 AND message_sequence>=$2 AND status<>3`
+	args := []any{query.DialogID, query.FromSequence}
 	descending := false
 	if query.Before != nil {
 		args = append(args, query.Before.Sequence, query.Before.ID, query.Limit)
-		base += ` AND (message_sequence,id)<($2,$3) ORDER BY message_sequence DESC,id DESC LIMIT $4`
+		base += ` AND (message_sequence,id)<($3,$4) ORDER BY message_sequence DESC,id DESC LIMIT $5`
 		descending = true
 	} else if query.After != nil {
 		args = append(args, query.After.Sequence, query.After.ID, query.Limit)
-		base += ` AND (message_sequence,id)>($2,$3) ORDER BY message_sequence,id LIMIT $4`
+		base += ` AND (message_sequence,id)>($3,$4) ORDER BY message_sequence,id LIMIT $5`
 	} else {
 		args = append(args, query.Limit)
-		base += ` ORDER BY message_sequence DESC,id DESC LIMIT $2`
+		base += ` ORDER BY message_sequence DESC,id DESC LIMIT $3`
 		descending = true
 	}
 	rows, err := runner(ctx, r.Pool).Query(ctx, base, args...)
@@ -78,13 +78,13 @@ func (r MessageRepository) List(ctx context.Context, query repository.MessageLis
 func (r MessageRepository) Window(ctx context.Context, query repository.MessageWindowQuery) ([]domain.Message, error) {
 	rows, err := runner(ctx, r.Pool).Query(ctx, `SELECT `+messageColumns+` FROM (
     (SELECT `+messageColumns+` FROM dialog_message
-     WHERE dialog_id=$1 AND message_sequence<$2 AND status<>3
+     WHERE dialog_id=$1 AND message_sequence>=$5 AND message_sequence<$2 AND status<>3
      ORDER BY message_sequence DESC,id DESC LIMIT $3)
     UNION ALL
     (SELECT `+messageColumns+` FROM dialog_message
-     WHERE dialog_id=$1 AND message_sequence>=$2 AND status<>3
+     WHERE dialog_id=$1 AND message_sequence>=$5 AND message_sequence>=$2 AND status<>3
      ORDER BY message_sequence,id LIMIT $4)
-) AS window ORDER BY message_sequence,id`, query.DialogID, query.AnchorSequence, query.Before, query.After)
+) AS window ORDER BY message_sequence,id`, query.DialogID, query.AnchorSequence, query.Before, query.After, query.FromSequence)
 	if err != nil {
 		return nil, err
 	}
@@ -94,8 +94,8 @@ func (r MessageRepository) Window(ctx context.Context, query repository.MessageW
 
 func (r MessageRepository) ListChanges(ctx context.Context, query repository.MessageChangeQuery) ([]domain.Message, error) {
 	rows, err := runner(ctx, r.Pool).Query(ctx, `SELECT `+messageColumns+`
-FROM dialog_message WHERE dialog_id=$1 AND last_event_sequence>$2
-ORDER BY last_event_sequence,id LIMIT $3`, query.DialogID, query.AfterEventSequence, query.Limit)
+FROM dialog_message WHERE dialog_id=$1 AND message_sequence>=$2 AND last_event_sequence>$3
+ORDER BY last_event_sequence,id LIMIT $4`, query.DialogID, query.FromSequence, query.AfterEventSequence, query.Limit)
 	if err != nil {
 		return nil, err
 	}

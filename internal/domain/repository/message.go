@@ -13,20 +13,23 @@ type MessageCursor struct {
 }
 
 type MessageListQuery struct {
-	DialogID uuid.UUID
-	Before   *MessageCursor
-	After    *MessageCursor
-	Limit    int
+	DialogID     uuid.UUID
+	FromSequence int64
+	Before       *MessageCursor
+	After        *MessageCursor
+	Limit        int
 }
 
 type MessageChangeQuery struct {
 	DialogID           uuid.UUID
+	FromSequence       int64
 	AfterEventSequence int64
 	Limit              int
 }
 
 type MessageWindowQuery struct {
 	DialogID       uuid.UUID
+	FromSequence   int64
 	AnchorSequence int64
 	Before         int
 	After          int
