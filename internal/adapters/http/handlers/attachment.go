@@ -70,6 +70,10 @@ func (h AttachmentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, r, domain.ErrValidation)
 		return
 	}
+	if err := decodeOptionalEmptyBody(r); err != nil {
+		WriteError(w, r, domain.ErrValidation)
+		return
+	}
 	item, err := h.Service.Delete(r.Context(), middleware.Actor(r), id)
 	if err != nil {
 		WriteError(w, r, err)

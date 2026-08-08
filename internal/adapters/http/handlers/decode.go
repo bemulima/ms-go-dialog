@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,16 +24,29 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, target any) error {
 }
 
 func decodeOptionalEmptyBody(r *http.Request) error {
-	if r.Body == nil || r.ContentLength == 0 {
+	if r.Body == nil {
 		return nil
 	}
-	decoder := json.NewDecoder(io.LimitReader(r.Body, 1024))
+	payload, err := io.ReadAll(io.LimitReader(r.Body, 1025))
+	if err != nil {
+		return err
+	}
+	if len(payload) > 1024 {
+		return fmt.Errorf("request body exceeds 1024 bytes")
+	}
+	if len(bytes.TrimSpace(payload)) == 0 {
+		return nil
+	}
+	decoder := json.NewDecoder(bytes.NewReader(payload))
 	var empty map[string]json.RawMessage
 	if err := decoder.Decode(&empty); err != nil {
 		return err
 	}
-	if len(empty) != 0 {
+	if empty == nil || len(empty) != 0 {
 		return fmt.Errorf("request body must be empty")
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return fmt.Errorf("request body must contain at most one empty JSON object")
 	}
 	return nil
 }

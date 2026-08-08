@@ -192,6 +192,10 @@ func (h DialogHandler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if err := decodeOptionalEmptyBody(r); err != nil {
+		WriteError(w, r, domain.ErrValidation)
+		return
+	}
 	view, err := h.Service.RemoveMember(r.Context(), middleware.Actor(r), dialogID, userID)
 	if err != nil {
 		WriteError(w, r, err)

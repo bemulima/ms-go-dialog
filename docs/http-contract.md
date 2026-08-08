@@ -7,7 +7,7 @@ Route groups follow the platform convention:
 - `/admin/v1`: explicit role-protected administration and moderation;
 - `/internal/v1`: exact shared-token service calls when introduced.
 
-Bodies reject unknown fields and acting-user fields. Pagination cursors are opaque, base64url encoded, and bound to their dialog/direction.
+Bodies reject unknown fields and acting-user fields. Commands documented without a request body accept an absent/whitespace body or one empty `{}` object up to 1 KiB; additional JSON values, fields, and oversized bodies are rejected. Pagination cursors are opaque, base64url encoded, and bound to their dialog/direction.
 
 ## Operational API
 
