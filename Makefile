@@ -21,6 +21,7 @@ validate-contracts:
 		test -s "$$file"; \
 		rg -q '^schema_version: 1$$' "$$file"; \
 	done
+	@XDG_CACHE_HOME=$(CURDIR)/.cache GOCACHE=$(CURDIR)/.cache/go-build GOMODCACHE=$(CURDIR)/.cache/gomod go test ./test/contracts
 
 migrate:
 	@sh scripts/migrate.sh

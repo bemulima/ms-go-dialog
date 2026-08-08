@@ -10,12 +10,17 @@ authentication:
     query_credentials: forbidden
 server_events:
     durable:
+        - dialog.created
         - dialog.updated
+        - dialog.closed
         - member.added
         - member.removed
+        - member.role_updated
         - message.created
         - message.updated
         - message.deleted
+        - message.hidden
+        - message.restored
         - read.updated
         - attachment.ready
         - attachment.failed
