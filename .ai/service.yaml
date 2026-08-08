@@ -3,7 +3,7 @@ name: ms-go-dialog
 service_kind: backend_service
 repository_role: service
 repository:
-    git_url: pending
+    git_url: https://github.com/bemulima/ms-go-dialog.git
     default_branch: main
 purpose: >-
     Independent authenticated personal and group messaging service. It owns dialogs,
