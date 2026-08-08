@@ -23,10 +23,7 @@ validate-contracts:
 	done
 
 migrate:
-	@set -eu; \
-	for file in $$(find db/migrations -name '*.up.sql' | sort); do \
-		docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$${POSTGRES_USER:-postgres}" -d "$${POSTGRES_DB:-ms_dialog}" < "$$file"; \
-	done
+	@sh scripts/migrate.sh
 
 up:
 	docker compose up -d --build

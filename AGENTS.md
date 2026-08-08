@@ -58,7 +58,7 @@ git-backed repositories under `/Users/marat/Developments/microservices`.
 ## Build, Test, and Development Commands
 - `task up` or `docker compose up --build`: start service + Postgres + ClamAV; NATS, FileStorage, and User are shared services on `ms-net`.
 - `make up`: same as above but detached.
-- `task migrate` or `make migrate`: apply SQL migrations inside the Postgres container (sorted order).
+- `task migrate` or `make migrate`: apply only unapplied SQL migrations inside the Postgres container using the service migration ledger.
 - `task test` or `go test ./...`: run Go unit/integration tests with local build cache `.cache/go-build`.
 - `task down` or `docker compose down -v`: stop stack and clean volumes.
 - `make validate-contracts`: validate checked-in service and agent contracts.

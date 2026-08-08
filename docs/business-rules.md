@@ -7,6 +7,8 @@
 - A user may read or mutate a dialog only while its membership is active.
 - Personal dialogs contain exactly two immutable participant identities and are unique per unordered pair inside one space.
 - Group owners and admins manage membership. A group must retain an active owner.
+- Rejoining a group starts a new active membership interval and a new history boundary after the current last message.
+- Dialogs in a disabled space are omitted from user lists and cannot be read or mutated until the space is active again.
 - Blocking prevents new personal-dialog creation and new messages between the blocked pair.
 
 ## Messages

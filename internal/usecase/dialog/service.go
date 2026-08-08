@@ -329,6 +329,9 @@ func (s Service) AddMember(ctx context.Context, actor domain.Actor, in AddMember
 		return View{}, fmt.Errorf("%w: dialog and user UUIDs are required", domain.ErrValidation)
 	}
 	if s.Participants != nil {
+		if err := s.authorizeGroupManager(ctx, actor, in.DialogID); err != nil {
+			return View{}, err
+		}
 		if err := s.Participants.RequireActiveUsers(ctx, []uuid.UUID{in.UserID}); err != nil {
 			return View{}, err
 		}
@@ -342,9 +345,6 @@ func (s Service) AddMember(ctx context.Context, actor domain.Actor, in AddMember
 		if current.Role != domain.MemberRoleOwner && current.Role != domain.MemberRoleAdmin {
 			return domain.ErrForbidden
 		}
-		if item.MemberCount >= space.Policy.MaxGroupMembers {
-			return domain.ErrMemberLimit
-		}
 		existing, err := s.Members.GetForUpdate(txCtx, item.ID, in.UserID)
 		if err == nil && existing.Status == domain.MemberStatusActive {
 			return domain.ErrAlreadyExists
@@ -352,12 +352,14 @@ func (s Service) AddMember(ctx context.Context, actor domain.Actor, in AddMember
 		if err != nil && !errors.Is(err, domain.ErrNotFound) {
 			return err
 		}
+		if item.MemberCount >= space.Policy.MaxGroupMembers {
+			return domain.ErrMemberLimit
+		}
 		now, eventSequence := s.now(), item.MaxEventSequence+1
 		member := newMember(item.ID, in.UserID, domain.MemberRoleMember, actor.UserID, eventSequence, now)
 		member.HistoryFromMessageSequence = item.MaxMessageSequence + 1
 		member.LastReadMessageSequence = item.MaxMessageSequence
 		if err == nil {
-			member.JoinedAt = existing.JoinedAt
 			if err := s.Members.Update(txCtx, member); err != nil {
 				return err
 			}
@@ -381,6 +383,9 @@ func (s Service) AddMember(ctx context.Context, actor domain.Actor, in AddMember
 func (s Service) RemoveMember(ctx context.Context, actor domain.Actor, dialogID, userID uuid.UUID) (View, error) {
 	if err := actor.Validate(); err != nil {
 		return View{}, err
+	}
+	if dialogID == uuid.Nil || userID == uuid.Nil {
+		return View{}, domain.ErrValidation
 	}
 	var result View
 	err := s.Tx.WithinTransaction(ctx, func(txCtx context.Context) error {
@@ -421,6 +426,9 @@ func (s Service) Leave(ctx context.Context, actor domain.Actor, dialogID uuid.UU
 	if err := actor.Validate(); err != nil {
 		return err
 	}
+	if dialogID == uuid.Nil {
+		return domain.ErrValidation
+	}
 	return s.Tx.WithinTransaction(ctx, func(txCtx context.Context) error {
 		item, _, current, err := s.loadGroupForManagement(txCtx, actor, dialogID)
 		if err != nil {
@@ -453,7 +461,7 @@ func (s Service) ChangeRole(ctx context.Context, actor domain.Actor, in ChangeRo
 	if err := actor.Validate(); err != nil {
 		return View{}, err
 	}
-	if in.Role < domain.MemberRoleOwner || in.Role > domain.MemberRoleMember {
+	if in.DialogID == uuid.Nil || in.UserID == uuid.Nil || in.Role < domain.MemberRoleOwner || in.Role > domain.MemberRoleMember {
 		return View{}, fmt.Errorf("%w: invalid member role", domain.ErrValidation)
 	}
 	var result View
@@ -498,6 +506,25 @@ func (s Service) ChangeRole(ctx context.Context, actor domain.Actor, in ChangeRo
 		return err
 	})
 	return result, err
+}
+
+func (s Service) authorizeGroupManager(ctx context.Context, actor domain.Actor, dialogID uuid.UUID) error {
+	item, err := s.Dialogs.GetByID(ctx, dialogID)
+	if err != nil || item.Status == domain.DialogStatusHidden {
+		return domain.ErrDialogNotFound
+	}
+	if item.Type != domain.DialogTypeGroup || item.Status != domain.DialogStatusActive {
+		return domain.ErrForbidden
+	}
+	space, err := s.Spaces.GetByID(ctx, item.SpaceID)
+	if err != nil || space.Status != domain.SpaceStatusActive {
+		return domain.ErrDialogNotFound
+	}
+	current, err := s.Members.Get(ctx, dialogID, actor.UserID)
+	if err != nil || current.Status != domain.MemberStatusActive || (current.Role != domain.MemberRoleOwner && current.Role != domain.MemberRoleAdmin) {
+		return domain.ErrForbidden
+	}
+	return nil
 }
 
 func (s Service) loadGroupForManagement(ctx context.Context, actor domain.Actor, dialogID uuid.UUID) (domain.Dialog, domain.Space, domain.Member, error) {

@@ -2,6 +2,10 @@
 
 PostgreSQL is owned exclusively by `ms-go-dialog`. Migrations are ordered reversible `.up.sql`/`.down.sql` pairs and do not use cross-service foreign keys.
 
+Applied migrations are immutable. The initial group shape requires at least two members; migration `003_group_single_owner` explicitly permits one remaining member so an active owner can remain after others leave.
+
+`scripts/migrate.sh` records applied versions in `dialog_schema_migration` and wraps each new migration plus its ledger insert in one transaction. Its bootstrap checks recognize databases created before the ledger was introduced, including whether the singleton-group constraint is already active.
+
 ## Tables
 
 - `dialog_space`: integration key, Origin allowlist, personal/group and content policies.

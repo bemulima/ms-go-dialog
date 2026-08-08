@@ -20,5 +20,6 @@ invariants:
 migration_policy:
     directory: db/migrations
     format: ordered reversible up/down pairs
+    ledger: dialog_schema_migration via scripts/migrate.sh
     destructive_change_requires: .ai/workflows/change-contract.yaml
 repository_ports: internal/domain/repository

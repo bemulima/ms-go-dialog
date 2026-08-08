@@ -49,7 +49,9 @@ func (r DialogRepository) ListForUser(ctx context.Context, query repository.Dial
 		return nil, domain.ErrValidation
 	}
 	base := `SELECT ` + prefixedColumns("d", dialogColumns) + `, ` + prefixedColumns("m", memberColumns) + `
-FROM dialog d JOIN dialog_member m ON m.dialog_id=d.id
+FROM dialog d
+JOIN dialog_member m ON m.dialog_id=d.id
+JOIN dialog_space s ON s.id=d.space_id AND s.status=1
 WHERE m.user_id=$1 AND m.status=1 AND d.status<>3`
 	args := []any{query.UserID}
 	if query.SpaceID != nil {

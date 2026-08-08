@@ -45,4 +45,23 @@ func TestMigrations_AreReversibleAndKeepReadStatePerMember(t *testing.T) {
 	if strings.Contains(text, "REFERENCES user") || strings.Contains(text, "REFERENCES users") {
 		t.Fatal("dialog schema must not create cross-service user foreign keys")
 	}
+
+	groupEvolution, err := os.ReadFile(filepath.Join(root, "003_group_single_owner.up.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(groupEvolution), "member_count BETWEEN 1 AND 1000") || !strings.Contains(string(groupEvolution), "DROP CONSTRAINT chk_dialog_personal_shape") {
+		t.Fatal("group singleton evolution must be explicit and upgrade existing databases")
+	}
+
+	runner, err := os.ReadFile(filepath.Join("..", "..", "scripts", "migrate.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	runnerText := string(runner)
+	for _, required := range []string{"dialog_schema_migration", "BEGIN;", "COMMIT;", "ON_ERROR_STOP=1"} {
+		if !strings.Contains(runnerText, required) {
+			t.Fatalf("migration runner is missing atomic ledger contract %q", required)
+		}
+	}
 }
