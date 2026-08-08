@@ -1,0 +1,16 @@
+.git
+.gitignore
+.cache
+.gocache
+.modcache
+.env
+.env.*
+!.env.dist
+integration.test
+.DS_Store
+tmp
+bin
+dist
+coverage
+coverage.out
+ms-dialog-service

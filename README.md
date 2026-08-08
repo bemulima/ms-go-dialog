@@ -18,6 +18,7 @@
 ## Local commands
 
 ```sh
+cp .env.dist .env
 make deps
 make test
 make validate-contracts
