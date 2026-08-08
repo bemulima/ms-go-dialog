@@ -1,0 +1,80 @@
+name: Dialog backend
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dialog-backend-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ms_dialog
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ms_dialog"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Unit, race, static, and contract checks
+        run: |
+          go test -race ./...
+          go vet ./...
+          make validate-contracts
+
+      - name: Apply migrations
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          for file in $(find db/migrations -maxdepth 1 -type f -name '*.up.sql' | sort); do
+            psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d ms_dialog -f "$file" >/dev/null
+          done
+
+      - name: PostgreSQL adapter checks
+        env:
+          DIALOG_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/ms_dialog?sslmode=disable
+        run: go test -race ./internal/adapters/postgres
+
+      - name: Start and probe Dialog API
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/ms_dialog?sslmode=disable
+          HTTP_PORT: "8080"
+          SERVICE_MODE: api
+        run: |
+          nohup go run ./cmd/ms-dialog-service > /tmp/ms-go-dialog.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/healthz >/dev/null && \
+               curl -fsS http://localhost:8080/readyz >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/ms-go-dialog.log
+          exit 1
+
+      - name: Show service log on failure
+        if: failure()
+        run: cat /tmp/ms-go-dialog.log || true
