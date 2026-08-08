@@ -53,6 +53,7 @@ type Service struct {
 	TTLMinutes            int
 	SignedURLMinutes      int
 	ActivationMaxAttempts int
+	WorkerLease           time.Duration
 }
 
 type UploadInput struct {
@@ -205,7 +206,8 @@ func (s Service) Process(ctx context.Context, limit int) (WorkResult, error) {
 	if err := s.expirePending(ctx, limit); err != nil {
 		workErrors = append(workErrors, err)
 	}
-	items, err := s.Attachments.ListForActivation(ctx, s.now(), limit)
+	claimTime := s.now()
+	items, err := s.Attachments.ClaimForActivation(ctx, claimTime, claimTime.Add(s.workerLease()), limit)
 	if err != nil {
 		return result, err
 	}
@@ -220,14 +222,15 @@ func (s Service) Process(ctx context.Context, limit int) (WorkResult, error) {
 			}
 			continue
 		}
-		changed, readyErr := s.markReady(ctx, item.ID)
+		changed, readyErr := s.markReady(ctx, item)
 		if readyErr != nil {
 			workErrors = append(workErrors, readyErr)
 		} else if changed {
 			result.Activated++
 		}
 	}
-	deletions, err := s.Attachments.ListForDeletion(ctx, s.now(), limit)
+	claimTime = s.now()
+	deletions, err := s.Attachments.ClaimForDeletion(ctx, claimTime, claimTime.Add(s.workerLease()), limit)
 	if err != nil {
 		return result, errors.Join(append(workErrors, err)...)
 	}
@@ -277,18 +280,24 @@ func (s Service) expirePending(ctx context.Context, limit int) error {
 	return errors.Join(errs...)
 }
 
-func (s Service) markReady(ctx context.Context, id uuid.UUID) (bool, error) {
+func (s Service) markReady(ctx context.Context, source domain.Attachment) (bool, error) {
 	changed := false
 	err := s.Tx.WithinTransaction(ctx, func(txCtx context.Context) error {
-		item, updated, err := s.Attachments.MarkReadyIfProcessing(txCtx, id, s.now())
+		message, dialogItem, err := s.lockLifecycle(txCtx, source)
+		if err != nil {
+			return err
+		}
+		item, updated, err := s.Attachments.MarkReadyIfProcessing(txCtx, source.ID, s.now())
 		if err != nil || !updated {
 			return err
 		}
-		if item.MessageID == nil {
-			return domain.ErrInvalidAttachment
+		if message.Status == domain.MessageStatusActive {
+			if err := s.emitLifecycleLocked(txCtx, item, domain.EventDialogAttachmentReady, dialogItem, message); err != nil {
+				return err
+			}
 		}
-		if err := s.emitLifecycle(txCtx, item, domain.EventDialogAttachmentReady); err != nil {
-			return err
+		if message.Status == domain.MessageStatusDeleted {
+			return domain.ErrMessageConflict
 		}
 		changed = true
 		return nil
@@ -298,28 +307,44 @@ func (s Service) markReady(ctx context.Context, id uuid.UUID) (bool, error) {
 func (s Service) recordActivationFailure(ctx context.Context, source domain.Attachment, cause error) (bool, error) {
 	terminal := false
 	err := s.Tx.WithinTransaction(ctx, func(txCtx context.Context) error {
+		message, dialogItem, err := s.lockLifecycle(txCtx, source)
+		if err != nil {
+			return err
+		}
 		item, ended, err := s.Attachments.RecordActivationFailure(txCtx, source.ID, s.now().Add(retryDelay(source.ActivationAttempts+1)), truncate(cause), s.maxAttempts())
 		if err != nil {
 			return err
 		}
 		terminal = ended
-		if ended {
-			return s.emitLifecycle(txCtx, item, domain.EventDialogAttachmentFailed)
+		if ended && message.Status == domain.MessageStatusActive {
+			return s.emitLifecycleLocked(txCtx, item, domain.EventDialogAttachmentFailed, dialogItem, message)
 		}
 		return nil
 	})
 	return terminal, err
 }
-func (s Service) emitLifecycle(ctx context.Context, item domain.Attachment, subject domain.EventSubject) error {
-	if item.MessageID == nil {
+
+func (s Service) lockLifecycle(ctx context.Context, source domain.Attachment) (domain.Message, domain.Dialog, error) {
+	if source.MessageID == nil {
+		return domain.Message{}, domain.Dialog{}, domain.ErrInvalidAttachment
+	}
+	message, err := s.Messages.GetByIDForUpdate(ctx, *source.MessageID)
+	if err != nil || message.DialogID != source.DialogID {
+		return domain.Message{}, domain.Dialog{}, domain.ErrMessageNotFound
+	}
+	dialogItem, err := s.Dialogs.GetByIDForUpdate(ctx, source.DialogID)
+	if err != nil {
+		return domain.Message{}, domain.Dialog{}, err
+	}
+	return message, dialogItem, nil
+}
+
+func (s Service) emitLifecycleLocked(ctx context.Context, item domain.Attachment, subject domain.EventSubject, dialogItem domain.Dialog, lockedMessage domain.Message) error {
+	if item.MessageID == nil || lockedMessage.ID != *item.MessageID || lockedMessage.DialogID != item.DialogID || dialogItem.ID != item.DialogID {
 		return domain.ErrInvalidAttachment
 	}
-	dialogItem, err := s.Dialogs.GetByIDForUpdate(ctx, item.DialogID)
-	if err != nil {
-		return err
-	}
 	eventSequence := dialogItem.MaxEventSequence + 1
-	message, err := s.Messages.AdvanceEvent(ctx, *item.MessageID, eventSequence)
+	message, err := s.Messages.AdvanceEvent(ctx, lockedMessage.ID, eventSequence)
 	if err != nil {
 		return err
 	}
@@ -384,6 +409,12 @@ func (s Service) maxAttempts() int {
 		return s.ActivationMaxAttempts
 	}
 	return defaultActivationRetries
+}
+func (s Service) workerLease() time.Duration {
+	if s.WorkerLease > 0 {
+		return s.WorkerLease
+	}
+	return 2 * time.Minute
 }
 func retryDelay(attempt int) time.Duration {
 	if attempt < 1 {

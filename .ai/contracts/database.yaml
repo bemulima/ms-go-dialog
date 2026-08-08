@@ -16,6 +16,7 @@ invariants:
     - message sequence is immutable and separate from event sequence
     - message mutation and outbox evidence commit atomically
     - attachment binding never crosses sender or dialog ownership
+    - attachment workers use finite leased SKIP LOCKED claims across replicas
 migration_policy:
     directory: db/migrations
     format: ordered reversible up/down pairs

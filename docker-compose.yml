@@ -31,6 +31,7 @@ services:
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-change-me}
       SERVICE_MODE: all
       READINESS_TIMEOUT_SECONDS: "2"
+      ATTACHMENT_WORKER_LEASE_SECONDS: "120"
     depends_on:
       postgres:
         condition: service_healthy

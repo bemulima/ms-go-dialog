@@ -13,6 +13,8 @@ The same binary supports four explicit modes:
 
 For production, `api`, `realtime`, and `worker` can be deployed and scaled independently. All modes expose the private operational HTTP surface. FileStorage and ClamAV are feature dependencies: an outage blocks attachment work but does not make message and dialog operations globally unready.
 
+Attachment worker replicas coordinate through leased `SKIP LOCKED` claims. Keep `ATTACHMENT_WORKER_LEASE_SECONDS` (default `120`) longer than a normal FileStorage activation/deletion request; a crashed worker's items become eligible after that deadline.
+
 ## Probes
 
 - `GET /healthz`: liveness. It does not call dependencies and should drive process restart decisions.

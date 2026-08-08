@@ -19,7 +19,9 @@ PostgreSQL is owned exclusively by `ms-go-dialog`. Migrations are ordered revers
 - Group and initial membership set commit together.
 - Message, dialog counters/sequences, recipient unread increments, attachment binding, and outbox insert commit together.
 - Read cursor, unread decrement, event sequence, and outbox insert commit together for one member only.
-- Attachment ready/failed transitions and their message/dialog event evidence commit together after idempotent FileStorage work.
+- Attachment ready/failed transitions and their message/dialog event evidence commit together after idempotent FileStorage work for active messages. Hidden messages finish the attachment transition without public event evidence; a later moderation restore carries the authoritative attachment snapshot.
+
+Attachment activation and deletion batches are claimed atomically with `FOR UPDATE SKIP LOCKED` by moving the corresponding next-attempt timestamp to a finite lease deadline. This permits multiple worker replicas without concurrent normal processing; an abandoned claim becomes eligible again after the lease.
 
 ## Sequence distinction
 

@@ -32,6 +32,7 @@ type Config struct {
 	AttachmentSignedURLMinutes   int    `envconfig:"ATTACHMENT_SIGNED_URL_MINUTES" default:"5"`
 	AttachmentWorkerInterval     int    `envconfig:"ATTACHMENT_WORKER_INTERVAL_SECONDS" default:"5"`
 	AttachmentWorkerBatch        int    `envconfig:"ATTACHMENT_WORKER_BATCH" default:"50"`
+	AttachmentWorkerLeaseSeconds int    `envconfig:"ATTACHMENT_WORKER_LEASE_SECONDS" default:"120"`
 	AttachmentActivationAttempts int    `envconfig:"ATTACHMENT_ACTIVATION_MAX_ATTEMPTS" default:"5"`
 	OutboxWorkerIntervalMS       int    `envconfig:"OUTBOX_WORKER_INTERVAL_MS" default:"500"`
 	OutboxWorkerBatch            int    `envconfig:"OUTBOX_WORKER_BATCH" default:"100"`
@@ -74,7 +75,7 @@ func (c Config) Validate() error {
 		return fmt.Errorf("realtime configuration is invalid")
 	}
 	if c.AttachmentTTLMinutes < 1 || c.AttachmentSignedURLMinutes < 1 || c.AttachmentWorkerInterval < 1 ||
-		c.AttachmentWorkerBatch < 1 || c.AttachmentActivationAttempts < 1 ||
+		c.AttachmentWorkerBatch < 1 || c.AttachmentWorkerLeaseSeconds <= 60 || c.AttachmentWorkerLeaseSeconds > 3600 || c.AttachmentActivationAttempts < 1 ||
 		c.OutboxWorkerIntervalMS < 1 || c.OutboxWorkerBatch < 1 || c.OutboxLeaseSeconds < 1 || c.ShutdownTimeoutSeconds < 1 {
 		return fmt.Errorf("worker configuration is invalid")
 	}

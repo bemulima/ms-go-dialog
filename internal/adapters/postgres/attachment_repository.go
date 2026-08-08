@@ -110,11 +110,15 @@ FROM dialog_attachment WHERE status=1 AND expires_at<$1 ORDER BY expires_at,id L
 	return scanAttachmentRows(rows)
 }
 
-func (r AttachmentRepository) ListForActivation(ctx context.Context, now time.Time, limit int) ([]domain.Attachment, error) {
-	rows, err := runner(ctx, r.Pool).Query(ctx, `SELECT `+attachmentColumns+`
-FROM dialog_attachment WHERE status=3
-AND (activation_next_attempt_at IS NULL OR activation_next_attempt_at<=$1)
-ORDER BY activation_next_attempt_at NULLS FIRST,id LIMIT $2`, now, limit)
+func (r AttachmentRepository) ClaimForActivation(ctx context.Context, now, leaseUntil time.Time, limit int) ([]domain.Attachment, error) {
+	rows, err := runner(ctx, r.Pool).Query(ctx, `WITH candidates AS (
+    SELECT id FROM dialog_attachment WHERE status=3
+    AND (activation_next_attempt_at IS NULL OR activation_next_attempt_at<=$1)
+    ORDER BY activation_next_attempt_at NULLS FIRST,id
+    FOR UPDATE SKIP LOCKED LIMIT $3
+)
+UPDATE dialog_attachment a SET activation_next_attempt_at=$2,updated_at=$1
+FROM candidates c WHERE a.id=c.id RETURNING `+prefixedColumns("a", attachmentColumns), now, leaseUntil, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -148,11 +152,15 @@ WHERE id=$1 AND status=3 RETURNING `+attachmentColumns, id, next, message, maxAt
 	return item, item.Status == domain.AttachmentStatusFailed, nil
 }
 
-func (r AttachmentRepository) ListForDeletion(ctx context.Context, now time.Time, limit int) ([]domain.Attachment, error) {
-	rows, err := runner(ctx, r.Pool).Query(ctx, `SELECT `+attachmentColumns+`
-FROM dialog_attachment WHERE status=6 AND storage_deleted_at IS NULL
-AND (delete_next_attempt_at IS NULL OR delete_next_attempt_at<=$1)
-ORDER BY delete_next_attempt_at NULLS FIRST,id LIMIT $2`, now, limit)
+func (r AttachmentRepository) ClaimForDeletion(ctx context.Context, now, leaseUntil time.Time, limit int) ([]domain.Attachment, error) {
+	rows, err := runner(ctx, r.Pool).Query(ctx, `WITH candidates AS (
+    SELECT id FROM dialog_attachment WHERE status=6 AND storage_deleted_at IS NULL
+    AND (delete_next_attempt_at IS NULL OR delete_next_attempt_at<=$1)
+    ORDER BY delete_next_attempt_at NULLS FIRST,id
+    FOR UPDATE SKIP LOCKED LIMIT $3
+)
+UPDATE dialog_attachment a SET delete_next_attempt_at=$2,updated_at=$1
+FROM candidates c WHERE a.id=c.id RETURNING `+prefixedColumns("a", attachmentColumns), now, leaseUntil, limit)
 	if err != nil {
 		return nil, err
 	}
