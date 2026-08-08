@@ -3,6 +3,8 @@ status: backend_contract_implemented_frontend_planned
 source_of_truth: docs/frontend-backend-contract-map.md
 message_loading:
     initial: GET /api/v1/message/window around first unread
+    no_unread: full before + after budget from the newest messages
+    window_cursors: null when no visible message remains in that direction
     older: GET /api/v1/message/list with before_cursor
     newer: GET /api/v1/message/list with after_cursor
     order: ascending message_sequence

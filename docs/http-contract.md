@@ -47,7 +47,7 @@ GET    /api/v1/ws
 
 ### Initial message window
 
-`GET /message/window?dialog_id=<uuid>&before=10&after=20` returns ascending messages around the actor's first unread boundary, older/newer cursors, current per-member read state, and both dialog high-water marks. With no unread messages it returns the latest window.
+`GET /message/window?dialog_id=<uuid>&before=10&after=20` returns ascending messages around the actor's first unread boundary, current per-member read state, and both dialog high-water marks. With no unread messages it spends the full `before + after` budget on the latest messages. `older_cursor` and `newer_cursor` are non-null only when at least one visible message exists in that direction.
 
 ### Read
 

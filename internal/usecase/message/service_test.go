@@ -152,6 +152,54 @@ func TestWindow_AppliesMemberHistoryBoundary(t *testing.T) {
 	}
 }
 
+func TestWindow_NoUnreadUsesFullBudgetForLatestMessages(t *testing.T) {
+	now := time.Now().UTC()
+	dialogID, spaceID, userID := uuid.New(), uuid.New(), uuid.New()
+	messages := &fakeMessages{}
+	service := Service{
+		Spaces:   fakeSpaces{item: domain.Space{ID: spaceID, Key: "platform", Name: "Platform", Status: domain.SpaceStatusActive, Policy: domain.DefaultPolicy(), CreatedBy: userID, CreatedAt: now, UpdatedAt: now}},
+		Dialogs:  &fakeDialogs{item: domain.Dialog{ID: dialogID, SpaceID: spaceID, Type: domain.DialogTypeGroup, Status: domain.DialogStatusActive, Title: "Group", CreatedBy: userID, Version: 1, MemberCount: 1, MessageCount: 50, MaxMessageSequence: 50, MaxEventSequence: 50, CreatedAt: now, UpdatedAt: now}},
+		Members:  &fakeMembers{items: map[uuid.UUID]domain.Member{userID: activeMember(dialogID, userID, 50, 0, now)}},
+		Messages: messages,
+	}
+
+	if _, err := service.Window(context.Background(), domain.Actor{UserID: userID, Role: "USER"}, dialogID, 10, 20); err != nil {
+		t.Fatal(err)
+	}
+	if messages.lastWindow.AnchorSequence != 51 || messages.lastWindow.Before != 31 || messages.lastWindow.After != 1 {
+		t.Fatalf("latest window budget mismatch: %+v", messages.lastWindow)
+	}
+}
+
+func TestWindow_TrimsProbesAndReportsAvailableDirections(t *testing.T) {
+	now := time.Now().UTC()
+	dialogID, spaceID, userID := uuid.New(), uuid.New(), uuid.New()
+	messages := &fakeMessages{windowItems: []domain.Message{
+		messageAt(dialogID, userID, 7, now),
+		messageAt(dialogID, userID, 8, now),
+		messageAt(dialogID, uuid.New(), 9, now),
+		messageAt(dialogID, uuid.New(), 10, now),
+		messageAt(dialogID, uuid.New(), 11, now),
+	}}
+	service := Service{
+		Spaces:   fakeSpaces{item: domain.Space{ID: spaceID, Key: "platform", Name: "Platform", Status: domain.SpaceStatusActive, Policy: domain.DefaultPolicy(), CreatedBy: userID, CreatedAt: now, UpdatedAt: now}},
+		Dialogs:  &fakeDialogs{item: domain.Dialog{ID: dialogID, SpaceID: spaceID, Type: domain.DialogTypeGroup, Status: domain.DialogStatusActive, Title: "Group", CreatedBy: userID, Version: 1, MemberCount: 2, MessageCount: 20, MaxMessageSequence: 20, MaxEventSequence: 20, CreatedAt: now, UpdatedAt: now}},
+		Members:  &fakeMembers{items: map[uuid.UUID]domain.Member{userID: activeMember(dialogID, userID, 8, 12, now)}},
+		Messages: messages,
+	}
+
+	window, err := service.Window(context.Background(), domain.Actor{UserID: userID, Role: "USER"}, dialogID, 1, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !window.HasOlder || !window.HasNewer || len(window.Items) != 3 {
+		t.Fatalf("window directions/items mismatch: %+v", window)
+	}
+	if window.Items[0].Message.MessageSequence != 8 || window.Items[2].Message.MessageSequence != 10 {
+		t.Fatalf("probe rows leaked into window: %+v", window.Items)
+	}
+}
+
 type fakeTx struct{}
 
 func (fakeTx) WithinTransaction(ctx context.Context, fn func(context.Context) error) error {
@@ -253,6 +301,7 @@ type fakeMessages struct {
 	lastList         repository.MessageListQuery
 	lastWindow       repository.MessageWindowQuery
 	lastChanges      repository.MessageChangeQuery
+	windowItems      []domain.Message
 	countUnreadCalls int
 }
 
@@ -273,7 +322,15 @@ func (f *fakeMessages) List(_ context.Context, q repository.MessageListQuery) ([
 }
 func (f *fakeMessages) Window(_ context.Context, q repository.MessageWindowQuery) ([]domain.Message, error) {
 	f.lastWindow = q
-	return nil, nil
+	return f.windowItems, nil
+}
+
+func messageAt(dialogID, senderID uuid.UUID, sequence int64, now time.Time) domain.Message {
+	return domain.Message{
+		ID: uuid.New(), DialogID: dialogID, SenderID: senderID, IdempotencyKey: uuid.New(),
+		Body: "message", Status: domain.MessageStatusActive, Version: 1,
+		MessageSequence: sequence, LastEventSequence: sequence, CreatedAt: now, UpdatedAt: now,
+	}
 }
 func (f *fakeMessages) ListChanges(_ context.Context, q repository.MessageChangeQuery) ([]domain.Message, error) {
 	f.lastChanges = q

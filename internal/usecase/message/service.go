@@ -72,6 +72,8 @@ type ReadState struct {
 type Window struct {
 	Items     []View
 	ReadState ReadState
+	HasOlder  bool
+	HasNewer  bool
 }
 
 func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput) (CreateResult, error) {
@@ -371,24 +373,38 @@ func (s Service) Window(ctx context.Context, actor domain.Actor, dialogID uuid.U
 		return Window{}, err
 	}
 	anchor := dialogItem.MaxMessageSequence + 1
+	windowBefore, windowAfter := before+after, 0
 	if member.UnreadCount > 0 {
 		first, err := s.Messages.FirstUnreadIncoming(ctx, dialogID, actor.UserID, member.LastReadMessageSequence)
 		if err == nil {
 			anchor = first
+			windowBefore, windowAfter = before, after
 		} else if !errors.Is(err, domain.ErrNotFound) {
 			return Window{}, err
 		}
 	}
-	items, err := s.Messages.Window(ctx, repository.MessageWindowQuery{DialogID: dialogID, FromSequence: member.HistoryFromMessageSequence, AnchorSequence: anchor, Before: before, After: after})
+	items, err := s.Messages.Window(ctx, repository.MessageWindowQuery{DialogID: dialogID, FromSequence: member.HistoryFromMessageSequence, AnchorSequence: anchor, Before: windowBefore + 1, After: windowAfter + 1})
 	if err != nil {
 		return Window{}, err
+	}
+	olderCount := sort.Search(len(items), func(index int) bool {
+		return items[index].MessageSequence >= anchor
+	})
+	hasOlder := olderCount > windowBefore
+	if hasOlder {
+		items = items[1:]
+		olderCount--
+	}
+	hasNewer := len(items)-olderCount > windowAfter
+	if hasNewer {
+		items = items[:len(items)-1]
 	}
 	views, err := s.views(ctx, items)
 	if err != nil {
 		return Window{}, err
 	}
 	state, err := s.readState(ctx, dialogItem, member)
-	return Window{Items: views, ReadState: state}, err
+	return Window{Items: views, ReadState: state, HasOlder: hasOlder, HasNewer: hasNewer}, err
 }
 
 func (s Service) List(ctx context.Context, actor domain.Actor, query repository.MessageListQuery) ([]View, error) {

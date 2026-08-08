@@ -2,7 +2,7 @@
 
 ## Loading and unread algorithm
 
-1. Open a dialog with `GET /api/v1/message/window?dialog_id=<uuid>&before=10&after=20`. The backend anchors the ascending window at the first unread incoming message; when there is no unread message it returns the newest window.
+1. Open a dialog with `GET /api/v1/message/window?dialog_id=<uuid>&before=10&after=20`. The backend anchors the ascending window at the first unread incoming message; when there is no unread message it uses the full `before + after` budget for the newest window.
 2. Treat returned `read_state` as authoritative. Merely downloading a message never marks it read.
 3. Render messages in ascending `message_sequence`: already-read history is above the unread boundary and unread messages are below it.
 4. Observe incoming message elements with `IntersectionObserver`. After a message is materially visible (recommended threshold `0.6` for `150–250 ms`), advance a local contiguous high-water mark. Own, deleted, or hidden sequence positions may be crossed but do not contribute to `unread_count`.

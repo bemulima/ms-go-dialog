@@ -115,9 +115,14 @@ func (h MessageHandler) Window(w http.ResponseWriter, r *http.Request) {
 	var older, newer *string
 	if len(window.Items) > 0 {
 		first, last := window.Items[0].Message, window.Items[len(window.Items)-1].Message
-		old := encodeMessageCursor(dialogID, repository.MessageCursor{Sequence: first.MessageSequence, ID: first.ID}, "before")
-		newValue := encodeMessageCursor(dialogID, repository.MessageCursor{Sequence: last.MessageSequence, ID: last.ID}, "after")
-		older, newer = &old, &newValue
+		if window.HasOlder {
+			value := encodeMessageCursor(dialogID, repository.MessageCursor{Sequence: first.MessageSequence, ID: first.ID}, "before")
+			older = &value
+		}
+		if window.HasNewer {
+			value := encodeMessageCursor(dialogID, repository.MessageCursor{Sequence: last.MessageSequence, ID: last.ID}, "after")
+			newer = &value
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items, "older_cursor": older, "newer_cursor": newer, "read_state": window.ReadState})
 }
