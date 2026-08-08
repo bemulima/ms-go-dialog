@@ -23,9 +23,11 @@
 - Every member owns `last_read_message_sequence`, `unread_count`, and `last_read_at`.
 - Reading by one member never changes another member's row.
 - A read cursor is monotonic and cannot exceed the dialog's current message sequence.
+- A valid cursor at or below the member's current cursor is an idempotent no-op. This is required because viewport batches and multiple devices can arrive out of order.
 - New messages increment unread count for active recipients only, never for the sender.
 - `read-all` takes the current maximum message sequence inside its transaction and sets only the actor's unread count to zero.
 - A new group member defaults to history beginning after the current last message. That boundary is enforced by window/list/changes/get/reply and attachment download authorization, not only stored as metadata.
+- A disabled space cannot mutate read state even if a stale client still holds a dialog ID.
 
 ## Delivery
 

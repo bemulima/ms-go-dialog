@@ -2,6 +2,7 @@ package message
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -65,6 +66,7 @@ func TestReadAll_UsesCurrentDialogMaximumForOneMember(t *testing.T) {
 		otherID:  activeMember(dialogID, otherID, 20, 30, now),
 	}}
 	service := Service{
+		Spaces:  fakeSpaces{item: domain.Space{ID: spaceID, Key: "platform", Name: "Platform", Status: domain.SpaceStatusActive, Policy: domain.DefaultPolicy(), CreatedBy: readerID, CreatedAt: now, UpdatedAt: now}},
 		Dialogs: dialogs, Members: members, Messages: &fakeMessages{}, Outbox: &fakeOutbox{}, Tx: fakeTx{},
 		Now: func() time.Time { return now.Add(time.Second) }, NewID: uuid.New,
 	}
@@ -77,6 +79,61 @@ func TestReadAll_UsesCurrentDialogMaximumForOneMember(t *testing.T) {
 	}
 	if got := members.items[otherID]; got.LastReadMessageSequence != 20 || got.UnreadCount != 30 {
 		t.Fatalf("read-all changed another member: %+v", got)
+	}
+}
+
+func TestReadThrough_OlderConcurrentRequestIsIdempotent(t *testing.T) {
+	now := time.Now().UTC()
+	dialogID, spaceID, readerID := uuid.New(), uuid.New(), uuid.New()
+	dialogs := &fakeDialogs{item: domain.Dialog{
+		ID: dialogID, SpaceID: spaceID, Type: domain.DialogTypeGroup, Status: domain.DialogStatusActive,
+		Title: "Group", CreatedBy: readerID, Version: 3, MemberCount: 2,
+		MessageCount: 50, MaxMessageSequence: 50, MaxEventSequence: 60,
+		LastMessageID: uuidPointer(uuid.New()), LastMessageAt: &now, CreatedAt: now, UpdatedAt: now,
+	}}
+	members := &fakeMembers{items: map[uuid.UUID]domain.Member{
+		readerID: activeMember(dialogID, readerID, 30, 20, now),
+	}}
+	messages := &fakeMessages{}
+	outbox := &fakeOutbox{}
+	service := Service{
+		Spaces:  fakeSpaces{item: domain.Space{ID: spaceID, Key: "platform", Name: "Platform", Status: domain.SpaceStatusActive, Policy: domain.DefaultPolicy(), CreatedBy: readerID, CreatedAt: now, UpdatedAt: now}},
+		Dialogs: dialogs, Members: members, Messages: messages, Outbox: outbox, Tx: fakeTx{},
+	}
+
+	state, err := service.ReadThrough(context.Background(), domain.Actor{UserID: readerID, Role: "USER"}, dialogID, 25)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.LastReadMessageSequence != 30 || state.UnreadCount != 20 {
+		t.Fatalf("older request changed state: %+v", state)
+	}
+	if messages.countUnreadCalls != 0 || len(outbox.items) != 0 {
+		t.Fatalf("older request performed a mutation: count_calls=%d events=%d", messages.countUnreadCalls, len(outbox.items))
+	}
+}
+
+func TestReadThrough_DisabledSpaceDoesNotMutateMember(t *testing.T) {
+	now := time.Now().UTC()
+	dialogID, spaceID, readerID := uuid.New(), uuid.New(), uuid.New()
+	dialogs := &fakeDialogs{item: domain.Dialog{
+		ID: dialogID, SpaceID: spaceID, Type: domain.DialogTypeGroup, Status: domain.DialogStatusActive,
+		Title: "Group", CreatedBy: readerID, Version: 1, MemberCount: 2,
+		MessageCount: 10, MaxMessageSequence: 10, MaxEventSequence: 10,
+		LastMessageID: uuidPointer(uuid.New()), LastMessageAt: &now, CreatedAt: now, UpdatedAt: now,
+	}}
+	members := &fakeMembers{items: map[uuid.UUID]domain.Member{readerID: activeMember(dialogID, readerID, 5, 5, now)}}
+	service := Service{
+		Spaces:  fakeSpaces{item: domain.Space{ID: spaceID, Key: "platform", Name: "Platform", Status: domain.SpaceStatusDisabled, Policy: domain.DefaultPolicy(), CreatedBy: readerID, CreatedAt: now, UpdatedAt: now}},
+		Dialogs: dialogs, Members: members, Messages: &fakeMessages{}, Outbox: &fakeOutbox{}, Tx: fakeTx{},
+	}
+
+	_, err := service.ReadThrough(context.Background(), domain.Actor{UserID: readerID, Role: "USER"}, dialogID, 10)
+	if !errors.Is(err, domain.ErrDialogNotFound) {
+		t.Fatalf("disabled space error=%v", err)
+	}
+	if got := members.items[readerID]; got.LastReadMessageSequence != 5 || got.UnreadCount != 5 {
+		t.Fatalf("disabled space changed member: %+v", got)
 	}
 }
 
@@ -193,9 +250,10 @@ func (f *fakeMembers) ListActiveDialogSequencesForUser(context.Context, uuid.UUI
 }
 
 type fakeMessages struct {
-	lastList    repository.MessageListQuery
-	lastWindow  repository.MessageWindowQuery
-	lastChanges repository.MessageChangeQuery
+	lastList         repository.MessageListQuery
+	lastWindow       repository.MessageWindowQuery
+	lastChanges      repository.MessageChangeQuery
+	countUnreadCalls int
 }
 
 func (*fakeMessages) Create(context.Context, domain.Message) error { return nil }
@@ -224,7 +282,8 @@ func (f *fakeMessages) ListChanges(_ context.Context, q repository.MessageChange
 func (*fakeMessages) FirstUnreadIncoming(_ context.Context, _ uuid.UUID, _ uuid.UUID, after int64) (int64, error) {
 	return after + 1, nil
 }
-func (*fakeMessages) CountUnreadIncoming(_ context.Context, _ uuid.UUID, _ uuid.UUID, after, through int64) (int64, error) {
+func (f *fakeMessages) CountUnreadIncoming(_ context.Context, _ uuid.UUID, _ uuid.UUID, after, through int64) (int64, error) {
+	f.countUnreadCalls++
 	if through < after {
 		return 0, domain.ErrInvalidReadSequence
 	}

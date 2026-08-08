@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -96,7 +97,10 @@ func SecurityHeaders(next http.Handler) http.Handler {
 
 func AssignRequestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestID := uuid.NewString()
+		requestID := strings.TrimSpace(r.Header.Get("X-Request-ID"))
+		if _, err := uuid.Parse(requestID); err != nil {
+			requestID = uuid.NewString()
+		}
 		w.Header().Set("X-Request-ID", requestID)
 		next.ServeHTTP(w, r.WithContext(WithRequestID(r.Context(), requestID)))
 	})

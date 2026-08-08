@@ -11,6 +11,7 @@ read_state:
     visible_batch: PUT /api/v1/dialog/read/{dialogID}
     read_all: PUT /api/v1/dialog/read-all/{dialogID}
     rule: loading does not mark read; only contiguous read-through mutates state
+    stale_request: valid cursor at or below stored cursor is a successful no-op
 realtime:
     scope: one user and one space per connection
     recovery: compare connection.ready dialog high-water marks and reconcile through REST

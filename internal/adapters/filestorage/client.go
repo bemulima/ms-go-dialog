@@ -27,29 +27,16 @@ func (c Client) UploadTemporary(ctx context.Context, input attachmentuc.Temporar
 	if err != nil {
 		return attachmentuc.StoredFile{}, err
 	}
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
-	part, err := writer.CreateFormFile("file", input.Filename)
+	reader, writer := io.Pipe()
+	multipartWriter := multipart.NewWriter(writer)
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/files/upload", reader)
 	if err != nil {
+		_ = reader.Close()
+		_ = writer.Close()
 		return attachmentuc.StoredFile{}, err
 	}
-	if _, err = part.Write(input.Data); err != nil {
-		return attachmentuc.StoredFile{}, err
-	}
-	fields := map[string]string{"file_kind": "USER_MEDIA", "owner_id": input.OwnerID.String(), "is_temp": "true", "ttl_minutes": fmt.Sprintf("%d", input.TTLMinutes)}
-	for name, value := range fields {
-		if err = writer.WriteField(name, value); err != nil {
-			return attachmentuc.StoredFile{}, err
-		}
-	}
-	if err = writer.Close(); err != nil {
-		return attachmentuc.StoredFile{}, err
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/files/upload", &body)
-	if err != nil {
-		return attachmentuc.StoredFile{}, err
-	}
-	request.Header.Set("Content-Type", writer.FormDataContentType())
+	request.Header.Set("Content-Type", multipartWriter.FormDataContentType())
+	go writeTemporaryMultipart(writer, multipartWriter, input)
 	response, err := c.httpClient().Do(request)
 	if err != nil {
 		return attachmentuc.StoredFile{}, fmt.Errorf("upload temporary file: %w", err)
@@ -68,6 +55,37 @@ func (c Client) UploadTemporary(ctx context.Context, input attachmentuc.Temporar
 		return attachmentuc.StoredFile{}, fmt.Errorf("filestorage response has no id")
 	}
 	return attachmentuc.StoredFile{ID: payload.ID}, nil
+}
+
+func writeTemporaryMultipart(pipe *io.PipeWriter, writer *multipart.Writer, input attachmentuc.TemporaryFileInput) {
+	var writeErr error
+	defer func() {
+		if closeErr := writer.Close(); writeErr == nil {
+			writeErr = closeErr
+		}
+		_ = pipe.CloseWithError(writeErr)
+	}()
+	part, err := writer.CreateFormFile("file", input.Filename)
+	if err != nil {
+		writeErr = err
+		return
+	}
+	if _, err = part.Write(input.Data); err != nil {
+		writeErr = err
+		return
+	}
+	fields := []struct{ name, value string }{
+		{name: "file_kind", value: "USER_MEDIA"},
+		{name: "owner_id", value: input.OwnerID.String()},
+		{name: "is_temp", value: "true"},
+		{name: "ttl_minutes", value: fmt.Sprintf("%d", input.TTLMinutes)},
+	}
+	for _, field := range fields {
+		if err = writer.WriteField(field.name, field.value); err != nil {
+			writeErr = err
+			return
+		}
+	}
 }
 func (c Client) Activate(ctx context.Context, id uuid.UUID) error {
 	return c.noBody(ctx, http.MethodPost, "/files/"+id.String()+"/activate", http.StatusOK, false)

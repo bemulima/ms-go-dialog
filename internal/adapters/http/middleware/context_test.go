@@ -36,3 +36,28 @@ func TestRequireActor_RejectsGuestAndAcceptsVerifiedUser(t *testing.T) {
 		t.Fatalf("authenticated status=%d", recorder.Code)
 	}
 }
+
+func TestAssignRequestID_PreservesTrustedUUIDAndReplacesInvalidValue(t *testing.T) {
+	handler := middleware.AssignRequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Observed-Request-ID", middleware.RequestID(r))
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	trusted := uuid.NewString()
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.Header.Set("X-Request-ID", trusted)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Header().Get("X-Request-ID") != trusted || response.Header().Get("Observed-Request-ID") != trusted {
+		t.Fatalf("trusted request ID was not preserved: %v", response.Header())
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "/", nil)
+	request.Header.Set("X-Request-ID", "untrusted-value")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	replacement := response.Header().Get("X-Request-ID")
+	if replacement == "untrusted-value" || uuid.Validate(replacement) != nil {
+		t.Fatalf("invalid request ID was not replaced: %q", replacement)
+	}
+}

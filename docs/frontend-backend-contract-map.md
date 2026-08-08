@@ -6,7 +6,7 @@
 2. Treat returned `read_state` as authoritative. Merely downloading a message never marks it read.
 3. Render messages in ascending `message_sequence`: already-read history is above the unread boundary and unread messages are below it.
 4. Observe incoming message elements with `IntersectionObserver`. After a message is materially visible (recommended threshold `0.6` for `150–250 ms`), advance a local contiguous high-water mark. Own, deleted, or hidden sequence positions may be crossed but do not contribute to `unread_count`.
-5. Debounce/batch the highest contiguous value into `PUT /api/v1/dialog/read/{dialogID}` with `{"through_message_sequence":N}`. Never send one request per row. Apply the returned read state; an optimistic badge decrement is allowed but must be reconciled to the response.
+5. Debounce/batch the highest contiguous value into `PUT /api/v1/dialog/read/{dialogID}` with `{"through_message_sequence":N}`. Never send one request per row. Apply the returned read state; an optimistic badge decrement is allowed but must be reconciled to the response. Requests may finish out of order: the backend treats a cursor at or below the stored cursor as a successful no-op and always returns authoritative state.
 6. When the user scrolls near the newer edge, request `GET /message/list` with `after_cursor`. Continue while a newer cursor exists. Older history uses `before_cursor` and never changes read state by itself.
 7. The “down/read all” action calls `PUT /api/v1/dialog/read-all/{dialogID}`. The transaction snapshots the current dialog maximum, changes only the actor's `dialog_member` row, returns `unread_count=0`, and emits `read.updated` for the actor's other sessions.
 

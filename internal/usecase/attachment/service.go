@@ -77,9 +77,12 @@ func (s Service) Upload(ctx context.Context, actor domain.Actor, input UploadInp
 	if s.Files == nil {
 		return domain.Attachment{}, errors.New("filestorage adapter is not configured")
 	}
-	_, space, _, err := s.readContext(ctx, actor, input.DialogID)
+	dialogItem, space, _, err := s.readContext(ctx, actor, input.DialogID)
 	if err != nil {
 		return domain.Attachment{}, err
+	}
+	if dialogItem.Status != domain.DialogStatusActive {
+		return domain.Attachment{}, domain.ErrDialogClosed
 	}
 	metadata, err := domain.InspectAttachment(input.Data, input.Filename, space.Policy)
 	if err != nil {

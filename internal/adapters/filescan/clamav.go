@@ -34,6 +34,15 @@ func (c ClamAV) Scan(ctx context.Context, data []byte) error {
 		return fmt.Errorf("%w: %v", domain.ErrFileScanUnavailable, err)
 	}
 	defer connection.Close()
+	watchDone := make(chan struct{})
+	defer close(watchDone)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = connection.Close()
+		case <-watchDone:
+		}
+	}()
 	_ = connection.SetDeadline(time.Now().Add(timeout))
 	if _, err = connection.Write([]byte("zINSTREAM\x00")); err != nil {
 		return fmt.Errorf("%w: %v", domain.ErrFileScanUnavailable, err)
@@ -58,6 +67,9 @@ func (c ClamAV) Scan(ctx context.Context, data []byte) error {
 	}
 	response, err := bufio.NewReader(connection).ReadString(0)
 	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return fmt.Errorf("%w: %v", domain.ErrFileScanUnavailable, err)
 	}
 	switch {

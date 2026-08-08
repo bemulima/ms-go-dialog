@@ -300,6 +300,10 @@ func (s Service) advanceRead(ctx context.Context, actor domain.Actor, dialogID u
 		if err != nil || dialogItem.Status == domain.DialogStatusHidden {
 			return domain.ErrDialogNotFound
 		}
+		space, err := s.Spaces.GetByID(txCtx, dialogItem.SpaceID)
+		if err != nil || space.Status != domain.SpaceStatusActive {
+			return domain.ErrDialogNotFound
+		}
 		member, err := s.Members.GetForUpdate(txCtx, dialogID, actor.UserID)
 		if err != nil || member.Status != domain.MemberStatusActive {
 			return domain.ErrForbidden
@@ -307,10 +311,23 @@ func (s Service) advanceRead(ctx context.Context, actor domain.Actor, dialogID u
 		through := dialogItem.MaxMessageSequence
 		if requested != nil {
 			through = *requested
+			if through < 0 || through > dialogItem.MaxMessageSequence {
+				return domain.ErrInvalidReadSequence
+			}
+			// Read requests can arrive out of order from debounced viewport
+			// observers or another device. An older cursor is an idempotent
+			// no-op, not a client error.
+			if through <= member.LastReadMessageSequence {
+				state, err = s.readState(txCtx, dialogItem, member)
+				return err
+			}
 		}
-		newlyRead, err := s.Messages.CountUnreadIncoming(txCtx, dialogID, actor.UserID, member.LastReadMessageSequence, through)
-		if err != nil {
-			return err
+		newlyRead := int64(0)
+		if requested != nil {
+			newlyRead, err = s.Messages.CountUnreadIncoming(txCtx, dialogID, actor.UserID, member.LastReadMessageSequence, through)
+			if err != nil {
+				return err
+			}
 		}
 		now := s.now()
 		var changed bool
