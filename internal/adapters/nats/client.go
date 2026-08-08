@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/bemulima/ms-go-dialog/internal/domain"
 	realtimeuc "github.com/bemulima/ms-go-dialog/internal/usecase/realtime"
 	natsgo "github.com/nats-io/nats.go"
-	"sync"
-	"time"
 )
 
 const LifecycleStream = "DIALOG_EVENTS"
@@ -64,6 +65,17 @@ func (c *Client) PublishTyping(ctx context.Context, dialogID string, payload []b
 	}
 	return c.Conn.Publish("dialog.realtime.typing."+dialogID, payload)
 }
+
+func (c *Client) Ping(ctx context.Context) error {
+	if c == nil || c.Conn == nil || !c.Conn.IsConnected() {
+		return errors.New("NATS connection is unavailable")
+	}
+	if _, ok := ctx.Deadline(); !ok {
+		return errors.New("NATS readiness context must have a deadline")
+	}
+	return c.Conn.FlushWithContext(ctx)
+}
+
 func (c *Client) jetStream() (natsgo.JetStreamContext, error) {
 	if c == nil || c.Conn == nil {
 		return nil, errors.New("NATS connection is not configured")

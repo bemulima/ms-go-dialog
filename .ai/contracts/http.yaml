@@ -2,6 +2,12 @@ schema_version: 1
 status: implemented
 source_of_truth: docs/http-contract.md
 route_groups:
+    - prefix: /
+      authentication: private operational network only; never public gateway routing
+      routes:
+        - GET /healthz
+        - GET /readyz
+        - GET /metrics
     - prefix: /api/v1
       authentication: required gateway identity and active membership where dialog-scoped
       routes:
@@ -45,3 +51,4 @@ pagination:
     message_order: message_sequence
     cursor: opaque and dialog scoped
 error_contract: docs/error-contract.md
+operations_contract: docs/operations.md

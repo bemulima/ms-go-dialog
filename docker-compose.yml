@@ -30,6 +30,7 @@ services:
       USER_SERVICE_BASE_URL: http://ms-user-service:8080
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-change-me}
       SERVICE_MODE: all
+      READINESS_TIMEOUT_SECONDS: "2"
     depends_on:
       postgres:
         condition: service_healthy
@@ -37,6 +38,12 @@ services:
         condition: service_healthy
     ports:
       - "${DIALOG_PORT:-8093}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
     networks:
       - default
       - ms-net

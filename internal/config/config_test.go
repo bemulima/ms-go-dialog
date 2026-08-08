@@ -13,8 +13,9 @@ func TestConfig_ValidateModesAndTicketTTL(t *testing.T) {
 		AttachmentTTLMinutes: 60, AttachmentSignedURLMinutes: 5, AttachmentWorkerInterval: 5,
 		AttachmentWorkerBatch: 50, AttachmentActivationAttempts: 5,
 		OutboxWorkerIntervalMS: 500, OutboxWorkerBatch: 100, OutboxLeaseSeconds: 30,
-		ShutdownTimeoutSeconds: 10,
-		ClamAVTimeoutSeconds:   30,
+		ReadinessTimeoutSeconds: 2,
+		ShutdownTimeoutSeconds:  10,
+		ClamAVTimeoutSeconds:    30,
 	}
 	if err := valid.Validate(); err != nil {
 		t.Fatalf("valid config rejected: %v", err)
@@ -28,5 +29,10 @@ func TestConfig_ValidateModesAndTicketTTL(t *testing.T) {
 	invalid.ServiceMode = "unknown"
 	if err := invalid.Validate(); err == nil {
 		t.Fatal("unknown service mode accepted")
+	}
+	invalid = valid
+	invalid.ReadinessTimeoutSeconds = 31
+	if err := invalid.Validate(); err == nil {
+		t.Fatal("readiness timeout above hard maximum accepted")
 	}
 }

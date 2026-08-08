@@ -6,6 +6,7 @@ import (
 
 	"github.com/bemulima/ms-go-dialog/internal/adapters/http/handlers"
 	"github.com/bemulima/ms-go-dialog/internal/adapters/http/middleware"
+	"github.com/bemulima/ms-go-dialog/internal/adapters/observability"
 	adminuc "github.com/bemulima/ms-go-dialog/internal/usecase/admin"
 	attachmentuc "github.com/bemulima/ms-go-dialog/internal/usecase/attachment"
 	dialoguc "github.com/bemulima/ms-go-dialog/internal/usecase/dialog"
@@ -22,6 +23,8 @@ type RouterDependencies struct {
 	RealtimeService   *realtimeuc.TicketService
 	WebSocketHandler  http.Handler
 	UserRateLimiter   middleware.ActorLimiter
+	Readiness         http.Handler
+	Metrics           *observability.Metrics
 }
 
 func NewRouter(deps RouterDependencies) http.Handler {
@@ -29,9 +32,18 @@ func NewRouter(deps RouterDependencies) http.Handler {
 	router.Use(middleware.SecurityHeaders)
 	router.Use(middleware.AssignRequestID)
 	router.Use(middleware.RecoverPanics(handlers.WriteError))
+	if deps.Metrics != nil {
+		router.Use(deps.Metrics.HTTPMiddleware)
+	}
 	router.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "service": "ms-go-dialog"})
 	})
+	if deps.Readiness != nil {
+		router.Get("/readyz", deps.Readiness.ServeHTTP)
+	}
+	if deps.Metrics != nil {
+		router.Get("/metrics", deps.Metrics.ServeHTTP)
+	}
 	if deps.AdminService != nil {
 		router.Route("/admin/v1", func(admin chi.Router) {
 			admin.Use(middleware.RequireActor(handlers.WriteError))

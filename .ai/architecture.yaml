@@ -58,6 +58,12 @@ layers:
       responsibilities:
         - ClamAV INSTREAM protocol
         - fail-closed generic file scanning
+    - name: health_and_observability_adapters
+      source_path: internal/adapters
+      responsibilities:
+        - mode-aware dependency readiness
+        - bounded-cardinality Prometheus exposition
+        - WebSocket and worker lifecycle metrics
 domain_ownership:
     - DialogSpace
     - Dialog

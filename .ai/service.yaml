@@ -40,6 +40,9 @@ capabilities:
     - name: user_scoped_realtime
       status: implemented
       source_path: docs/websocket-contract.md
+    - name: mode_aware_readiness_and_metrics
+      status: implemented
+      source_path: docs/operations.md
 relations:
     - name: depends_on
       value: postgres
@@ -64,6 +67,7 @@ instructions:
     - docs/agent-contract-map.md
     - docs/frontend-backend-contract-map.md
     - docs/integration-contract.md
+    - docs/operations.md
 commands:
     - format
     - dependencies

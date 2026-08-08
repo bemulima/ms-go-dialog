@@ -13,9 +13,11 @@ import (
 
 	"github.com/bemulima/ms-go-dialog/internal/adapters/filescan"
 	"github.com/bemulima/ms-go-dialog/internal/adapters/filestorage"
+	"github.com/bemulima/ms-go-dialog/internal/adapters/health"
 	httpadapter "github.com/bemulima/ms-go-dialog/internal/adapters/http"
 	httpmiddleware "github.com/bemulima/ms-go-dialog/internal/adapters/http/middleware"
 	natsadapter "github.com/bemulima/ms-go-dialog/internal/adapters/nats"
+	"github.com/bemulima/ms-go-dialog/internal/adapters/observability"
 	"github.com/bemulima/ms-go-dialog/internal/adapters/postgres"
 	websocketadapter "github.com/bemulima/ms-go-dialog/internal/adapters/websocket"
 	"github.com/bemulima/ms-go-dialog/internal/config"
@@ -76,6 +78,7 @@ func run() error {
 	adminService := &adminuc.Service{Spaces: spaces, Dialogs: dialogs, Members: members, Messages: messages, Attachments: attachments, Outbox: outbox, Tx: tx}
 	realtimeService := &realtimeuc.TicketService{Spaces: spaces, Members: members, Tickets: tickets, TTL: time.Duration(cfg.RealtimeTicketTTLSeconds) * time.Second}
 	dispatcher := &realtimeuc.Dispatcher{Outbox: outbox, Lease: time.Duration(cfg.OutboxLeaseSeconds) * time.Second}
+	metrics := observability.NewMetrics()
 	rateLimiter, err := httpmiddleware.NewActorRateLimiter(cfg.HTTPUserRateLimitRPS, cfg.HTTPUserRateLimitBurst, cfg.HTTPUserRateLimitMaxActors, time.Duration(cfg.HTTPUserRateLimitIdleSeconds)*time.Second)
 	if err != nil {
 		return fmt.Errorf("configure HTTP rate limiter: %w", err)
@@ -102,13 +105,20 @@ func run() error {
 	var websocketHandler http.Handler
 	if modeHasRealtime(cfg.ServiceMode) {
 		hub = websocketadapter.NewHub(cfg.WSMaxConnectionsPerUser, cfg.WSQueueSize)
-		websocketHandler = websocketadapter.Handler{Tickets: realtimeService, Hub: hub, Typing: natsClient, MaxFrameBytes: cfg.WSMaxFrameBytes}
+		websocketHandler = websocketadapter.Handler{Tickets: realtimeService, Hub: hub, Typing: natsClient, Metrics: metrics, MaxFrameBytes: cfg.WSMaxFrameBytes}
 		subscription, err = natsClient.SubscribeRealtime(hub)
 		if err != nil {
 			return fmt.Errorf("subscribe realtime: %w", err)
 		}
 	}
-	dependencies := httpadapter.RouterDependencies{}
+	readinessChecks := map[string]health.Check{"postgres": pool.Ping}
+	if natsClient != nil {
+		readinessChecks["nats"] = natsClient.Ping
+	}
+	dependencies := httpadapter.RouterDependencies{
+		Readiness: health.NewChecker(time.Duration(cfg.ReadinessTimeoutSeconds)*time.Second, readinessChecks),
+		Metrics:   metrics,
+	}
 	if modeHasAPI(cfg.ServiceMode) {
 		dependencies.DialogService = dialogService
 		dependencies.MessageService = messageService
@@ -136,15 +146,15 @@ func run() error {
 		workers.Add(3)
 		go func() {
 			defer workers.Done()
-			runAttachmentWorker(ctx, logger, attachmentService, time.Duration(cfg.AttachmentWorkerInterval)*time.Second, cfg.AttachmentWorkerBatch)
+			runAttachmentWorker(ctx, logger, metrics, attachmentService, time.Duration(cfg.AttachmentWorkerInterval)*time.Second, cfg.AttachmentWorkerBatch)
 		}()
 		go func() {
 			defer workers.Done()
-			runOutboxWorker(ctx, logger, dispatcher, time.Duration(cfg.OutboxWorkerIntervalMS)*time.Millisecond, cfg.OutboxWorkerBatch)
+			runOutboxWorker(ctx, logger, metrics, dispatcher, time.Duration(cfg.OutboxWorkerIntervalMS)*time.Millisecond, cfg.OutboxWorkerBatch)
 		}()
 		go func() {
 			defer workers.Done()
-			runTicketCleanupWorker(ctx, logger, realtimeService, time.Duration(cfg.RealtimeTicketCleanupSeconds)*time.Second, cfg.OutboxWorkerBatch)
+			runTicketCleanupWorker(ctx, logger, metrics, realtimeService, time.Duration(cfg.RealtimeTicketCleanupSeconds)*time.Second, cfg.OutboxWorkerBatch)
 		}()
 	}
 	serverError := make(chan error, 1)
@@ -180,7 +190,7 @@ func run() error {
 	return serveErr
 }
 
-func runAttachmentWorker(ctx context.Context, logger *zap.Logger, service *attachmentuc.Service, interval time.Duration, batch int) {
+func runAttachmentWorker(ctx context.Context, logger *zap.Logger, metrics *observability.Metrics, service *attachmentuc.Service, interval time.Duration, batch int) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -188,16 +198,29 @@ func runAttachmentWorker(ctx context.Context, logger *zap.Logger, service *attac
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			result, err := service.Process(ctx, batch)
-			if err != nil {
-				logger.Error("attachment worker failed", zap.Error(err))
-			} else if result.Activated+result.Failed+result.Deleted > 0 {
-				logger.Info("attachment worker completed", zap.Int("activated", result.Activated), zap.Int("failed", result.Failed), zap.Int("deleted", result.Deleted))
-			}
+			processAttachmentBatch(ctx, logger, metrics, service, batch)
 		}
 	}
 }
-func runOutboxWorker(ctx context.Context, logger *zap.Logger, dispatcher *realtimeuc.Dispatcher, interval time.Duration, batch int) {
+
+type attachmentProcessor interface {
+	Process(context.Context, int) (attachmentuc.WorkResult, error)
+}
+
+func processAttachmentBatch(ctx context.Context, logger *zap.Logger, metrics *observability.Metrics, service attachmentProcessor, batch int) {
+	result, err := service.Process(ctx, batch)
+	metrics.Increment(observability.AttachmentWorkerActivatedTotal, result.Activated)
+	metrics.Increment(observability.AttachmentWorkerFailedTotal, result.Failed)
+	metrics.Increment(observability.AttachmentWorkerDeletedTotal, result.Deleted)
+	if err != nil {
+		metrics.Increment(observability.AttachmentWorkerErrorsTotal, 1)
+		logger.Error("attachment worker failed", zap.Error(err), zap.Int("activated", result.Activated), zap.Int("failed", result.Failed), zap.Int("deleted", result.Deleted))
+	} else if result.Activated+result.Failed+result.Deleted > 0 {
+		logger.Info("attachment worker completed", zap.Int("activated", result.Activated), zap.Int("failed", result.Failed), zap.Int("deleted", result.Deleted))
+	}
+}
+
+func runOutboxWorker(ctx context.Context, logger *zap.Logger, metrics *observability.Metrics, dispatcher *realtimeuc.Dispatcher, interval time.Duration, batch int) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -205,16 +228,28 @@ func runOutboxWorker(ctx context.Context, logger *zap.Logger, dispatcher *realti
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			result, err := dispatcher.Process(ctx, batch)
-			if err != nil {
-				logger.Error("outbox worker failed", zap.Error(err))
-			} else if result.Published+result.Failed > 0 {
-				logger.Info("outbox worker completed", zap.Int("published", result.Published), zap.Int("failed", result.Failed))
-			}
+			processOutboxBatch(ctx, logger, metrics, dispatcher, batch)
 		}
 	}
 }
-func runTicketCleanupWorker(ctx context.Context, logger *zap.Logger, service *realtimeuc.TicketService, interval time.Duration, batch int) {
+
+type outboxProcessor interface {
+	Process(context.Context, int) (realtimeuc.DispatchResult, error)
+}
+
+func processOutboxBatch(ctx context.Context, logger *zap.Logger, metrics *observability.Metrics, dispatcher outboxProcessor, batch int) {
+	result, err := dispatcher.Process(ctx, batch)
+	metrics.Increment(observability.OutboxPublishedTotal, result.Published)
+	metrics.Increment(observability.OutboxFailedTotal, result.Failed)
+	if err != nil {
+		metrics.Increment(observability.OutboxWorkerErrorsTotal, 1)
+		logger.Error("outbox worker failed", zap.Error(err), zap.Int("published", result.Published), zap.Int("failed", result.Failed))
+	} else if result.Published+result.Failed > 0 {
+		logger.Info("outbox worker completed", zap.Int("published", result.Published), zap.Int("failed", result.Failed))
+	}
+}
+
+func runTicketCleanupWorker(ctx context.Context, logger *zap.Logger, metrics *observability.Metrics, service *realtimeuc.TicketService, interval time.Duration, batch int) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -222,15 +257,26 @@ func runTicketCleanupWorker(ctx context.Context, logger *zap.Logger, service *re
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			deleted, err := service.DeleteExpired(ctx, batch)
-			if err != nil {
-				logger.Error("ticket cleanup failed", zap.Error(err))
-			} else if deleted > 0 {
-				logger.Info("ticket cleanup completed", zap.Int("deleted", deleted))
-			}
+			processTicketCleanupBatch(ctx, logger, metrics, service, batch)
 		}
 	}
 }
+
+type ticketCleaner interface {
+	DeleteExpired(context.Context, int) (int, error)
+}
+
+func processTicketCleanupBatch(ctx context.Context, logger *zap.Logger, metrics *observability.Metrics, service ticketCleaner, batch int) {
+	deleted, err := service.DeleteExpired(ctx, batch)
+	metrics.Increment(observability.TicketCleanupDeletedTotal, deleted)
+	if err != nil {
+		metrics.Increment(observability.TicketCleanupErrorsTotal, 1)
+		logger.Error("ticket cleanup failed", zap.Error(err), zap.Int("deleted", deleted))
+	} else if deleted > 0 {
+		logger.Info("ticket cleanup completed", zap.Int("deleted", deleted))
+	}
+}
+
 func modeHasAPI(mode string) bool      { return mode == "all" || mode == "api" }
 func modeHasRealtime(mode string) bool { return mode == "all" || mode == "realtime" }
 func modeHasWorkers(mode string) bool  { return mode == "all" || mode == "worker" }

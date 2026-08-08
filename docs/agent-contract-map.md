@@ -11,6 +11,7 @@ This map is the final navigation source for the current backend release. Until i
 | Durable delivery | PostgreSQL outbox + NATS JetStream | at-least-once, event-ID deduplication |
 | Browser realtime | Dialog WebSocket | ticket-authenticated projection |
 | Malware decision | ClamAV | fail-closed synchronous scan for generic files |
+| Liveness, readiness, metrics | `ms-go-dialog` private HTTP port | operations contract and observability adapters |
 
 Integration boundaries are specified in `docs/integration-contract.md`. The future frontend must follow `docs/frontend-backend-contract-map.md`; in particular, loading is not reading and only an explicit contiguous read-through or read-all command mutates one member's counters.
 
@@ -24,3 +25,4 @@ Change routing:
 - event: domain subject, outbox, events contract and consumer rules;
 - attachment: attachment use case, FileStorage adapter, lifecycle contract.
 - frontend/read UX: frontend/backend map, message window query, per-member read transaction, `read.updated` event.
+- operations: health/observability adapters, runtime composition, operations contract, HTTP machine contract.

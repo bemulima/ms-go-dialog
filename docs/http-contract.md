@@ -2,11 +2,18 @@
 
 Route groups follow the platform convention:
 
+- `/healthz`, `/readyz`, `/metrics`: private operational endpoints without actor authentication;
 - `/api/v1`: authenticated user operations;
 - `/admin/v1`: explicit role-protected administration and moderation;
 - `/internal/v1`: exact shared-token service calls when introduced.
 
 Bodies reject unknown fields and acting-user fields. Pagination cursors are opaque, base64url encoded, and bound to their dialog/direction.
+
+## Operational API
+
+`GET /healthz` is liveness only and returns `200` while the process can serve HTTP. `GET /readyz` returns `200` only when all dependencies required by the configured runtime mode are usable, otherwise `503`. It reports only `ok`/`failed` component states and never exposes connection strings or dependency error messages. `GET /metrics` returns Prometheus text format with route-template HTTP labels and no user, dialog, message, attachment, or request identifiers.
+
+These routes are served on the private service port. The gateway must not expose them under `/api/dialog/v1`.
 
 ## User API
 

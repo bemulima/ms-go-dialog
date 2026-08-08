@@ -5,13 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	realtimeuc "github.com/bemulima/ms-go-dialog/internal/usecase/realtime"
-	"github.com/google/uuid"
-	gorillaws "github.com/gorilla/websocket"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	realtimeuc "github.com/bemulima/ms-go-dialog/internal/usecase/realtime"
+	"github.com/google/uuid"
+	gorillaws "github.com/gorilla/websocket"
 )
 
 const dialogProtocol = "dialog.v1"
@@ -22,10 +23,15 @@ type TicketConsumer interface {
 type TypingPublisher interface {
 	PublishTyping(context.Context, string, []byte) error
 }
+type ConnectionMetrics interface {
+	WebSocketOpened()
+	WebSocketClosed()
+}
 type Handler struct {
 	Tickets                                 TicketConsumer
 	Hub                                     *Hub
 	Typing                                  TypingPublisher
+	Metrics                                 ConnectionMetrics
 	MaxFrameBytes                           int64
 	WriteTimeout, PongTimeout, PingInterval time.Duration
 	Now                                     func() time.Time
@@ -70,6 +76,10 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer connection.Close()
+	if h.Metrics != nil {
+		h.Metrics.WebSocketOpened()
+		defer h.Metrics.WebSocketClosed()
+	}
 	initial := h.Hub.activate(item, readyFrame(session.SpaceID, session.DialogSequences, h.now()))
 	writerDone := make(chan struct{})
 	go func() { defer close(writerDone); h.writeLoop(connection, item, initial); _ = connection.Close() }()

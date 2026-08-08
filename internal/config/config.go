@@ -26,6 +26,7 @@ type Config struct {
 	UserServiceBaseURL           string `envconfig:"USER_SERVICE_BASE_URL" default:"http://localhost:8082"`
 	InternalAPIToken             string `envconfig:"INTERNAL_API_TOKEN" default:"change-me"`
 	ServiceMode                  string `envconfig:"SERVICE_MODE" default:"all"`
+	ReadinessTimeoutSeconds      int    `envconfig:"READINESS_TIMEOUT_SECONDS" default:"2"`
 	ShutdownTimeoutSeconds       int    `envconfig:"SHUTDOWN_TIMEOUT_SECONDS" default:"10"`
 	AttachmentTTLMinutes         int    `envconfig:"ATTACHMENT_TTL_MINUTES" default:"60"`
 	AttachmentSignedURLMinutes   int    `envconfig:"ATTACHMENT_SIGNED_URL_MINUTES" default:"5"`
@@ -76,6 +77,9 @@ func (c Config) Validate() error {
 		c.AttachmentWorkerBatch < 1 || c.AttachmentActivationAttempts < 1 ||
 		c.OutboxWorkerIntervalMS < 1 || c.OutboxWorkerBatch < 1 || c.OutboxLeaseSeconds < 1 || c.ShutdownTimeoutSeconds < 1 {
 		return fmt.Errorf("worker configuration is invalid")
+	}
+	if c.ReadinessTimeoutSeconds < 1 || c.ReadinessTimeoutSeconds > 30 {
+		return fmt.Errorf("readiness configuration is invalid")
 	}
 	if c.ClamAVTimeoutSeconds < 1 || c.ClamAVTimeoutSeconds > 300 {
 		return fmt.Errorf("file scan configuration is invalid")
