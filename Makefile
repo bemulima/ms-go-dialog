@@ -19,7 +19,7 @@ validate-contracts:
 	@set -eu; \
 	for file in .ai/service.yaml .ai/architecture.yaml .ai/commands.yaml .ai/contracts/database.yaml .ai/contracts/http.yaml .ai/contracts/websocket.yaml .ai/contracts/events.yaml .ai/contracts/frontend.yaml; do \
 		test -s "$$file"; \
-		rg -q '^schema_version: 1$$' "$$file"; \
+		grep -q '^schema_version: 1$$' "$$file"; \
 	done
 	@XDG_CACHE_HOME=$(CURDIR)/.cache GOCACHE=$(CURDIR)/.cache/go-build GOMODCACHE=$(CURDIR)/.cache/gomod go test ./test/contracts
 
