@@ -25,6 +25,12 @@ make up
 make migrate
 ```
 
+PostgreSQL adapter smoke tests are opt-in and roll their fixtures back:
+
+```sh
+DIALOG_TEST_DATABASE_URL='postgres://postgres:postgres@localhost:5444/ms_dialog?sslmode=disable' go test ./internal/adapters/postgres
+```
+
 The external gateway namespace is `/api/dialog/v1/*`; the service owns `/api/v1/*`. `X-User-ID` and `X-User-Role` are trusted only from `ms-gateway`. WebSocket authentication uses a short-lived single-use ticket in `Sec-WebSocket-Protocol`, never a bearer token in the URL.
 
 Runtime modes are `api`, `realtime`, `worker`, and `all`. PostgreSQL is always required; realtime/worker modes require NATS JetStream, attachment operations require FileStorage, and generic-file uploads require ClamAV. See [integration contract](docs/integration-contract.md) and [frontend/backend map](docs/frontend-backend-contract-map.md).

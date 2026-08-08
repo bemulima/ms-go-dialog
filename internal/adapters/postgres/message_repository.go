@@ -84,7 +84,7 @@ func (r MessageRepository) Window(ctx context.Context, query repository.MessageW
     (SELECT `+messageColumns+` FROM dialog_message
      WHERE dialog_id=$1 AND message_sequence>=$5 AND message_sequence>=$2 AND status<>3
      ORDER BY message_sequence,id LIMIT $4)
-) AS window ORDER BY message_sequence,id`, query.DialogID, query.AnchorSequence, query.Before, query.After, query.FromSequence)
+) AS message_window ORDER BY message_sequence,id`, query.DialogID, query.AnchorSequence, query.Before, query.After, query.FromSequence)
 	if err != nil {
 		return nil, err
 	}
