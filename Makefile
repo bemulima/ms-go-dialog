@@ -1,4 +1,4 @@
-.PHONY: fmt deps tidy test lint validate-contracts migrate up down
+.PHONY: fmt deps tidy test lint validate-contracts runtime-e2e migrate up down
 
 fmt:
 	gofmt -w cmd internal test
@@ -22,6 +22,9 @@ validate-contracts:
 		grep -q '^schema_version: 1$$' "$$file"; \
 	done
 	@XDG_CACHE_HOME=$(CURDIR)/.cache GOCACHE=$(CURDIR)/.cache/go-build GOMODCACHE=$(CURDIR)/.cache/gomod go test ./test/contracts
+
+runtime-e2e:
+	@test/runtime/gateway_e2e_test.sh
 
 migrate:
 	@sh scripts/migrate.sh
