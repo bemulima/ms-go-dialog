@@ -26,6 +26,8 @@ make up
 make migrate
 ```
 
+The all-in-one local runtime is available at `http://localhost:8095` by default. Set `DIALOG_PORT` to override only the host port; containers on `ms-net` continue to use `ms-dialog-service:8080`.
+
 PostgreSQL adapter smoke tests are opt-in and roll their fixtures back:
 
 ```sh
