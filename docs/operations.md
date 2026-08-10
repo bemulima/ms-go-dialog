@@ -11,7 +11,7 @@ The same binary supports four explicit modes:
 | `worker` | no | no | yes | PostgreSQL, NATS |
 | `all` | yes | yes | yes | PostgreSQL, NATS |
 
-For production, `api`, `realtime`, and `worker` can be deployed and scaled independently. All modes expose the private operational HTTP surface. FileStorage and ClamAV are feature dependencies: an outage blocks attachment work but does not make message and dialog operations globally unready.
+For production, `api`, `realtime`, and `worker` can be deployed and scaled independently. All modes expose the private operational HTTP surface. FileStorage, ClamAV, and `ms-go-user` participant resolution are feature dependencies: an outage blocks the operations that need them but does not make unrelated message/dialog operations globally unready. Participant mutations use `USER_SERVICE_BASE_URL`, `INTERNAL_API_TOKEN`, and `USER_SERVICE_TIMEOUT_SECONDS` (default `3`, maximum `30`) and fail with retryable `503 dependency_unavailable` when a trustworthy user lookup is unavailable.
 
 The development Compose stack exposes the `all` mode on `http://localhost:8095` by default. `DIALOG_PORT` changes only that host binding; Gateway and other containers reach the stable internal address `ms-dialog-service:8080` on `ms-net`.
 

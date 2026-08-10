@@ -43,6 +43,9 @@ capabilities:
     - name: mode_aware_readiness_and_metrics
       status: implemented
       source_path: docs/operations.md
+    - name: active_participant_batch_validation
+      status: implemented
+      source_path: docs/integration-contract.md
 relations:
     - name: depends_on
       value: postgres
@@ -50,7 +53,7 @@ relations:
       value: nats
     - name: depends_on
       value: ms-go-filestorage
-    - name: resolves_profiles_from
+    - name: validates_participants_with
       value: ms-go-user
     - name: receives_identity_from
       value: ms-gateway

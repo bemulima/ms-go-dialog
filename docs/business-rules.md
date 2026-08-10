@@ -6,6 +6,7 @@
 - Request bodies never select the acting user or sender.
 - A user may read or mutate a dialog only while its membership is active.
 - Personal dialogs contain exactly two immutable participant identities and are unique per unordered pair inside one space.
+- Personal/group creation and group-member addition require every relevant participant to be active in `ms-go-user`; validation is batched and fails closed before the mutation transaction.
 - Group owners and admins manage membership. A group must retain an active owner.
 - Rejoining a group starts a new active membership interval and a new history boundary after the current last message.
 - Dialogs in a disabled space are omitted from user lists and cannot be read or mutated until the space is active again.
