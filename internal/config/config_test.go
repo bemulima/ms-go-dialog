@@ -13,9 +13,12 @@ func TestConfig_ValidateModesAndTicketTTL(t *testing.T) {
 		AttachmentTTLMinutes: 60, AttachmentSignedURLMinutes: 5, AttachmentWorkerInterval: 5,
 		AttachmentWorkerBatch: 50, AttachmentWorkerLeaseSeconds: 120, AttachmentActivationAttempts: 5,
 		OutboxWorkerIntervalMS: 500, OutboxWorkerBatch: 100, OutboxLeaseSeconds: 30,
-		ReadinessTimeoutSeconds: 2,
-		ShutdownTimeoutSeconds:  10,
-		ClamAVTimeoutSeconds:    30,
+		ReadinessTimeoutSeconds:   2,
+		ShutdownTimeoutSeconds:    10,
+		ClamAVTimeoutSeconds:      30,
+		UserServiceBaseURL:        "http://ms-user-service:8080",
+		UserServiceTimeoutSeconds: 3,
+		InternalAPIToken:          "secret",
 	}
 	if err := valid.Validate(); err != nil {
 		t.Fatalf("valid config rejected: %v", err)
@@ -39,5 +42,10 @@ func TestConfig_ValidateModesAndTicketTTL(t *testing.T) {
 	invalid.AttachmentWorkerLeaseSeconds = 60
 	if err := invalid.Validate(); err == nil {
 		t.Fatal("attachment worker lease below safe minimum accepted")
+	}
+	invalid = valid
+	invalid.UserServiceTimeoutSeconds = 31
+	if err := invalid.Validate(); err == nil {
+		t.Fatal("user service timeout above hard maximum accepted")
 	}
 }
