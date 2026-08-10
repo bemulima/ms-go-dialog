@@ -38,7 +38,7 @@ services:
       clamav:
         condition: service_healthy
     ports:
-      - "${DIALOG_PORT:-8093}:8080"
+      - "${DIALOG_PORT:-8095}:8080"
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/readyz"]
       interval: 5s
@@ -50,7 +50,7 @@ services:
       - ms-net
 
   clamav:
-    image: clamav/clamav:1.4
+    image: clamav/clamav-debian:1.4
     healthcheck:
       test: ["CMD", "/usr/local/bin/clamdcheck.sh"]
       interval: 10s

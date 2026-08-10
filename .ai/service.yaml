@@ -75,6 +75,7 @@ commands:
     - test
     - lint
     - validate_contracts
+    - runtime_e2e
     - migrate_local
     - run_local
     - start_local_stack

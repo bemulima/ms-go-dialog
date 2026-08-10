@@ -44,6 +44,9 @@ jobs:
           go vet ./...
           make validate-contracts
 
+      - name: Compose runtime contract
+        run: ./test/runtime/compose_contract_test.sh
+
       - name: Apply migrations
         env:
           PGPASSWORD: postgres

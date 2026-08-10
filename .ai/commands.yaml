@@ -30,6 +30,11 @@ commands:
       source_path: Makefile
       requires_approval: false
       risk: verification
+    - name: runtime_e2e
+      run: DIALOG_E2E_ADMIN_TOKEN=<token> make runtime-e2e
+      source_path: Makefile
+      requires_approval: true
+      risk: integration_data_change
     - name: migrate_local
       run: make migrate
       source_path: Makefile

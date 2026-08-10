@@ -13,6 +13,16 @@ The same binary supports four explicit modes:
 
 For production, `api`, `realtime`, and `worker` can be deployed and scaled independently. All modes expose the private operational HTTP surface. FileStorage and ClamAV are feature dependencies: an outage blocks attachment work but does not make message and dialog operations globally unready.
 
+The development Compose stack exposes the `all` mode on `http://localhost:8095` by default. `DIALOG_PORT` changes only that host binding; Gateway and other containers reach the stable internal address `ms-dialog-service:8080` on `ms-net`.
+
+After Dialog and Gateway are running, the opt-in integration probe creates an isolated space and two temporary authenticated users, then verifies a three-member group, per-member unread cursors, read-all, image/file activation, signed URLs, WebSocket typing, single-use tickets, and reconnect:
+
+```sh
+DIALOG_E2E_ADMIN_TOKEN='<current ADMIN access token>' make runtime-e2e
+```
+
+The probe uses the public Gateway on `http://localhost:7070`, the admin Gateway on `http://localhost:9090`, and the Tarantool integration hook through Gateway. Override `DIALOG_E2E_GATEWAY_URL`, `DIALOG_E2E_ADMIN_GATEWAY_URL`, or `DIALOG_E2E_ORIGIN` when the local topology differs. It creates integration data intentionally and never prints access tokens.
+
 Attachment worker replicas coordinate through leased `SKIP LOCKED` claims. Keep `ATTACHMENT_WORKER_LEASE_SECONDS` (default `120`) longer than a normal FileStorage activation/deletion request; a crashed worker's items become eligible after that deadline.
 
 ## Probes
