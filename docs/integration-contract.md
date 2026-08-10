@@ -10,7 +10,11 @@ The WebSocket flow is: authenticated REST request to `POST /api/v1/realtime/tick
 
 ## User service
 
-Dialog stores user UUIDs only. Profile names and avatars are hydrated from `ms-go-user` by the consuming application; they are not copied into dialog tables or events. The gateway authenticates the acting user. Participant UUID existence validation is exposed as the `ParticipantResolver` port; it remains optional until `ms-go-user` provides a bounded batch internal lookup. This avoids N sequential cross-service calls during large-group creation. A production rollout must either bind that port to the batch contract or explicitly accept UUID-only eventual consistency.
+Dialog stores user UUIDs only. Profile names and avatars are hydrated from `ms-go-user` by the consuming application; they are not copied into dialog tables or events. The gateway authenticates the acting user.
+
+Before creating a personal dialog, creating a group, or adding a group member, Dialog resolves the relevant participant UUIDs with one bounded request to `POST /internal/v1/users/active/resolve`. The request uses `X-Internal-Token`, contains `user_ids`, and is limited to 1000 unique non-zero UUIDs. `ms-go-user` returns the same UUID set partitioned into `data.active_user_ids` and `data.unavailable_user_ids`; active means the user is enabled and has status `ACTIVE` or `NEW_USER`.
+
+Dialog validates the response as an exact partition. Any unavailable participant produces `422 participant_unavailable`; transport failure, non-200 response, timeout, oversized or malformed payload, or inconsistent partition produces `503 dependency_unavailable`. These mutations fail closed before their database transaction. The lookup remains a feature dependency and is not part of global readiness. The actor is included in group-creation validation; personal-dialog creation and member addition validate the target participant. Manager authorization precedes member lookup so the endpoint does not expose whether an arbitrary UUID exists.
 
 ## FileStorage and scanner
 

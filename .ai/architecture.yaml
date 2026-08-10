@@ -58,6 +58,12 @@ layers:
       responsibilities:
         - ClamAV INSTREAM protocol
         - fail-closed generic file scanning
+    - name: user_adapter
+      source_path: internal/adapters/user
+      responsibilities:
+        - bounded active-participant batch resolution
+        - strict response partition validation
+        - fail-closed dependency error mapping
     - name: health_and_observability_adapters
       source_path: internal/adapters
       responsibilities:
@@ -76,7 +82,7 @@ domain_ownership:
 external_ownership:
     - name: user_identity_and_profile
       owner: ms-go-auth/ms-go-user
-      local_reference: UUID without cross-database FK
+      local_reference: UUID without cross-database FK; activity resolved through private batch API
     - name: attachment_bytes
       owner: ms-go-filestorage
       local_reference: filestorage_id

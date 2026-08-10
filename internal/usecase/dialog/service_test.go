@@ -51,6 +51,12 @@ func (f *dialogSpaceStore) GetByID(_ context.Context, id uuid.UUID) (domain.Spac
 	}
 	return f.item, nil
 }
+func (f *dialogSpaceStore) GetByKey(_ context.Context, key string) (domain.Space, error) {
+	if key != f.item.Key {
+		return domain.Space{}, domain.ErrNotFound
+	}
+	return f.item, nil
+}
 
 type dialogMemberStore struct {
 	repository.MemberRepository
@@ -104,11 +110,36 @@ func (f *dialogOutboxStore) Add(_ context.Context, item domain.OutboxEvent) erro
 	return nil
 }
 
-type participantResolverStub struct{ calls int }
+type participantResolverStub struct {
+	calls int
+	ids   []uuid.UUID
+	err   error
+}
 
-func (f *participantResolverStub) RequireActiveUsers(context.Context, []uuid.UUID) error {
+func (f *participantResolverStub) RequireActiveUsers(_ context.Context, ids []uuid.UUID) error {
 	f.calls++
-	return nil
+	f.ids = append([]uuid.UUID(nil), ids...)
+	return f.err
+}
+
+func TestEnsurePersonal_RequiresActiveParticipantBeforeTransaction(t *testing.T) {
+	now := time.Now().UTC()
+	spaceID, actorID, targetID := uuid.New(), uuid.New(), uuid.New()
+	resolver := &participantResolverStub{err: domain.ErrParticipantUnavailable}
+	tx := &dialogTx{}
+	service := Service{
+		Spaces:       &dialogSpaceStore{item: domain.Space{ID: spaceID, Key: "platform", Name: "Platform", Status: domain.SpaceStatusActive, Policy: domain.DefaultPolicy(), CreatedBy: actorID, CreatedAt: now, UpdatedAt: now}},
+		Participants: resolver,
+		Tx:           tx,
+	}
+
+	_, err := service.EnsurePersonal(context.Background(), domain.Actor{UserID: actorID, Role: "USER"}, EnsurePersonalInput{SpaceKey: "platform", ParticipantID: targetID})
+	if !errors.Is(err, domain.ErrParticipantUnavailable) {
+		t.Fatalf("error=%v, want participant unavailable", err)
+	}
+	if resolver.calls != 1 || len(resolver.ids) != 1 || resolver.ids[0] != targetID || tx.calls != 0 {
+		t.Fatalf("resolver/transaction mismatch: calls=%d ids=%v tx=%d", resolver.calls, resolver.ids, tx.calls)
+	}
 }
 
 func TestAddMember_RejoinStartsNewHistoryAndMembershipInterval(t *testing.T) {

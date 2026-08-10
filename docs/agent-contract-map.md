@@ -6,7 +6,7 @@ This map is the final navigation source for the current backend release. Until i
 | --- | --- | --- |
 | Dialogs, membership, messages, read state | `ms-go-dialog` | domain/use cases and PostgreSQL |
 | Authentication | `ms-go-auth` + `ms-gateway` | gateway-replaced actor headers |
-| User profile | `ms-go-user` | UUID reference only locally |
+| User profile and participant activity | `ms-go-user` | UUID reference locally; bounded internal batch lookup before membership mutations |
 | Attachment bytes | `ms-go-filestorage` | local binding and authorization metadata |
 | Durable delivery | PostgreSQL outbox + NATS JetStream | at-least-once, event-ID deduplication |
 | Browser realtime | Dialog WebSocket | ticket-authenticated projection |
@@ -24,5 +24,6 @@ Change routing:
 - persistence: reversible migrations, postgres adapter, database contract;
 - event: domain subject, outbox, events contract and consumer rules;
 - attachment: attachment use case, FileStorage adapter, lifecycle contract.
+- participant validation: dialog use-case port, user HTTP adapter, `ms-go-user` internal batch contract, stable `422`/`503` errors.
 - frontend/read UX: frontend/backend map, message window query, per-member read transaction, `read.updated` event.
 - operations: health/observability adapters, runtime composition, operations contract, HTTP machine contract.

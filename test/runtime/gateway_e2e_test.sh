@@ -117,6 +117,15 @@ http_status="$(curl -sS --max-time 30 -o "$work_dir/space.json" -w '%{http_code}
 expect_status 201 "$http_status" "$work_dir/space.json" "admin space/create"
 space_id="$(jq -er '.id' "$work_dir/space.json")"
 
+missing_user_id="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+invalid_group_body="$(jq -nc --arg space "$space_key" --arg missing "$missing_user_id" \
+  '{space_key:$space,title:"Unavailable participant",participant_ids:[$missing]}')"
+http_status="$(curl -sS --max-time 30 -o "$work_dir/group-unavailable.json" -w '%{http_code}' \
+  -H "Authorization: Bearer $user1_token" -H 'Content-Type: application/json' --data "$invalid_group_body" \
+  "$gateway_url/api/dialog/v1/dialog/group/create")"
+expect_status 422 "$http_status" "$work_dir/group-unavailable.json" "dialog group/create unavailable participant"
+jq -e '.error == "participant_unavailable"' "$work_dir/group-unavailable.json" >/dev/null || fail "unavailable participant error contract is invalid"
+
 group_body="$(jq -nc --arg space "$space_key" --arg user2 "$user2_id" --arg admin "$admin_id" \
   '{space_key:$space,title:"Runtime E2E group",participant_ids:[$user2,$admin]}')"
 http_status="$(curl -sS --max-time 30 -o "$work_dir/group.json" -w '%{http_code}' \
@@ -206,4 +215,4 @@ for reconnect_attempt in 1 2; do
     --url "$websocket_url/api/dialog/v1/ws" --origin "$origin" --ticket "$ticket" --dialog-id "$dialog_id")
 done
 
-printf 'dialog runtime e2e passed: space=%s dialog=%s members=3 messages=22 unread/read-all=passed attachments=2 websocket_reconnect=passed\n' "$space_id" "$dialog_id"
+printf 'dialog runtime e2e passed: space=%s dialog=%s participant_validation=passed members=3 messages=22 unread/read-all=passed attachments=2 websocket_reconnect=passed\n' "$space_id" "$dialog_id"
