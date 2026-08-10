@@ -39,6 +39,8 @@ func classifyError(err error) (int, string, string) {
 		return http.StatusForbidden, "dialog_forbidden", "dialog membership or permission is required"
 	case errors.Is(err, domain.ErrBlocked):
 		return http.StatusForbidden, "user_blocked", "messaging is blocked for this user pair"
+	case errors.Is(err, domain.ErrParticipantUnavailable):
+		return http.StatusUnprocessableEntity, "participant_unavailable", "one or more participants are unavailable"
 	case errors.Is(err, domain.ErrDialogClosed):
 		return http.StatusConflict, "dialog_closed", "dialog is not writable"
 	case errors.Is(err, domain.ErrMemberLimit):
@@ -67,6 +69,8 @@ func classifyError(err error) (int, string, string) {
 		return http.StatusUnprocessableEntity, "file_infected", "file did not pass malware scanning"
 	case errors.Is(err, domain.ErrFileScanUnavailable):
 		return http.StatusServiceUnavailable, "file_scan_unavailable", "file scanning is temporarily unavailable"
+	case errors.Is(err, domain.ErrDependencyUnavailable):
+		return http.StatusServiceUnavailable, "dependency_unavailable", "a required service is temporarily unavailable"
 	case errors.Is(err, domain.ErrValidation), errors.Is(err, domain.ErrInvalidContent):
 		return http.StatusBadRequest, "invalid_request", "request is invalid"
 	default:

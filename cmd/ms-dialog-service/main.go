@@ -19,6 +19,7 @@ import (
 	natsadapter "github.com/bemulima/ms-go-dialog/internal/adapters/nats"
 	"github.com/bemulima/ms-go-dialog/internal/adapters/observability"
 	"github.com/bemulima/ms-go-dialog/internal/adapters/postgres"
+	useradapter "github.com/bemulima/ms-go-dialog/internal/adapters/user"
 	websocketadapter "github.com/bemulima/ms-go-dialog/internal/adapters/websocket"
 	"github.com/bemulima/ms-go-dialog/internal/config"
 	adminuc "github.com/bemulima/ms-go-dialog/internal/usecase/admin"
@@ -67,6 +68,11 @@ func run() error {
 
 	dialogService := &dialoguc.Service{
 		Spaces: spaces, Dialogs: dialogs, Members: members, Blocks: blocks, Outbox: outbox, Tx: tx,
+		Participants: &useradapter.Client{
+			BaseURL:       cfg.UserServiceBaseURL,
+			InternalToken: cfg.InternalAPIToken,
+			HTTPClient:    &http.Client{Timeout: time.Duration(cfg.UserServiceTimeoutSeconds) * time.Second},
+		},
 	}
 	messageService := &messageuc.Service{
 		Spaces: spaces, Dialogs: dialogs, Members: members, Messages: messages,

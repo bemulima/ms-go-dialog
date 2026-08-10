@@ -28,6 +28,7 @@ services:
       FILESTORAGE_SERVICE_BASE_URL: http://ms-filestorage:8080
       CLAMAV_ADDRESS: clamav:3310
       USER_SERVICE_BASE_URL: http://ms-user-service:8080
+      USER_SERVICE_TIMEOUT_SECONDS: "3"
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-change-me}
       SERVICE_MODE: all
       READINESS_TIMEOUT_SECONDS: "2"
