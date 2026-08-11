@@ -40,6 +40,7 @@ jobs:
 
       - name: Unit, race, static, and contract checks
         run: |
+          make agent-policy
           go test -race ./...
           go vet ./...
           make validate-contracts

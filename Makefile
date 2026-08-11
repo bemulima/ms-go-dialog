@@ -1,4 +1,7 @@
-.PHONY: fmt deps tidy test lint validate-contracts runtime-e2e migrate up down
+.PHONY: fmt deps tidy test lint validate-contracts agent-policy runtime-e2e migrate up down
+
+agent-policy:
+	./scripts/check-agent-policy.sh
 
 fmt:
 	gofmt -w cmd internal test

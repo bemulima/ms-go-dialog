@@ -65,7 +65,8 @@ contracts:
     - .ai/contracts/frontend.yaml
 instructions:
     - AGENTS.md
-    - prompts/git-workflow.md
+    - .ai/rules/common.md
+    - docs/README.md
     - docs/domain-map.md
     - docs/agent-contract-map.md
     - docs/frontend-backend-contract-map.md
@@ -84,6 +85,10 @@ commands:
     - start_local_stack
     - stop_local_stack
 workflows:
+    - .ai/workflows/bugfix.yaml
     - .ai/workflows/implement-feature.yaml
+    - .ai/workflows/refactor.yaml
+    - .ai/workflows/review.yaml
+    - .ai/workflows/issue-delivery.yaml
     - .ai/workflows/change-contract.yaml
     - .ai/workflows/test.yaml

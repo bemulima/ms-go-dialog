@@ -1,0 +1,9 @@
+schema_version: 1
+name: refactor
+requires_approval: false
+steps:
+  - define preserved behavior and establish a passing baseline
+  - identify boundaries and contracts that must not change
+  - perform the smallest structural change without mixed feature work
+  - run focused and repository verification
+  - review the diff for accidental behavior or contract changes

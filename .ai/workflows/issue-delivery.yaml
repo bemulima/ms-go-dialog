@@ -1,0 +1,9 @@
+schema_version: 1
+name: issue-delivery
+requires_approval: true
+steps:
+  - confirm issue scope, acceptance criteria, repository, and branch
+  - select the matching bugfix, feature, refactor, or review workflow
+  - implement and verify without mutating external systems implicitly
+  - inspect status and diff and prepare a focused handoff
+  - create commits, push, or open a pull request only when authorized

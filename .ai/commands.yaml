@@ -1,5 +1,10 @@
 schema_version: 1
 commands:
+    - name: agent_policy
+      run: ./scripts/check-agent-policy.sh
+      source_path: scripts/check-agent-policy.sh
+      requires_approval: false
+      risk: verification
     - name: format
       run: gofmt -w cmd internal test
       source_path: Makefile

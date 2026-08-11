@@ -1,0 +1,9 @@
+schema_version: 1
+name: bugfix
+requires_approval: false
+steps:
+  - read the issue, common rules, service manifest, and affected contracts
+  - reproduce or characterize the failure and identify the root cause
+  - add a regression test and implement the smallest safe fix
+  - run narrow checks, then the required repository verification
+  - review the diff and document contract or migration impact

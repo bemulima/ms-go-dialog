@@ -1,0 +1,16 @@
+schema_version: 1
+project: ms-go-dialog
+template: .ai/template.yaml
+entrypoint: AGENTS.md
+common_rules: .ai/rules/common.md
+project_specific:
+  service: .ai/service.yaml
+  architecture: .ai/architecture.yaml
+  commands: .ai/commands.yaml
+  docs_index: docs/README.md
+  contracts:
+    - .ai/contracts/database.yaml
+    - .ai/contracts/events.yaml
+    - .ai/contracts/frontend.yaml
+    - .ai/contracts/http.yaml
+    - .ai/contracts/websocket.yaml

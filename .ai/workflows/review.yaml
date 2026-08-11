@@ -1,0 +1,9 @@
+schema_version: 1
+name: review
+requires_approval: false
+steps:
+  - inspect the real diff and task acceptance criteria independently
+  - check correctness, security, data integrity, compatibility, and migrations
+  - verify tests and documentation cover changed behavior
+  - report actionable findings with exact file and line references
+  - summarize residual risk and verification after findings
