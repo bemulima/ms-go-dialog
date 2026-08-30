@@ -79,6 +79,8 @@ domain_ownership:
     - OutboxEvent
     - RealtimeTicket
     - UserBlock
+    - TeacherDialogBinding
+    - MessageAuthor
 external_ownership:
     - name: user_identity_and_profile
       owner: ms-go-auth/ms-go-user
@@ -86,6 +88,12 @@ external_ownership:
     - name: attachment_bytes
       owner: ms-go-filestorage
       local_reference: filestorage_id
+    - name: personal_teacher_identity_and_pedagogy
+      owner: ms-go-teacher-agent
+      local_reference: personal_teacher_id on teacher dialogs and teacher-authored messages
+    - name: learning_action
+      owner: ms-go-student
+      local_reference: opaque learning_action_id on task/project teacher-dialog messages
 runtime_modes:
     - all
     - api

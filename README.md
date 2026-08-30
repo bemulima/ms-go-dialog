@@ -1,6 +1,6 @@
 # ms-go-dialog
 
-`ms-go-dialog` is an independent Go domain service for authenticated personal and group messaging. It owns dialogs, membership, messages, per-member read state, attachment authorization, realtime sequencing, moderation state, and transactional event delivery. It does not own user profiles or file bytes.
+`ms-go-dialog` is an independent Go domain service for authenticated personal, group, and contextual PersonalTeacher messaging. It owns dialogs, membership, explicit user/teacher message authorship, per-member read state, attachment authorization, realtime sequencing, moderation state, and transactional event delivery. It does not own user profiles, PersonalTeacher pedagogy, student mastery, or file bytes.
 
 ## Architecture
 

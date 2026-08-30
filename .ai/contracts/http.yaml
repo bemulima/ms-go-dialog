@@ -47,8 +47,18 @@ route_groups:
         - PUT /dialog/reopen/{dialogID}
         - PUT /message/hide/{messageID}
         - PUT /message/restore/{messageID}
+    - prefix: /internal/v1
+      authentication: exact X-Internal-Token; never gateway or browser routed
+      routes:
+        - PUT /teacher-dialog/ensure
+        - GET /teacher-dialog/{dialogID}/request/{sourceMessageID}
+        - POST /teacher-dialog/{dialogID}/message
 pagination:
     message_order: message_sequence
     cursor: opaque and dialog scoped
 error_contract: docs/error-contract.md
 operations_contract: docs/operations.md
+teacher_dialog:
+    provisioning: internal command from ms-go-teacher-agent; browser cannot select personal_teacher_id
+    request_context: exact source message plus at most 49 preceding messages; no unrestricted history
+    response_append: idempotent per personal_teacher_id and key; source message is the reply target

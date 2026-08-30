@@ -25,6 +25,7 @@ type RouterDependencies struct {
 	UserRateLimiter   middleware.ActorLimiter
 	Readiness         http.Handler
 	Metrics           *observability.Metrics
+	InternalToken     string
 }
 
 func NewRouter(deps RouterDependencies) http.Handler {
@@ -59,6 +60,15 @@ func NewRouter(deps RouterDependencies) http.Handler {
 			admin.Put("/dialog/reopen/{dialogID}", handler.ReopenDialog)
 			admin.Put("/message/hide/{messageID}", handler.HideMessage)
 			admin.Put("/message/restore/{messageID}", handler.RestoreMessage)
+		})
+	}
+	if deps.InternalToken != "" && deps.DialogService != nil && deps.MessageService != nil {
+		router.Route("/internal/v1", func(internal chi.Router) {
+			internal.Use(middleware.RequireInternalToken(deps.InternalToken, handlers.WriteError))
+			handler := handlers.TeacherDialogHandler{Dialogs: deps.DialogService, Messages: deps.MessageService}
+			internal.Put("/teacher-dialog/ensure", handler.Ensure)
+			internal.Get("/teacher-dialog/{dialogID}/request/{sourceMessageID}", handler.RequestContext)
+			internal.Post("/teacher-dialog/{dialogID}/message", handler.AppendResponse)
 		})
 	}
 

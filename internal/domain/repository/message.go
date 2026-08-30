@@ -51,3 +51,8 @@ type MessageRepository interface {
 	AdvanceEvent(ctx context.Context, messageID uuid.UUID, eventSequence int64) (domain.Message, error)
 	UpdateModerationStatus(ctx context.Context, message domain.Message, expectedStatus domain.MessageStatus, expectedVersion int) error
 }
+
+type TeacherMessageRepository interface {
+	GetByTeacherIdempotencyKey(ctx context.Context, personalTeacherID, key uuid.UUID) (domain.Message, error)
+	LockTeacherIdempotencyKey(ctx context.Context, personalTeacherID, key uuid.UUID) error
+}

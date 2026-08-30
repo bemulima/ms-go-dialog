@@ -8,9 +8,10 @@ The service owns authenticated messaging. Users are referenced by UUID without c
 
 ```text
 DialogSpace
-└── Dialog (personal or group)
+└── Dialog (personal, group, or contextual personal-teacher)
     ├── DialogMember (one independent read state per user)
-    ├── DialogMessage (ordered flat stream, optional reply reference)
+    ├── Teacher binding (teacher dialogs: one student + logical PersonalTeacher + educational context)
+    ├── DialogMessage (ordered flat stream, explicit user/PersonalTeacher author, optional LearningAction/reply reference)
     │   └── DialogAttachment
     ├── RealtimeTicket
     ├── max_message_sequence
@@ -34,3 +35,5 @@ Database transaction
 8. Stage, bind, scan/activate, authorize, and delete attachments.
 9. Publish committed lifecycle events and fan them out through user-scoped WebSockets.
 10. Recover gaps from REST using event sequence and current snapshots.
+11. Ensure one teacher dialog for a student, logical PersonalTeacher, and bounded educational context.
+12. Emit a body-free durable teacher request for each committed student message in a teacher dialog and append the eventual teacher response idempotently.

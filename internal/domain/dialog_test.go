@@ -25,6 +25,28 @@ func TestBuildPersonalKey_IsOrderIndependent(t *testing.T) {
 	}
 }
 
+func TestDialog_ValidatesTeacherContextShape(t *testing.T) {
+	now := time.Now().UTC()
+	item := Dialog{
+		ID: uuid.New(), SpaceID: uuid.New(), Type: DialogTypeTeacher, Status: DialogStatusActive,
+		StudentID: uuid.New(), PersonalTeacherID: uuid.New(), TeacherContextType: TeacherContextGeneralTeacher,
+		CreatedBy: uuid.New(), Version: 1, MemberCount: 1, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := item.Validate(); err != nil {
+		t.Fatalf("valid general teacher dialog rejected: %v", err)
+	}
+	contextID := uuid.New()
+	item.TeacherContextType = TeacherContextPracticeTask
+	item.ContextID = &contextID
+	if err := item.Validate(); err != nil {
+		t.Fatalf("valid practice teacher dialog rejected: %v", err)
+	}
+	item.ContextID = nil
+	if err := item.Validate(); err == nil {
+		t.Fatal("contextual teacher dialog without context id was accepted")
+	}
+}
+
 func TestMember_AdvanceReadChangesOnlyReceiver(t *testing.T) {
 	now := time.Now().UTC()
 	dialogID := uuid.New()

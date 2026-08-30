@@ -19,11 +19,11 @@ func (r MessageRepository) Create(ctx context.Context, item domain.Message) erro
 		return err
 	}
 	_, err = runner(ctx, r.Pool).Exec(ctx, `INSERT INTO dialog_message (
-id, dialog_id, sender_id, reply_to_message_id, body, links, status, version,
+id, dialog_id, author_type, sender_id, personal_teacher_id, learning_action_id, reply_to_message_id, body, links, status, version,
 message_sequence, last_event_sequence, idempotency_key, edited_at, deleted_at,
 created_at, updated_at
-) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-		item.ID, item.DialogID, item.SenderID, item.ReplyToMessageID, item.Body, links,
+) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+		item.ID, item.DialogID, item.AuthorType, nullableUUID(item.SenderID), nullableUUID(item.PersonalTeacherID), item.LearningActionID, item.ReplyToMessageID, item.Body, links,
 		item.Status, item.Version, item.MessageSequence, item.LastEventSequence,
 		item.IdempotencyKey, item.EditedAt, item.DeletedAt, item.CreatedAt, item.UpdatedAt)
 	return mapError(err)
@@ -44,6 +44,16 @@ FROM dialog_message WHERE sender_id=$1 AND idempotency_key=$2`, senderID, key))
 
 func (r MessageRepository) LockIdempotencyKey(ctx context.Context, senderID, key uuid.UUID) error {
 	_, err := runner(ctx, r.Pool).Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, senderID.String()+":"+key.String())
+	return err
+}
+
+func (r MessageRepository) GetByTeacherIdempotencyKey(ctx context.Context, personalTeacherID, key uuid.UUID) (domain.Message, error) {
+	return scanMessage(runner(ctx, r.Pool).QueryRow(ctx, `SELECT `+messageColumns+`
+FROM dialog_message WHERE author_type='personal_teacher' AND personal_teacher_id=$1 AND idempotency_key=$2`, personalTeacherID, key))
+}
+
+func (r MessageRepository) LockTeacherIdempotencyKey(ctx context.Context, personalTeacherID, key uuid.UUID) error {
+	_, err := runner(ctx, r.Pool).Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "personal_teacher:"+personalTeacherID.String()+":"+key.String())
 	return err
 }
 
@@ -106,7 +116,7 @@ ORDER BY last_event_sequence,id LIMIT $4`, query.DialogID, query.FromSequence, q
 func (r MessageRepository) FirstUnreadIncoming(ctx context.Context, dialogID, readerID uuid.UUID, afterSequence int64) (int64, error) {
 	var sequence int64
 	err := runner(ctx, r.Pool).QueryRow(ctx, `SELECT message_sequence FROM dialog_message
-WHERE dialog_id=$1 AND sender_id<>$2 AND message_sequence>$3 AND status=1
+WHERE dialog_id=$1 AND (sender_id IS NULL OR sender_id<>$2) AND message_sequence>$3 AND status=1
 ORDER BY message_sequence LIMIT 1`, dialogID, readerID, afterSequence).Scan(&sequence)
 	return sequence, mapError(err)
 }
@@ -117,7 +127,7 @@ func (r MessageRepository) CountUnreadIncoming(ctx context.Context, dialogID, re
 	}
 	var count int64
 	err := runner(ctx, r.Pool).QueryRow(ctx, `SELECT COUNT(*) FROM dialog_message
-WHERE dialog_id=$1 AND sender_id<>$2 AND message_sequence>$3 AND message_sequence<=$4 AND status=1`,
+WHERE dialog_id=$1 AND (sender_id IS NULL OR sender_id<>$2) AND message_sequence>$3 AND message_sequence<=$4 AND status=1`,
 		dialogID, readerID, afterExclusive, throughInclusive).Scan(&count)
 	return count, err
 }
@@ -183,3 +193,4 @@ func reverseMessages(items []domain.Message) {
 }
 
 var _ repository.MessageRepository = (*MessageRepository)(nil)
+var _ repository.TeacherMessageRepository = (*MessageRepository)(nil)

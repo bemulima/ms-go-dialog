@@ -16,11 +16,13 @@ type DialogRepository struct{ Pool *pgxpool.Pool }
 func (r DialogRepository) Create(ctx context.Context, item domain.Dialog) error {
 	_, err := runner(ctx, r.Pool).Exec(ctx, `INSERT INTO dialog (
 id, space_id, type, status, personal_key, title, created_by, version, member_count,
+student_id, personal_teacher_id, teacher_context_type, context_id,
 message_count, max_message_sequence, max_event_sequence, last_message_id,
 last_message_at, created_at, updated_at
-) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
 		item.ID, item.SpaceID, item.Type, item.Status, nullableBytes(item.PersonalKey), nullableString(item.Title),
-		item.CreatedBy, item.Version, item.MemberCount, item.MessageCount, item.MaxMessageSequence,
+		item.CreatedBy, item.Version, item.MemberCount, nullableUUID(item.StudentID), nullableUUID(item.PersonalTeacherID), nullableString(string(item.TeacherContextType)), item.ContextID,
+		item.MessageCount, item.MaxMessageSequence,
 		item.MaxEventSequence, item.LastMessageID, item.LastMessageAt, item.CreatedAt, item.UpdatedAt)
 	return mapError(err)
 }
@@ -40,6 +42,22 @@ FROM dialog WHERE space_id=$1 AND type=1 AND personal_key=$2`, spaceID, key))
 
 func (r DialogRepository) LockPersonalKey(ctx context.Context, spaceID uuid.UUID, key []byte) error {
 	lockKey := spaceID.String() + ":" + hex.EncodeToString(key)
+	_, err := runner(ctx, r.Pool).Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, lockKey)
+	return err
+}
+
+func (r DialogRepository) FindTeacherByContext(ctx context.Context, spaceID, studentID, personalTeacherID uuid.UUID, contextType domain.TeacherContextType, contextID *uuid.UUID) (domain.Dialog, error) {
+	return scanDialog(runner(ctx, r.Pool).QueryRow(ctx, `SELECT `+dialogColumns+`
+FROM dialog WHERE space_id=$1 AND type=3 AND student_id=$2 AND personal_teacher_id=$3
+AND teacher_context_type=$4 AND context_id IS NOT DISTINCT FROM $5`, spaceID, studentID, personalTeacherID, contextType, contextID))
+}
+
+func (r DialogRepository) LockTeacherContext(ctx context.Context, spaceID, studentID, personalTeacherID uuid.UUID, contextType domain.TeacherContextType, contextID *uuid.UUID) error {
+	contextValue := ""
+	if contextID != nil {
+		contextValue = contextID.String()
+	}
+	lockKey := spaceID.String() + ":" + studentID.String() + ":" + personalTeacherID.String() + ":" + string(contextType) + ":" + contextValue
 	_, err := runner(ctx, r.Pool).Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, lockKey)
 	return err
 }
@@ -130,9 +148,11 @@ func scanDialogAndMember(row interface{ Scan(...any) error }) (domain.Dialog, do
 	var item domain.Dialog
 	var member domain.Member
 	var title *string
+	var studentID, personalTeacherID *uuid.UUID
+	var teacherContextType *string
 	err := row.Scan(
 		&item.ID, &item.SpaceID, &item.Type, &item.Status, &item.PersonalKey, &title,
-		&item.CreatedBy, &item.Version, &item.MemberCount, &item.MessageCount,
+		&item.CreatedBy, &item.Version, &item.MemberCount, &studentID, &personalTeacherID, &teacherContextType, &item.ContextID, &item.MessageCount,
 		&item.MaxMessageSequence, &item.MaxEventSequence, &item.LastMessageID, &item.LastMessageAt,
 		&item.CreatedAt, &item.UpdatedAt,
 		&member.DialogID, &member.UserID, &member.Role, &member.Status,
@@ -142,6 +162,15 @@ func scanDialogAndMember(row interface{ Scan(...any) error }) (domain.Dialog, do
 	)
 	if title != nil {
 		item.Title = *title
+	}
+	if studentID != nil {
+		item.StudentID = *studentID
+	}
+	if personalTeacherID != nil {
+		item.PersonalTeacherID = *personalTeacherID
+	}
+	if teacherContextType != nil {
+		item.TeacherContextType = domain.TeacherContextType(*teacherContextType)
 	}
 	return item, member, mapError(err)
 }
@@ -190,4 +219,12 @@ func nullableBytes(value []byte) any {
 	return value
 }
 
+func nullableUUID(value uuid.UUID) any {
+	if value == uuid.Nil {
+		return nil
+	}
+	return value
+}
+
 var _ repository.DialogRepository = (*DialogRepository)(nil)
+var _ repository.TeacherDialogRepository = (*DialogRepository)(nil)

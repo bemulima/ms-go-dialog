@@ -67,7 +67,7 @@ func run() error {
 	tx := &postgres.TransactionManager{Pool: pool}
 
 	dialogService := &dialoguc.Service{
-		Spaces: spaces, Dialogs: dialogs, Members: members, Blocks: blocks, Outbox: outbox, Tx: tx,
+		Spaces: spaces, Dialogs: dialogs, TeacherDialogs: dialogs, Members: members, Blocks: blocks, Outbox: outbox, Tx: tx,
 		Participants: &useradapter.Client{
 			BaseURL:       cfg.UserServiceBaseURL,
 			InternalToken: cfg.InternalAPIToken,
@@ -75,7 +75,7 @@ func run() error {
 		},
 	}
 	messageService := &messageuc.Service{
-		Spaces: spaces, Dialogs: dialogs, Members: members, Messages: messages,
+		Spaces: spaces, Dialogs: dialogs, Members: members, Messages: messages, TeacherMessages: messages,
 		Attachments: attachments, Outbox: outbox, Tx: tx,
 		Blocks: blocks,
 	}
@@ -132,6 +132,7 @@ func run() error {
 		dependencies.RealtimeService = realtimeService
 		dependencies.AdminService = adminService
 		dependencies.UserRateLimiter = rateLimiter
+		dependencies.InternalToken = cfg.InternalAPIToken
 	}
 	if modeHasRealtime(cfg.ServiceMode) {
 		dependencies.WebSocketHandler = websocketHandler

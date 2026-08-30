@@ -27,6 +27,7 @@ const (
 	EventDialogAttachmentReady   EventSubject = "dialog.attachment.ready"
 	EventDialogAttachmentFailed  EventSubject = "dialog.attachment.failed"
 	EventDialogReadUpdated       EventSubject = "dialog.read.updated"
+	EventDialogTeacherRequested  EventSubject = "dialog.teacher.requested"
 )
 
 func (s EventSubject) Valid() bool {
@@ -35,7 +36,8 @@ func (s EventSubject) Valid() bool {
 		EventDialogMemberAdded, EventDialogMemberRemoved, EventDialogMemberRoleUpdated,
 		EventDialogMessageCreated, EventDialogMessageUpdated, EventDialogMessageDeleted,
 		EventDialogMessageHidden, EventDialogMessageRestored,
-		EventDialogAttachmentReady, EventDialogAttachmentFailed, EventDialogReadUpdated:
+		EventDialogAttachmentReady, EventDialogAttachmentFailed, EventDialogReadUpdated,
+		EventDialogTeacherRequested:
 		return true
 	default:
 		return false

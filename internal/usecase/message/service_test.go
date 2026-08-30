@@ -2,6 +2,7 @@ package message
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -200,6 +201,97 @@ func TestWindow_TrimsProbesAndReportsAvailableDirections(t *testing.T) {
 	}
 }
 
+func TestCreate_TeacherDialogPublishesDedicatedRequest(t *testing.T) {
+	now := time.Date(2026, 8, 30, 13, 0, 0, 0, time.UTC)
+	dialogID, spaceID, studentID, teacherID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	contextID, learningActionID := uuid.New(), uuid.New()
+	dialogs := &fakeDialogs{item: teacherDialog(dialogID, spaceID, studentID, teacherID, contextID, now)}
+	members := &fakeMembers{items: map[uuid.UUID]domain.Member{studentID: activeMember(dialogID, studentID, 0, 0, now)}}
+	messages := &fakeMessages{items: map[uuid.UUID]domain.Message{}}
+	outbox := &fakeOutbox{}
+	service := Service{
+		Spaces: fakeSpaces{item: activeTestSpace(spaceID, studentID, now)}, Dialogs: dialogs,
+		Members: members, Messages: messages, Outbox: outbox, Tx: fakeTx{},
+		Now: func() time.Time { return now }, NewID: uuid.New,
+	}
+
+	result, err := service.Create(context.Background(), domain.Actor{UserID: studentID, Role: "STUDENT"}, CreateInput{
+		DialogID: dialogID, Body: "Помоги разобраться", IdempotencyKey: uuid.New(), LearningActionID: &learningActionID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Created || result.View.Message.AuthorType != domain.MessageAuthorUser || result.View.Message.LearningActionID == nil || *result.View.Message.LearningActionID != learningActionID {
+		t.Fatalf("created teacher request mismatch: %+v", result)
+	}
+	if len(outbox.items) != 2 || outbox.items[0].Subject != domain.EventDialogMessageCreated || outbox.items[1].Subject != domain.EventDialogTeacherRequested {
+		t.Fatalf("teacher request events mismatch: %+v", outbox.items)
+	}
+	if outbox.items[0].EventSequence != outbox.items[1].EventSequence {
+		t.Fatalf("one message mutation must share one event sequence: %+v", outbox.items)
+	}
+	if string(outbox.items[1].Payload) == "" || containsJSONField(outbox.items[1].Payload, "body") {
+		t.Fatalf("teacher trigger leaked message body: %s", outbox.items[1].Payload)
+	}
+}
+
+func TestTeacherRequestContextAndAppendResponse(t *testing.T) {
+	now := time.Date(2026, 8, 30, 14, 0, 0, 0, time.UTC)
+	dialogID, spaceID, studentID, teacherID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	contextID, learningActionID, sourceID := uuid.New(), uuid.New(), uuid.New()
+	dialogItem := teacherDialog(dialogID, spaceID, studentID, teacherID, contextID, now)
+	dialogItem.MessageCount = 1
+	dialogItem.MaxMessageSequence = 1
+	dialogItem.MaxEventSequence = 2
+	dialogItem.LastMessageID = &sourceID
+	dialogItem.LastMessageAt = &now
+	source := domain.Message{
+		ID: sourceID, DialogID: dialogID, AuthorType: domain.MessageAuthorUser, SenderID: studentID,
+		LearningActionID: &learningActionID, Body: "Почему тест падает?", Status: domain.MessageStatusActive,
+		Version: 1, MessageSequence: 1, LastEventSequence: 2, IdempotencyKey: uuid.New(), CreatedAt: now, UpdatedAt: now,
+	}
+	messages := &fakeMessages{items: map[uuid.UUID]domain.Message{sourceID: source}, windowItems: []domain.Message{source}}
+	outbox := &fakeOutbox{}
+	service := Service{
+		Spaces: fakeSpaces{item: activeTestSpace(spaceID, studentID, now)}, Dialogs: &fakeDialogs{item: dialogItem},
+		Members:  &fakeMembers{items: map[uuid.UUID]domain.Member{studentID: activeMember(dialogID, studentID, 0, 0, now)}},
+		Messages: messages, TeacherMessages: messages, Outbox: outbox, Tx: fakeTx{},
+		Now: func() time.Time { return now.Add(time.Second) }, NewID: uuid.New,
+	}
+
+	requestContext, err := service.GetTeacherRequestContext(context.Background(), dialogID, teacherID, sourceID, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if requestContext.Source.ID != sourceID || len(requestContext.Messages) != 1 || requestContext.Dialog.PersonalTeacherID != teacherID {
+		t.Fatalf("bounded request context mismatch: %+v", requestContext)
+	}
+
+	idempotencyKey := uuid.New()
+	result, err := service.AppendTeacherResponse(context.Background(), AppendTeacherResponseInput{
+		DialogID: dialogID, PersonalTeacherID: teacherID, SourceMessageID: sourceID,
+		IdempotencyKey: idempotencyKey, Body: "Проверь условие перед циклом.",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	message := result.View.Message
+	if !result.Created || message.AuthorType != domain.MessageAuthorPersonalTeacher || message.PersonalTeacherID != teacherID || message.SenderID != uuid.Nil ||
+		message.ReplyToMessageID == nil || *message.ReplyToMessageID != sourceID || message.LearningActionID == nil || *message.LearningActionID != learningActionID {
+		t.Fatalf("teacher response mismatch: %+v", result)
+	}
+	if len(outbox.items) != 1 || outbox.items[0].Subject != domain.EventDialogMessageCreated {
+		t.Fatalf("teacher response outbox mismatch: %+v", outbox.items)
+	}
+	replay, err := service.AppendTeacherResponse(context.Background(), AppendTeacherResponseInput{
+		DialogID: dialogID, PersonalTeacherID: teacherID, SourceMessageID: sourceID,
+		IdempotencyKey: idempotencyKey, Body: "Проверь условие перед циклом.",
+	})
+	if err != nil || replay.Created || replay.View.Message.ID != message.ID || len(outbox.items) != 1 {
+		t.Fatalf("teacher response replay mismatch: replay=%+v err=%v events=%d", replay, err, len(outbox.items))
+	}
+}
+
 type fakeTx struct{}
 
 func (fakeTx) WithinTransaction(ctx context.Context, fn func(context.Context) error) error {
@@ -303,11 +395,22 @@ type fakeMessages struct {
 	lastChanges      repository.MessageChangeQuery
 	windowItems      []domain.Message
 	countUnreadCalls int
+	items            map[uuid.UUID]domain.Message
 }
 
-func (*fakeMessages) Create(context.Context, domain.Message) error { return nil }
-func (*fakeMessages) GetByID(context.Context, uuid.UUID) (domain.Message, error) {
-	return domain.Message{}, domain.ErrNotFound
+func (f *fakeMessages) Create(_ context.Context, item domain.Message) error {
+	if f.items == nil {
+		f.items = make(map[uuid.UUID]domain.Message)
+	}
+	f.items[item.ID] = item
+	return nil
+}
+func (f *fakeMessages) GetByID(_ context.Context, id uuid.UUID) (domain.Message, error) {
+	item, ok := f.items[id]
+	if !ok {
+		return domain.Message{}, domain.ErrNotFound
+	}
+	return item, nil
 }
 func (*fakeMessages) GetByIDForUpdate(context.Context, uuid.UUID) (domain.Message, error) {
 	return domain.Message{}, domain.ErrNotFound
@@ -316,6 +419,17 @@ func (*fakeMessages) GetByIdempotencyKey(context.Context, uuid.UUID, uuid.UUID) 
 	return domain.Message{}, domain.ErrNotFound
 }
 func (*fakeMessages) LockIdempotencyKey(context.Context, uuid.UUID, uuid.UUID) error { return nil }
+func (f *fakeMessages) GetByTeacherIdempotencyKey(_ context.Context, personalTeacherID, key uuid.UUID) (domain.Message, error) {
+	for _, item := range f.items {
+		if item.AuthorType == domain.MessageAuthorPersonalTeacher && item.PersonalTeacherID == personalTeacherID && item.IdempotencyKey == key {
+			return item, nil
+		}
+	}
+	return domain.Message{}, domain.ErrNotFound
+}
+func (*fakeMessages) LockTeacherIdempotencyKey(context.Context, uuid.UUID, uuid.UUID) error {
+	return nil
+}
 func (f *fakeMessages) List(_ context.Context, q repository.MessageListQuery) ([]domain.Message, error) {
 	f.lastList = q
 	return nil, nil
@@ -327,7 +441,7 @@ func (f *fakeMessages) Window(_ context.Context, q repository.MessageWindowQuery
 
 func messageAt(dialogID, senderID uuid.UUID, sequence int64, now time.Time) domain.Message {
 	return domain.Message{
-		ID: uuid.New(), DialogID: dialogID, SenderID: senderID, IdempotencyKey: uuid.New(),
+		ID: uuid.New(), DialogID: dialogID, AuthorType: domain.MessageAuthorUser, SenderID: senderID, IdempotencyKey: uuid.New(),
 		Body: "message", Status: domain.MessageStatusActive, Version: 1,
 		MessageSequence: sequence, LastEventSequence: sequence, CreatedAt: now, UpdatedAt: now,
 	}
@@ -380,5 +494,27 @@ var _ repository.SpaceRepository = fakeSpaces{}
 var _ repository.DialogRepository = (*fakeDialogs)(nil)
 var _ repository.MemberRepository = (*fakeMembers)(nil)
 var _ repository.MessageRepository = (*fakeMessages)(nil)
+var _ repository.TeacherMessageRepository = (*fakeMessages)(nil)
 var _ repository.OutboxRepository = (*fakeOutbox)(nil)
 var _ repository.TransactionManager = fakeTx{}
+
+func teacherDialog(dialogID, spaceID, studentID, teacherID, contextID uuid.UUID, now time.Time) domain.Dialog {
+	return domain.Dialog{
+		ID: dialogID, SpaceID: spaceID, Type: domain.DialogTypeTeacher, Status: domain.DialogStatusActive,
+		StudentID: studentID, PersonalTeacherID: teacherID, TeacherContextType: domain.TeacherContextPracticeTask, ContextID: &contextID,
+		CreatedBy: studentID, Version: 1, MemberCount: 1, CreatedAt: now, UpdatedAt: now,
+	}
+}
+
+func activeTestSpace(spaceID, createdBy uuid.UUID, now time.Time) domain.Space {
+	return domain.Space{ID: spaceID, Key: "platform", Name: "Platform", Status: domain.SpaceStatusActive, Policy: domain.DefaultPolicy(), CreatedBy: createdBy, CreatedAt: now, UpdatedAt: now}
+}
+
+func containsJSONField(payload []byte, field string) bool {
+	var value map[string]any
+	if json.Unmarshal(payload, &value) != nil {
+		return false
+	}
+	_, ok := value[field]
+	return ok
+}

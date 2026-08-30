@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"crypto/subtle"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,6 +12,20 @@ import (
 	"github.com/bemulima/ms-go-dialog/internal/domain"
 	"github.com/google/uuid"
 )
+
+func RequireInternalToken(token string, writeError ErrorWriter) func(http.Handler) http.Handler {
+	expected := strings.TrimSpace(token)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			provided := r.Header.Get("X-Internal-Token")
+			if expected == "" || len(provided) != len(expected) || subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) != 1 {
+				writeError(w, r, domain.ErrAuthentication)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
 
 type ActorLimiter interface{ Allow(uuid.UUID) bool }
 type ActorRateLimiter struct {

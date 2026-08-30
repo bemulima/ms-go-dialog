@@ -15,7 +15,31 @@ type DialogType int16
 const (
 	DialogTypePersonal DialogType = iota + 1
 	DialogTypeGroup
+	DialogTypeTeacher
 )
+
+type TeacherContextType string
+
+const (
+	TeacherContextGeneralTeacher TeacherContextType = "general_teacher"
+	TeacherContextLesson         TeacherContextType = "lesson"
+	TeacherContextLessonTask     TeacherContextType = "lesson_task"
+	TeacherContextPracticeTask   TeacherContextType = "practice_task"
+	TeacherContextProject        TeacherContextType = "project"
+)
+
+func (t TeacherContextType) Valid() bool {
+	switch t {
+	case TeacherContextGeneralTeacher, TeacherContextLesson, TeacherContextLessonTask, TeacherContextPracticeTask, TeacherContextProject:
+		return true
+	default:
+		return false
+	}
+}
+
+func (t TeacherContextType) RequiresLearningAction() bool {
+	return t == TeacherContextLessonTask || t == TeacherContextPracticeTask || t == TeacherContextProject
+}
 
 type DialogStatus int16
 
@@ -48,6 +72,10 @@ type Dialog struct {
 	Status             DialogStatus
 	PersonalKey        []byte
 	Title              string
+	StudentID          uuid.UUID
+	PersonalTeacherID  uuid.UUID
+	TeacherContextType TeacherContextType
+	ContextID          *uuid.UUID
 	CreatedBy          uuid.UUID
 	Version            int
 	MemberCount        int
@@ -84,17 +112,33 @@ func (d Dialog) Validate() error {
 	}
 	switch d.Type {
 	case DialogTypePersonal:
-		if len(d.PersonalKey) != sha256.Size || d.MemberCount != 2 || strings.TrimSpace(d.Title) != "" {
+		if len(d.PersonalKey) != sha256.Size || d.MemberCount != 2 || strings.TrimSpace(d.Title) != "" || d.hasTeacherBinding() {
 			return fmt.Errorf("%w: invalid personal dialog shape", ErrValidation)
 		}
 	case DialogTypeGroup:
-		if len(d.PersonalKey) != 0 || d.MemberCount < 1 || d.MemberCount > HardMaxGroupMembers || len([]rune(strings.TrimSpace(d.Title))) > 200 || strings.TrimSpace(d.Title) == "" {
+		if len(d.PersonalKey) != 0 || d.MemberCount < 1 || d.MemberCount > HardMaxGroupMembers || len([]rune(strings.TrimSpace(d.Title))) > 200 || strings.TrimSpace(d.Title) == "" || d.hasTeacherBinding() {
 			return fmt.Errorf("%w: invalid group dialog shape", ErrValidation)
+		}
+	case DialogTypeTeacher:
+		if len(d.PersonalKey) != 0 || strings.TrimSpace(d.Title) != "" || d.MemberCount != 1 ||
+			d.StudentID == uuid.Nil || d.PersonalTeacherID == uuid.Nil || !d.TeacherContextType.Valid() {
+			return fmt.Errorf("%w: invalid teacher dialog shape", ErrValidation)
+		}
+		if d.TeacherContextType == TeacherContextGeneralTeacher {
+			if d.ContextID != nil {
+				return fmt.Errorf("%w: general teacher dialog cannot have context id", ErrValidation)
+			}
+		} else if d.ContextID == nil || *d.ContextID == uuid.Nil {
+			return fmt.Errorf("%w: contextual teacher dialog requires context id", ErrValidation)
 		}
 	default:
 		return fmt.Errorf("%w: invalid dialog type", ErrValidation)
 	}
 	return nil
+}
+
+func (d Dialog) hasTeacherBinding() bool {
+	return d.StudentID != uuid.Nil || d.PersonalTeacherID != uuid.Nil || d.TeacherContextType != "" || d.ContextID != nil
 }
 
 type Member struct {

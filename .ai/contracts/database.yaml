@@ -15,6 +15,10 @@ invariants:
     - every member owns an independent monotonic read cursor and unread count
     - message sequence is immutable and separate from event sequence
     - message mutation and outbox evidence commit atomically
+    - a teacher dialog has one real student member and one logical personal_teacher_id binding
+    - user and personal-teacher message authors are mutually exclusive
+    - task and project teacher requests retain the opaque learning_action_id supplied on the source message
+    - message.created and teacher.requested evidence for one source mutation may share one event sequence and differ by subject
     - attachment binding never crosses sender or dialog ownership
     - attachment workers use finite leased SKIP LOCKED claims across replicas
 migration_policy:

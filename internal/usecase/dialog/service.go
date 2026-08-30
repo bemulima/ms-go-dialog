@@ -24,20 +24,29 @@ type ParticipantResolver interface {
 }
 
 type Service struct {
-	Spaces       repository.SpaceRepository
-	Dialogs      repository.DialogRepository
-	Members      repository.MemberRepository
-	Blocks       repository.BlockRepository
-	Outbox       repository.OutboxRepository
-	Tx           repository.TransactionManager
-	Participants ParticipantResolver
-	Now          func() time.Time
-	NewID        func() uuid.UUID
+	Spaces         repository.SpaceRepository
+	Dialogs        repository.DialogRepository
+	TeacherDialogs repository.TeacherDialogRepository
+	Members        repository.MemberRepository
+	Blocks         repository.BlockRepository
+	Outbox         repository.OutboxRepository
+	Tx             repository.TransactionManager
+	Participants   ParticipantResolver
+	Now            func() time.Time
+	NewID          func() uuid.UUID
 }
 
 type EnsurePersonalInput struct {
 	SpaceKey      string
 	ParticipantID uuid.UUID
+}
+
+type EnsureTeacherInput struct {
+	SpaceKey          string
+	StudentID         uuid.UUID
+	PersonalTeacherID uuid.UUID
+	ContextType       domain.TeacherContextType
+	ContextID         *uuid.UUID
 }
 
 type CreateGroupInput struct {
@@ -175,6 +184,84 @@ func (s Service) EnsurePersonal(ctx context.Context, actor domain.Actor, in Ensu
 			return err
 		}
 		result = EnsureResult{Created: true, View: View{Dialog: item, Space: space, Members: members, CurrentMember: members[0]}}
+		return nil
+	})
+	return result, err
+}
+
+func (s Service) EnsureTeacher(ctx context.Context, in EnsureTeacherInput) (EnsureResult, error) {
+	shape := domain.Dialog{
+		ID:                 uuid.New(),
+		SpaceID:            uuid.New(),
+		Type:               domain.DialogTypeTeacher,
+		Status:             domain.DialogStatusActive,
+		StudentID:          in.StudentID,
+		PersonalTeacherID:  in.PersonalTeacherID,
+		TeacherContextType: in.ContextType,
+		ContextID:          in.ContextID,
+		CreatedBy:          in.StudentID,
+		Version:            1,
+		MemberCount:        1,
+	}
+	if err := shape.Validate(); err != nil {
+		return EnsureResult{}, err
+	}
+	space, err := s.activeSpace(ctx, in.SpaceKey)
+	if err != nil {
+		return EnsureResult{}, err
+	}
+	if !space.Policy.AllowPersonal {
+		return EnsureResult{}, domain.ErrForbidden
+	}
+	if s.Participants != nil {
+		if err := s.Participants.RequireActiveUsers(ctx, []uuid.UUID{in.StudentID}); err != nil {
+			return EnsureResult{}, err
+		}
+	}
+
+	var result EnsureResult
+	err = s.Tx.WithinTransaction(ctx, func(txCtx context.Context) error {
+		if s.TeacherDialogs == nil {
+			return fmt.Errorf("teacher dialog repository is not configured")
+		}
+		if err := s.TeacherDialogs.LockTeacherContext(txCtx, space.ID, in.StudentID, in.PersonalTeacherID, in.ContextType, in.ContextID); err != nil {
+			return err
+		}
+		existing, err := s.TeacherDialogs.FindTeacherByContext(txCtx, space.ID, in.StudentID, in.PersonalTeacherID, in.ContextType, in.ContextID)
+		if err == nil {
+			view, err := s.buildView(txCtx, in.StudentID, space, existing)
+			if err != nil {
+				return err
+			}
+			result = EnsureResult{View: view}
+			return nil
+		}
+		if !errors.Is(err, domain.ErrNotFound) {
+			return err
+		}
+
+		now := s.now()
+		item := domain.Dialog{
+			ID: s.newID(), SpaceID: space.ID, Type: domain.DialogTypeTeacher, Status: domain.DialogStatusActive,
+			StudentID: in.StudentID, PersonalTeacherID: in.PersonalTeacherID,
+			TeacherContextType: in.ContextType, ContextID: in.ContextID,
+			CreatedBy: in.StudentID, Version: 1, MemberCount: 1, MaxEventSequence: 1,
+			CreatedAt: now, UpdatedAt: now,
+		}
+		if err := item.Validate(); err != nil {
+			return err
+		}
+		if err := s.Dialogs.Create(txCtx, item); err != nil {
+			return err
+		}
+		member := newMember(item.ID, in.StudentID, domain.MemberRoleMember, in.StudentID, 1, now)
+		if err := s.Members.Create(txCtx, member); err != nil {
+			return err
+		}
+		if err := s.addCreatedEvent(txCtx, item, []domain.Member{member}, now); err != nil {
+			return err
+		}
+		result = EnsureResult{Created: true, View: View{Dialog: item, Space: space, Members: []domain.Member{member}, CurrentMember: member}}
 		return nil
 	})
 	return result, err
@@ -594,11 +681,18 @@ func (s Service) addCreatedEvent(ctx context.Context, item domain.Dialog, member
 	for _, member := range members {
 		ids = append(ids, member.UserID)
 	}
-	payload, err := json.Marshal(map[string]any{
+	data := map[string]any{
 		"schema_version": 1, "event_id": s.newID(), "occurred_at": now,
 		"dialog_id": item.ID, "event_sequence": int64(1), "type": item.Type,
 		"space_id": item.SpaceID, "created_by": item.CreatedBy, "participant_ids": ids,
-	})
+	}
+	if item.Type == domain.DialogTypeTeacher {
+		data["student_id"] = item.StudentID
+		data["personal_teacher_id"] = item.PersonalTeacherID
+		data["context_type"] = item.TeacherContextType
+		data["context_id"] = item.ContextID
+	}
+	payload, err := json.Marshal(data)
 	if err != nil {
 		return err
 	}

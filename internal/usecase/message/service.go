@@ -19,16 +19,17 @@ const (
 )
 
 type Service struct {
-	Spaces      repository.SpaceRepository
-	Dialogs     repository.DialogRepository
-	Members     repository.MemberRepository
-	Messages    repository.MessageRepository
-	Attachments repository.AttachmentRepository
-	Outbox      repository.OutboxRepository
-	Blocks      repository.BlockRepository
-	Tx          repository.TransactionManager
-	Now         func() time.Time
-	NewID       func() uuid.UUID
+	Spaces          repository.SpaceRepository
+	Dialogs         repository.DialogRepository
+	Members         repository.MemberRepository
+	Messages        repository.MessageRepository
+	TeacherMessages repository.TeacherMessageRepository
+	Attachments     repository.AttachmentRepository
+	Outbox          repository.OutboxRepository
+	Blocks          repository.BlockRepository
+	Tx              repository.TransactionManager
+	Now             func() time.Time
+	NewID           func() uuid.UUID
 }
 
 type CreateInput struct {
@@ -37,6 +38,7 @@ type CreateInput struct {
 	Body             string
 	AttachmentIDs    []uuid.UUID
 	IdempotencyKey   uuid.UUID
+	LearningActionID *uuid.UUID
 }
 
 type UpdateInput struct {
@@ -74,6 +76,22 @@ type Window struct {
 	ReadState ReadState
 	HasOlder  bool
 	HasNewer  bool
+}
+
+const MaxTeacherContextMessages = 50
+
+type TeacherRequestContext struct {
+	Dialog   domain.Dialog
+	Source   domain.Message
+	Messages []domain.Message
+}
+
+type AppendTeacherResponseInput struct {
+	DialogID          uuid.UUID
+	PersonalTeacherID uuid.UUID
+	SourceMessageID   uuid.UUID
+	IdempotencyKey    uuid.UUID
+	Body              string
 }
 
 func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput) (CreateResult, error) {
@@ -122,6 +140,9 @@ func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput)
 				}
 			}
 		}
+		if err := validateLearningActionBinding(dialogItem, in.LearningActionID); err != nil {
+			return err
+		}
 		attachments, imageCount, fileCount, err := s.bindableAttachments(txCtx, actor.UserID, in.DialogID, in.AttachmentIDs, space.Policy)
 		if err != nil {
 			return err
@@ -141,7 +162,8 @@ func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput)
 		messageSequence := dialogItem.MaxMessageSequence + 1
 		eventSequence := dialogItem.MaxEventSequence + 1
 		item := domain.Message{
-			ID: s.newID(), DialogID: in.DialogID, SenderID: actor.UserID, ReplyToMessageID: in.ReplyToMessageID,
+			ID: s.newID(), DialogID: in.DialogID, AuthorType: domain.MessageAuthorUser, SenderID: actor.UserID,
+			LearningActionID: in.LearningActionID, ReplyToMessageID: in.ReplyToMessageID,
 			Body: content.Body, Links: content.Links, Status: domain.MessageStatusActive, Version: 1,
 			MessageSequence: messageSequence, LastEventSequence: eventSequence,
 			IdempotencyKey: in.IdempotencyKey, CreatedAt: now, UpdatedAt: now,
@@ -176,7 +198,132 @@ func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput)
 		if err := s.addEvent(txCtx, item, attachments, domain.EventDialogMessageCreated, actor.UserID, now); err != nil {
 			return err
 		}
+		if dialogItem.Type == domain.DialogTypeTeacher {
+			if err := s.addTeacherRequestedEvent(txCtx, dialogItem, item, now); err != nil {
+				return err
+			}
+		}
 		result = CreateResult{Created: true, View: View{Message: item, Attachments: attachments}}
+		return nil
+	})
+	return result, err
+}
+
+func (s Service) GetTeacherRequestContext(ctx context.Context, dialogID, personalTeacherID, sourceMessageID uuid.UUID, before int) (TeacherRequestContext, error) {
+	if dialogID == uuid.Nil || personalTeacherID == uuid.Nil || sourceMessageID == uuid.Nil || before < 0 || before >= MaxTeacherContextMessages {
+		return TeacherRequestContext{}, fmt.Errorf("%w: invalid teacher request context", domain.ErrValidation)
+	}
+	dialogItem, err := s.Dialogs.GetByID(ctx, dialogID)
+	if err != nil || dialogItem.Type != domain.DialogTypeTeacher || dialogItem.Status == domain.DialogStatusHidden {
+		return TeacherRequestContext{}, domain.ErrDialogNotFound
+	}
+	if dialogItem.Status != domain.DialogStatusActive || dialogItem.PersonalTeacherID != personalTeacherID {
+		return TeacherRequestContext{}, domain.ErrForbidden
+	}
+	source, err := s.Messages.GetByID(ctx, sourceMessageID)
+	if err != nil || source.DialogID != dialogID || source.Status != domain.MessageStatusActive ||
+		source.AuthorType != domain.MessageAuthorUser || source.SenderID != dialogItem.StudentID {
+		return TeacherRequestContext{}, domain.ErrMessageNotFound
+	}
+	if err := validateLearningActionBinding(dialogItem, source.LearningActionID); err != nil {
+		return TeacherRequestContext{}, err
+	}
+	items, err := s.Messages.Window(ctx, repository.MessageWindowQuery{
+		DialogID: dialogID, FromSequence: 0, AnchorSequence: source.MessageSequence,
+		Before: before, After: 1,
+	})
+	if err != nil {
+		return TeacherRequestContext{}, err
+	}
+	if len(items) == 0 || items[len(items)-1].ID != source.ID {
+		return TeacherRequestContext{}, domain.ErrMessageNotFound
+	}
+	return TeacherRequestContext{Dialog: dialogItem, Source: source, Messages: items}, nil
+}
+
+func (s Service) AppendTeacherResponse(ctx context.Context, in AppendTeacherResponseInput) (CreateResult, error) {
+	if in.DialogID == uuid.Nil || in.PersonalTeacherID == uuid.Nil || in.SourceMessageID == uuid.Nil || in.IdempotencyKey == uuid.Nil {
+		return CreateResult{}, fmt.Errorf("%w: teacher response identities are required", domain.ErrValidation)
+	}
+	var result CreateResult
+	err := s.Tx.WithinTransaction(ctx, func(txCtx context.Context) error {
+		if s.TeacherMessages == nil {
+			return fmt.Errorf("teacher message repository is not configured")
+		}
+		if err := s.TeacherMessages.LockTeacherIdempotencyKey(txCtx, in.PersonalTeacherID, in.IdempotencyKey); err != nil {
+			return err
+		}
+		existing, err := s.TeacherMessages.GetByTeacherIdempotencyKey(txCtx, in.PersonalTeacherID, in.IdempotencyKey)
+		if err == nil {
+			if existing.DialogID != in.DialogID || existing.Body != in.Body || existing.ReplyToMessageID == nil || *existing.ReplyToMessageID != in.SourceMessageID {
+				return domain.ErrIdempotencyConflict
+			}
+			result = CreateResult{View: View{Message: existing}}
+			return nil
+		}
+		if !errors.Is(err, domain.ErrNotFound) {
+			return err
+		}
+
+		dialogItem, err := s.Dialogs.GetByIDForUpdate(txCtx, in.DialogID)
+		if err != nil || dialogItem.Type != domain.DialogTypeTeacher || dialogItem.Status == domain.DialogStatusHidden {
+			return domain.ErrDialogNotFound
+		}
+		if dialogItem.Status != domain.DialogStatusActive {
+			return domain.ErrDialogClosed
+		}
+		if dialogItem.PersonalTeacherID != in.PersonalTeacherID {
+			return domain.ErrForbidden
+		}
+		space, err := s.Spaces.GetByID(txCtx, dialogItem.SpaceID)
+		if err != nil || space.Status != domain.SpaceStatusActive {
+			return domain.ErrDialogNotFound
+		}
+		source, err := s.Messages.GetByID(txCtx, in.SourceMessageID)
+		if err != nil || source.DialogID != in.DialogID || source.Status != domain.MessageStatusActive ||
+			source.AuthorType != domain.MessageAuthorUser || source.SenderID != dialogItem.StudentID {
+			return domain.ErrMessageNotFound
+		}
+		if err := validateLearningActionBinding(dialogItem, source.LearningActionID); err != nil {
+			return err
+		}
+		content := domain.AnalyzeMessageContent(in.Body, 0, 0)
+		if err := content.Validate(space.Policy); err != nil {
+			return err
+		}
+
+		now := s.now()
+		item := domain.Message{
+			ID: s.newID(), DialogID: in.DialogID, AuthorType: domain.MessageAuthorPersonalTeacher,
+			PersonalTeacherID: in.PersonalTeacherID, LearningActionID: source.LearningActionID,
+			ReplyToMessageID: &source.ID, Body: content.Body, Links: content.Links,
+			Status: domain.MessageStatusActive, Version: 1,
+			MessageSequence: dialogItem.MaxMessageSequence + 1, LastEventSequence: dialogItem.MaxEventSequence + 1,
+			IdempotencyKey: in.IdempotencyKey, CreatedAt: now, UpdatedAt: now,
+		}
+		if err := item.Validate(); err != nil {
+			return err
+		}
+		if err := s.Messages.Create(txCtx, item); err != nil {
+			return err
+		}
+		dialogItem.MessageCount++
+		dialogItem.MaxMessageSequence = item.MessageSequence
+		dialogItem.MaxEventSequence = item.LastEventSequence
+		dialogItem.LastMessageID = &item.ID
+		dialogItem.LastMessageAt = &now
+		dialogItem.Version++
+		dialogItem.UpdatedAt = now
+		if err := s.Dialogs.UpdateState(txCtx, dialogItem, dialogItem.Version-1); err != nil {
+			return err
+		}
+		if err := s.Members.IncrementUnreadRecipients(txCtx, item.DialogID, uuid.Nil, item.LastEventSequence); err != nil {
+			return err
+		}
+		if err := s.addEvent(txCtx, item, nil, domain.EventDialogMessageCreated, uuid.Nil, now); err != nil {
+			return err
+		}
+		result = CreateResult{Created: true, View: View{Message: item}}
 		return nil
 	})
 	return result, err
@@ -532,7 +679,7 @@ func (s Service) resolveReplay(ctx context.Context, existing domain.Message, in 
 	if err != nil {
 		return err
 	}
-	if existing.DialogID != in.DialogID || existing.Body != in.Body || !sameUUID(existing.ReplyToMessageID, in.ReplyToMessageID) || !sameAttachmentIDs(attachments, in.AttachmentIDs) {
+	if existing.DialogID != in.DialogID || existing.Body != in.Body || !sameUUID(existing.ReplyToMessageID, in.ReplyToMessageID) || !sameUUID(existing.LearningActionID, in.LearningActionID) || !sameAttachmentIDs(attachments, in.AttachmentIDs) {
 		return domain.ErrIdempotencyConflict
 	}
 	*result = CreateResult{View: View{Message: existing, Attachments: attachments}}
@@ -580,7 +727,9 @@ func (s Service) addEvent(ctx context.Context, item domain.Message, attachments 
 		"schema_version": 1, "event_id": eventID, "occurred_at": now,
 		"dialog_id": item.DialogID, "event_sequence": item.LastEventSequence,
 		"message_sequence": item.MessageSequence, "message_id": item.ID,
-		"sender_id": item.SenderID, "actor_id": actorID, "status": item.Status,
+		"author_type": item.AuthorType, "sender_id": nullableEventUUID(item.SenderID),
+		"personal_teacher_id": nullableEventUUID(item.PersonalTeacherID), "learning_action_id": item.LearningActionID,
+		"actor_id": nullableEventUUID(actorID), "status": item.Status,
 		"version": item.Version, "body": item.Body, "links": item.Links, "attachments": attachments,
 	})
 	if err != nil {
@@ -589,6 +738,26 @@ func (s Service) addEvent(ctx context.Context, item domain.Message, attachments 
 	return s.Outbox.Add(ctx, domain.OutboxEvent{
 		ID: eventID, DialogID: item.DialogID, AggregateType: "message", AggregateID: item.ID,
 		Subject: subject, EventSequence: item.LastEventSequence, SchemaVersion: 1,
+		Payload: payload, NextAttemptAt: now, CreatedAt: now,
+	})
+}
+
+func (s Service) addTeacherRequestedEvent(ctx context.Context, dialogItem domain.Dialog, item domain.Message, now time.Time) error {
+	eventID := s.newID()
+	payload, err := json.Marshal(map[string]any{
+		"schema_version": 1, "event_id": eventID, "occurred_at": now,
+		"dialog_id": dialogItem.ID, "event_sequence": item.LastEventSequence,
+		"source_message_id": item.ID, "source_message_sequence": item.MessageSequence,
+		"student_id": dialogItem.StudentID, "personal_teacher_id": dialogItem.PersonalTeacherID,
+		"context_type": dialogItem.TeacherContextType, "context_id": dialogItem.ContextID,
+		"learning_action_id": item.LearningActionID,
+	})
+	if err != nil {
+		return err
+	}
+	return s.Outbox.Add(ctx, domain.OutboxEvent{
+		ID: eventID, DialogID: item.DialogID, AggregateType: "teacher_request", AggregateID: item.ID,
+		Subject: domain.EventDialogTeacherRequested, EventSequence: item.LastEventSequence, SchemaVersion: 1,
 		Payload: payload, NextAttemptAt: now, CreatedAt: now,
 	})
 }
@@ -642,6 +811,29 @@ func sameUUID(first, second *uuid.UUID) bool {
 		return first == nil && second == nil
 	}
 	return *first == *second
+}
+
+func nullableEventUUID(value uuid.UUID) any {
+	if value == uuid.Nil {
+		return nil
+	}
+	return value
+}
+
+func validateLearningActionBinding(item domain.Dialog, learningActionID *uuid.UUID) error {
+	if learningActionID != nil && *learningActionID == uuid.Nil {
+		return fmt.Errorf("%w: learning action UUID is invalid", domain.ErrValidation)
+	}
+	if item.Type != domain.DialogTypeTeacher {
+		if learningActionID != nil {
+			return fmt.Errorf("%w: learning action is limited to teacher dialogs", domain.ErrValidation)
+		}
+		return nil
+	}
+	if item.TeacherContextType.RequiresLearningAction() != (learningActionID != nil) {
+		return fmt.Errorf("%w: learning action does not match teacher dialog context", domain.ErrValidation)
+	}
+	return nil
 }
 
 func sameAttachmentIDs(items []domain.Attachment, ids []uuid.UUID) bool {

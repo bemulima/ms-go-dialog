@@ -15,8 +15,8 @@ func TestHTTPContractMatchesRegisteredRoutes(t *testing.T) {
 	router := readText(t, filepath.Join(root, "internal", "adapters", "http", "router.go"))
 	contract := readText(t, filepath.Join(root, ".ai", "contracts", "http.yaml"))
 
-	routePattern := regexp.MustCompile(`\b(router|api|admin)\.(Get|Post|Put|Delete|Patch|Handle)\("([^"]+)"`)
-	prefixes := map[string]string{"router": "", "api": "/api/v1", "admin": "/admin/v1"}
+	routePattern := regexp.MustCompile(`\b(router|api|admin|internal)\.(Get|Post|Put|Delete|Patch|Handle)\("([^"]+)"`)
+	prefixes := map[string]string{"router": "", "api": "/api/v1", "admin": "/admin/v1", "internal": "/internal/v1"}
 	registered := make(map[string]struct{})
 	for _, match := range routePattern.FindAllStringSubmatch(router, -1) {
 		method := strings.ToUpper(match[2])

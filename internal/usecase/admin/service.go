@@ -196,7 +196,15 @@ func (s Service) moderate(ctx context.Context, actor domain.Actor, id uuid.UUID,
 			return err
 		}
 		eventID := s.newID()
-		payload, err := json.Marshal(map[string]any{"schema_version": 1, "event_id": eventID, "occurred_at": now, "dialog_id": item.DialogID, "space_id": dialogItem.SpaceID, "event_sequence": eventSequence, "message_sequence": item.MessageSequence, "message_id": item.ID, "sender_id": item.SenderID, "status": item.Status, "version": item.Version, "actor_id": actor.UserID, "body": item.Body, "links": item.Links, "attachments": attachments})
+		payload, err := json.Marshal(map[string]any{
+			"schema_version": 1, "event_id": eventID, "occurred_at": now,
+			"dialog_id": item.DialogID, "space_id": dialogItem.SpaceID, "event_sequence": eventSequence,
+			"message_sequence": item.MessageSequence, "message_id": item.ID,
+			"author_type": item.AuthorType, "sender_id": optionalUUID(item.SenderID),
+			"personal_teacher_id": optionalUUID(item.PersonalTeacherID), "learning_action_id": item.LearningActionID,
+			"status": item.Status, "version": item.Version, "actor_id": actor.UserID,
+			"body": item.Body, "links": item.Links, "attachments": attachments,
+		})
 		if err != nil {
 			return err
 		}
@@ -207,6 +215,13 @@ func (s Service) moderate(ctx context.Context, actor domain.Actor, id uuid.UUID,
 		return nil
 	})
 	return result, err
+}
+
+func optionalUUID(value uuid.UUID) any {
+	if value == uuid.Nil {
+		return nil
+	}
+	return value
 }
 func requireAdmin(actor domain.Actor) error {
 	if err := actor.Validate(); err != nil {

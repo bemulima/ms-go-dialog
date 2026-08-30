@@ -6,6 +6,9 @@
 - Request bodies never select the acting user or sender.
 - A user may read or mutate a dialog only while its membership is active.
 - Personal dialogs contain exactly two immutable participant identities and are unique per unordered pair inside one space.
+- Teacher dialogs contain exactly one real student member and bind that student to one logical `personal_teacher_id`; the teacher is not an `ms-go-user` participant.
+- Teacher dialogs are unique per space, student, PersonalTeacher, context type, and context ID. `general_teacher` has no context ID; `lesson`, `lesson_task`, `practice_task`, and `project` require one.
+- Teacher-dialog provisioning is an internal command. Browsers cannot choose or impersonate a `personal_teacher_id`.
 - Personal/group creation and group-member addition require every relevant participant to be active in `ms-go-user`; validation is batched and fails closed before the mutation transaction.
 - Group owners and admins manage membership. A group must retain an active owner.
 - Rejoining a group starts a new active membership interval and a new history boundary after the current last message.
@@ -19,6 +22,10 @@
 - Content requires non-blank text or at least one attachment.
 - Raw HTML is rejected. Only absolute HTTP(S) links are accepted when links are enabled.
 - Create is idempotent per sender UUID key. Update/delete use expected integer version.
+- Message author is explicit: `user` has `sender_id`, while `personal_teacher` has `personal_teacher_id`; both at once are forbidden.
+- Student messages in `lesson_task`, `practice_task`, and `project` teacher dialogs require an opaque `learning_action_id`. Other dialog contexts reject it. Dialog does not validate mastery or targets; Teacher verifies action ownership and OPEN state through Student.
+- A committed student message in a teacher dialog atomically records both normal `dialog.message.created` evidence and a body-free `dialog.teacher.requested` trigger. A teacher-authored response never recursively emits a teacher request.
+- Teacher responses are accepted only through the internal idempotent append command, must match the bound PersonalTeacher and source student message, inherit its LearningAction reference, and reply to that source message.
 - Delete keeps a tombstone, identity, order, reply references, and sequence.
 
 ## Read state
@@ -35,6 +42,7 @@
 ## Delivery
 
 - Durable mutations allocate event sequence and insert outbox evidence in the same transaction.
+- The lifecycle event and teacher-request integration event for one source-message mutation share one event sequence and have different subjects.
 - FileStorage and NATS calls never run inside the domain transaction.
 - REST is the command source of truth. WebSocket is a bounded low-latency projection.
 - Clients deduplicate by event ID and reconcile event-sequence gaps through REST.

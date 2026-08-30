@@ -20,7 +20,14 @@ func (f *dialogTx) WithinTransaction(ctx context.Context, run func(context.Conte
 
 type dialogStore struct {
 	repository.DialogRepository
-	item domain.Dialog
+	item        domain.Dialog
+	createCalls int
+}
+
+func (f *dialogStore) Create(_ context.Context, item domain.Dialog) error {
+	f.item = item
+	f.createCalls++
+	return nil
 }
 
 func (f *dialogStore) GetByID(_ context.Context, id uuid.UUID) (domain.Dialog, error) {
@@ -37,6 +44,16 @@ func (f *dialogStore) UpdateState(_ context.Context, item domain.Dialog, expecte
 		return domain.ErrMessageConflict
 	}
 	f.item = item
+	return nil
+}
+func (f *dialogStore) FindTeacherByContext(_ context.Context, spaceID, studentID, personalTeacherID uuid.UUID, contextType domain.TeacherContextType, contextID *uuid.UUID) (domain.Dialog, error) {
+	if f.item.Type != domain.DialogTypeTeacher || f.item.SpaceID != spaceID || f.item.StudentID != studentID ||
+		f.item.PersonalTeacherID != personalTeacherID || f.item.TeacherContextType != contextType || !sameOptionalUUID(f.item.ContextID, contextID) {
+		return domain.Dialog{}, domain.ErrNotFound
+	}
+	return f.item, nil
+}
+func (*dialogStore) LockTeacherContext(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, domain.TeacherContextType, *uuid.UUID) error {
 	return nil
 }
 
@@ -142,6 +159,49 @@ func TestEnsurePersonal_RequiresActiveParticipantBeforeTransaction(t *testing.T)
 	}
 }
 
+func TestEnsureTeacher_CreatesOneStudentBindingIdempotently(t *testing.T) {
+	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
+	spaceID, studentID, teacherID := uuid.New(), uuid.New(), uuid.New()
+	dialogs := &dialogStore{}
+	members := &dialogMemberStore{items: map[uuid.UUID]domain.Member{}}
+	outbox := &dialogOutboxStore{}
+	resolver := &participantResolverStub{}
+	service := Service{
+		Spaces: &dialogSpaceStore{item: domain.Space{
+			ID: spaceID, Key: "platform", Name: "Platform", Status: domain.SpaceStatusActive,
+			Policy: domain.DefaultPolicy(), CreatedBy: studentID, CreatedAt: now, UpdatedAt: now,
+		}},
+		Dialogs: dialogs, TeacherDialogs: dialogs, Members: members, Outbox: outbox,
+		Participants: resolver, Tx: &dialogTx{}, Now: func() time.Time { return now }, NewID: uuid.New,
+	}
+	input := EnsureTeacherInput{
+		SpaceKey: "platform", StudentID: studentID, PersonalTeacherID: teacherID,
+		ContextType: domain.TeacherContextGeneralTeacher,
+	}
+
+	first, err := service.EnsureTeacher(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := service.EnsureTeacher(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !first.Created || second.Created || first.View.Dialog.ID != second.View.Dialog.ID || dialogs.createCalls != 1 {
+		t.Fatalf("ensure idempotency mismatch: first=%+v second=%+v creates=%d", first, second, dialogs.createCalls)
+	}
+	if first.View.Dialog.Type != domain.DialogTypeTeacher || first.View.Dialog.StudentID != studentID || first.View.Dialog.PersonalTeacherID != teacherID || first.View.Dialog.MemberCount != 1 {
+		t.Fatalf("teacher binding mismatch: %+v", first.View.Dialog)
+	}
+	member := members.items[studentID]
+	if member.DialogID != first.View.Dialog.ID || member.Status != domain.MemberStatusActive {
+		t.Fatalf("student membership mismatch: %+v", member)
+	}
+	if resolver.calls != 2 || len(outbox.items) != 1 || outbox.items[0].Subject != domain.EventDialogCreated {
+		t.Fatalf("resolver/outbox mismatch: calls=%d events=%+v", resolver.calls, outbox.items)
+	}
+}
+
 func TestAddMember_RejoinStartsNewHistoryAndMembershipInterval(t *testing.T) {
 	oldJoined := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
 	now := time.Date(2026, 8, 8, 10, 0, 0, 0, time.UTC)
@@ -216,3 +276,11 @@ func TestAddMember_DoesNotResolveTargetBeforeManagerAuthorization(t *testing.T) 
 }
 
 var _ repository.TransactionManager = (*dialogTx)(nil)
+var _ repository.TeacherDialogRepository = (*dialogStore)(nil)
+
+func sameOptionalUUID(first, second *uuid.UUID) bool {
+	if first == nil || second == nil {
+		return first == nil && second == nil
+	}
+	return *first == *second
+}

@@ -21,6 +21,7 @@ func (h MessageHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Body             string      `json:"body"`
 		AttachmentIDs    []uuid.UUID `json:"attachment_ids"`
 		IdempotencyKey   uuid.UUID   `json:"idempotency_key"`
+		LearningActionID *uuid.UUID  `json:"learning_action_id"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
 		WriteError(w, r, domain.ErrValidation)
@@ -28,7 +29,7 @@ func (h MessageHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := h.Service.Create(r.Context(), middleware.Actor(r), messageuc.CreateInput{
 		DialogID: request.DialogID, ReplyToMessageID: request.ReplyToMessageID,
-		Body: request.Body, AttachmentIDs: request.AttachmentIDs, IdempotencyKey: request.IdempotencyKey,
+		Body: request.Body, AttachmentIDs: request.AttachmentIDs, IdempotencyKey: request.IdempotencyKey, LearningActionID: request.LearningActionID,
 	})
 	if err != nil {
 		WriteError(w, r, err)

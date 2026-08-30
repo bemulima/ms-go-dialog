@@ -12,6 +12,9 @@ This map is the final navigation source for the current backend release. Until i
 | Browser realtime | Dialog WebSocket | ticket-authenticated projection |
 | Malware decision | ClamAV | fail-closed synchronous scan for generic files |
 | Liveness, readiness, metrics | `ms-go-dialog` private HTTP port | operations contract and observability adapters |
+| Logical PersonalTeacher identity and pedagogy | `ms-go-teacher-agent` | opaque binding/reference locally; no synthetic user |
+| Teacher conversation history and delivery | `ms-go-dialog` | teacher dialog, explicit message author, outbox and WebSocket |
+| LearningAction ownership/state | `ms-go-student` | opaque source-message reference; verified by Teacher |
 
 Integration boundaries are specified in `docs/integration-contract.md`. The future frontend must follow `docs/frontend-backend-contract-map.md`; in particular, loading is not reading and only an explicit contiguous read-through or read-all command mutates one member's counters.
 
@@ -27,3 +30,4 @@ Change routing:
 - participant validation: dialog use-case port, user HTTP adapter, `ms-go-user` internal batch contract, stable `422`/`503` errors.
 - frontend/read UX: frontend/backend map, message window query, per-member read transaction, `read.updated` event.
 - operations: health/observability adapters, runtime composition, operations contract, HTTP machine contract.
+- teacher dialog: Dialog domain/migration, internal ensure/read/append contour, body-free durable trigger, Teacher-owned consumer contract.

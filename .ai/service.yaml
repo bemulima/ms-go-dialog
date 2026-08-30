@@ -6,10 +6,11 @@ repository:
     git_url: https://github.com/bemulima/ms-go-dialog.git
     default_branch: main
 purpose: >-
-    Independent authenticated personal and group messaging service. It owns dialogs,
-    membership, messages, per-member read state, attachment authorization, moderation,
-    realtime sequencing, WebSocket tickets, and outbox delivery. It does not own user
-    profiles, authentication credentials, or attachment bytes.
+    Independent authenticated personal, group, and contextual PersonalTeacher messaging
+    service. It owns dialogs, membership, explicit message authorship, per-member read
+    state, attachment authorization, moderation, realtime sequencing, WebSocket tickets,
+    and outbox delivery. It does not own user profiles, authentication credentials,
+    teacher pedagogy, student mastery, or attachment bytes.
 release_contract_map: docs/agent-contract-map.md
 stack:
     - name: language
@@ -46,6 +47,12 @@ capabilities:
     - name: active_participant_batch_validation
       status: implemented
       source_path: docs/integration-contract.md
+    - name: contextual_personal_teacher_dialogs
+      status: implemented
+      source_path: docs/business-rules.md
+    - name: durable_teacher_request_delivery
+      status: implemented
+      source_path: docs/realtime-delivery.md
 relations:
     - name: depends_on
       value: postgres
@@ -57,6 +64,10 @@ relations:
       value: ms-go-user
     - name: receives_identity_from
       value: ms-gateway
+    - name: binds_logical_teacher_from
+      value: ms-go-teacher-agent
+    - name: emits_teacher_requests_to
+      value: ms-go-teacher-agent
 contracts:
     - .ai/contracts/database.yaml
     - .ai/contracts/http.yaml

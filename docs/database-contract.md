@@ -9,9 +9,9 @@ Applied migrations are immutable. The initial group shape requires at least two 
 ## Tables
 
 - `dialog_space`: integration key, Origin allowlist, personal/group and content policies.
-- `dialog`: type, lifecycle, personal pair hash, counters, message/event high-water marks, last activity.
+- `dialog`: type, lifecycle, personal pair hash, optional teacher binding (`student_id`, `personal_teacher_id`, `teacher_context_type`, `context_id`), counters, message/event high-water marks, last activity.
 - `dialog_member`: role, lifecycle, history boundary, independent read cursor/unread count, mute/archive state.
-- `dialog_message`: sender, optional same-dialog reply, content, immutable message order, latest event sequence, version and tombstone.
+- `dialog_message`: mutually exclusive user/PersonalTeacher author, optional LearningAction and same-dialog reply, content, immutable message order, latest event sequence, version and tombstone.
 - `dialog_attachment`: service authorization and lifecycle metadata while FileStorage owns bytes.
 - `dialog_outbox`: versioned lifecycle payload, finite claim lease, retries and publication evidence.
 - `dialog_ws_ticket`: SHA-256 ticket hash, user/space binding and short expiry.
@@ -22,6 +22,8 @@ Applied migrations are immutable. The initial group shape requires at least two 
 - Personal dialog and both memberships commit together.
 - Group and initial membership set commit together.
 - Message, dialog counters/sequences, recipient unread increments, attachment binding, and outbox insert commit together.
+- A student teacher-dialog message also inserts `dialog.teacher.requested` in that same transaction. It shares the source mutation's event sequence with `dialog.message.created`; outbox uniqueness therefore includes subject.
+- An internally appended PersonalTeacher response, dialog counters, student unread increment, and `dialog.message.created` evidence commit together.
 - Read cursor, unread decrement, event sequence, and outbox insert commit together for one member only.
 - Attachment ready/failed transitions and their message/dialog event evidence commit together after idempotent FileStorage work for active messages. Hidden messages finish the attachment transition without public event evidence; a later moderation restore carries the authoritative attachment snapshot.
 
@@ -30,3 +32,5 @@ Attachment activation and deletion batches are claimed atomically with `FOR UPDA
 ## Sequence distinction
 
 `dialog.max_message_sequence` increments only for message creation. `dialog.max_event_sequence` increments for every durable change. `dialog_message.message_sequence` never changes; `last_event_sequence` advances on edits, deletes, moderation, or attachment projection changes.
+
+Migration `004_teacher_dialogs` is additive and preserves existing personal/group rows. Its down migration fails closed while teacher-dialog, teacher-message, LearningAction, or teacher-request data exists instead of silently deleting it.

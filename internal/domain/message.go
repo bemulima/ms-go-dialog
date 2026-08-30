@@ -24,6 +24,17 @@ const (
 	MessageStatusHidden
 )
 
+type MessageAuthorType string
+
+const (
+	MessageAuthorUser            MessageAuthorType = "user"
+	MessageAuthorPersonalTeacher MessageAuthorType = "personal_teacher"
+)
+
+func (t MessageAuthorType) Valid() bool {
+	return t == MessageAuthorUser || t == MessageAuthorPersonalTeacher
+}
+
 type Link struct {
 	URL string `json:"url"`
 }
@@ -86,7 +97,10 @@ func (c MessageContent) Validate(policy Policy) error {
 type Message struct {
 	ID                uuid.UUID
 	DialogID          uuid.UUID
+	AuthorType        MessageAuthorType
 	SenderID          uuid.UUID
+	PersonalTeacherID uuid.UUID
+	LearningActionID  *uuid.UUID
 	ReplyToMessageID  *uuid.UUID
 	Body              string
 	Links             []Link
@@ -102,10 +116,17 @@ type Message struct {
 }
 
 func (m Message) Validate() error {
-	if m.ID == uuid.Nil || m.DialogID == uuid.Nil || m.SenderID == uuid.Nil || m.IdempotencyKey == uuid.Nil ||
+	if m.ID == uuid.Nil || m.DialogID == uuid.Nil || !m.AuthorType.Valid() || m.IdempotencyKey == uuid.Nil ||
 		m.Version < 1 || m.MessageSequence < 1 || m.LastEventSequence < m.MessageSequence ||
 		m.Status < MessageStatusActive || m.Status > MessageStatusHidden {
 		return fmt.Errorf("%w: invalid message identity or state", ErrValidation)
+	}
+	if (m.AuthorType == MessageAuthorUser && (m.SenderID == uuid.Nil || m.PersonalTeacherID != uuid.Nil)) ||
+		(m.AuthorType == MessageAuthorPersonalTeacher && (m.SenderID != uuid.Nil || m.PersonalTeacherID == uuid.Nil)) {
+		return fmt.Errorf("%w: invalid message author", ErrValidation)
+	}
+	if m.LearningActionID != nil && *m.LearningActionID == uuid.Nil {
+		return fmt.Errorf("%w: invalid learning action", ErrValidation)
 	}
 	if m.ReplyToMessageID != nil && *m.ReplyToMessageID == m.ID {
 		return fmt.Errorf("%w: a message cannot reply to itself", ErrValidation)

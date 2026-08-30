@@ -23,3 +23,11 @@ Dialog authorizes and binds attachment metadata. `ms-go-filestorage` owns bytes 
 ## NATS
 
 JetStream `DIALOG_EVENTS` carries durable `dialog.*` subjects from the PostgreSQL outbox. Consumers deduplicate by `event_id`. Core NATS `dialog.realtime.typing.<dialog_id>` is ephemeral and may be lost. Realtime instances use independent subscriptions so every instance can serve its local WebSocket connections.
+
+`dialog.teacher.requested` is a dedicated at-least-once integration trigger for `ms-go-teacher-agent`. It is emitted only after a student-authored teacher-dialog message commits and contains the source IDs, student, bound PersonalTeacher, educational context, and optional LearningAction reference. It deliberately excludes the message body, mastery, and history. Teacher deduplicates by `event_id`, then uses the bounded internal read contract.
+
+## Teacher Agent
+
+`ms-go-teacher-agent` owns logical PersonalTeacher identity and pedagogy. It provisions teacher bindings through `PUT /internal/v1/teacher-dialog/ensure`, reads the exact source plus a bounded prior window through `GET /internal/v1/teacher-dialog/{dialogID}/request/{sourceMessageID}`, and appends the eventual response through `POST /internal/v1/teacher-dialog/{dialogID}/message`. All calls require the exact `X-Internal-Token`; the gateway and browser must never route these endpoints.
+
+Dialog checks binding, context, source authorship, content policy, and append idempotency. Teacher verifies the opaque `learning_action_id` against `ms-go-student`, applies deterministic pedagogy before any model invocation, and does not persist a competing conversation history.

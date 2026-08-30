@@ -23,22 +23,26 @@ type memberResponse struct {
 }
 
 type dialogResponse struct {
-	ID                 uuid.UUID           `json:"id"`
-	SpaceID            uuid.UUID           `json:"space_id"`
-	Type               domain.DialogType   `json:"type"`
-	Status             domain.DialogStatus `json:"status"`
-	Title              string              `json:"title,omitempty"`
-	Version            int                 `json:"version"`
-	MemberCount        int                 `json:"member_count"`
-	MessageCount       int64               `json:"message_count"`
-	MaxMessageSequence int64               `json:"max_message_sequence"`
-	MaxEventSequence   int64               `json:"max_event_sequence"`
-	LastMessageID      *uuid.UUID          `json:"last_message_id"`
-	LastMessageAt      *time.Time          `json:"last_message_at"`
-	CurrentMember      memberResponse      `json:"current_member"`
-	Members            []memberResponse    `json:"members,omitempty"`
-	CreatedAt          time.Time           `json:"created_at"`
-	UpdatedAt          time.Time           `json:"updated_at"`
+	ID                 uuid.UUID                 `json:"id"`
+	SpaceID            uuid.UUID                 `json:"space_id"`
+	Type               domain.DialogType         `json:"type"`
+	Status             domain.DialogStatus       `json:"status"`
+	Title              string                    `json:"title,omitempty"`
+	StudentID          *uuid.UUID                `json:"student_id,omitempty"`
+	PersonalTeacherID  *uuid.UUID                `json:"personal_teacher_id,omitempty"`
+	ContextType        domain.TeacherContextType `json:"context_type,omitempty"`
+	ContextID          *uuid.UUID                `json:"context_id,omitempty"`
+	Version            int                       `json:"version"`
+	MemberCount        int                       `json:"member_count"`
+	MessageCount       int64                     `json:"message_count"`
+	MaxMessageSequence int64                     `json:"max_message_sequence"`
+	MaxEventSequence   int64                     `json:"max_event_sequence"`
+	LastMessageID      *uuid.UUID                `json:"last_message_id"`
+	LastMessageAt      *time.Time                `json:"last_message_at"`
+	CurrentMember      memberResponse            `json:"current_member"`
+	Members            []memberResponse          `json:"members,omitempty"`
+	CreatedAt          time.Time                 `json:"created_at"`
+	UpdatedAt          time.Time                 `json:"updated_at"`
 }
 
 func newDialogResponse(view dialog.View, includeMembers bool) dialogResponse {
@@ -49,6 +53,12 @@ func newDialogResponse(view dialog.View, includeMembers bool) dialogResponse {
 		MaxMessageSequence: view.Dialog.MaxMessageSequence, MaxEventSequence: view.Dialog.MaxEventSequence,
 		LastMessageID: view.Dialog.LastMessageID, LastMessageAt: view.Dialog.LastMessageAt,
 		CurrentMember: newMemberResponse(view.CurrentMember), CreatedAt: view.Dialog.CreatedAt, UpdatedAt: view.Dialog.UpdatedAt,
+	}
+	if view.Dialog.Type == domain.DialogTypeTeacher {
+		result.StudentID = uuidPointer(view.Dialog.StudentID)
+		result.PersonalTeacherID = uuidPointer(view.Dialog.PersonalTeacherID)
+		result.ContextType = view.Dialog.TeacherContextType
+		result.ContextID = view.Dialog.ContextID
 	}
 	if includeMembers {
 		result.Members = make([]memberResponse, 0, len(view.Members))
@@ -84,21 +94,24 @@ func newAttachmentResponse(item domain.Attachment) attachmentResponse {
 }
 
 type messageResponse struct {
-	ID                uuid.UUID            `json:"id"`
-	DialogID          uuid.UUID            `json:"dialog_id"`
-	SenderID          uuid.UUID            `json:"sender_id"`
-	ReplyToMessageID  *uuid.UUID           `json:"reply_to_message_id"`
-	Body              string               `json:"body"`
-	Links             []domain.Link        `json:"links"`
-	Status            domain.MessageStatus `json:"status"`
-	Version           int                  `json:"version"`
-	MessageSequence   int64                `json:"message_sequence"`
-	LastEventSequence int64                `json:"last_event_sequence"`
-	Attachments       []attachmentResponse `json:"attachments"`
-	EditedAt          *time.Time           `json:"edited_at"`
-	DeletedAt         *time.Time           `json:"deleted_at"`
-	CreatedAt         time.Time            `json:"created_at"`
-	UpdatedAt         time.Time            `json:"updated_at"`
+	ID                uuid.UUID                `json:"id"`
+	DialogID          uuid.UUID                `json:"dialog_id"`
+	AuthorType        domain.MessageAuthorType `json:"author_type"`
+	SenderID          *uuid.UUID               `json:"sender_id"`
+	PersonalTeacherID *uuid.UUID               `json:"personal_teacher_id,omitempty"`
+	LearningActionID  *uuid.UUID               `json:"learning_action_id,omitempty"`
+	ReplyToMessageID  *uuid.UUID               `json:"reply_to_message_id"`
+	Body              string                   `json:"body"`
+	Links             []domain.Link            `json:"links"`
+	Status            domain.MessageStatus     `json:"status"`
+	Version           int                      `json:"version"`
+	MessageSequence   int64                    `json:"message_sequence"`
+	LastEventSequence int64                    `json:"last_event_sequence"`
+	Attachments       []attachmentResponse     `json:"attachments"`
+	EditedAt          *time.Time               `json:"edited_at"`
+	DeletedAt         *time.Time               `json:"deleted_at"`
+	CreatedAt         time.Time                `json:"created_at"`
+	UpdatedAt         time.Time                `json:"updated_at"`
 }
 
 func newMessageResponse(view message.View) messageResponse {
@@ -107,11 +120,20 @@ func newMessageResponse(view message.View) messageResponse {
 		attachments = append(attachments, newAttachmentResponse(item))
 	}
 	return messageResponse{
-		ID: view.Message.ID, DialogID: view.Message.DialogID, SenderID: view.Message.SenderID,
+		ID: view.Message.ID, DialogID: view.Message.DialogID, AuthorType: view.Message.AuthorType,
+		SenderID: uuidPointer(view.Message.SenderID), PersonalTeacherID: uuidPointer(view.Message.PersonalTeacherID), LearningActionID: view.Message.LearningActionID,
 		ReplyToMessageID: view.Message.ReplyToMessageID, Body: view.Message.Body, Links: view.Message.Links,
 		Status: view.Message.Status, Version: view.Message.Version, MessageSequence: view.Message.MessageSequence,
 		LastEventSequence: view.Message.LastEventSequence, Attachments: attachments,
 		EditedAt: view.Message.EditedAt, DeletedAt: view.Message.DeletedAt,
 		CreatedAt: view.Message.CreatedAt, UpdatedAt: view.Message.UpdatedAt,
 	}
+}
+
+func uuidPointer(value uuid.UUID) *uuid.UUID {
+	if value == uuid.Nil {
+		return nil
+	}
+	copy := value
+	return &copy
 }

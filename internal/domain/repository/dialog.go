@@ -40,3 +40,8 @@ type DialogRepository interface {
 	UpdateState(ctx context.Context, dialog domain.Dialog, expectedVersion int) error
 	ListAdmin(ctx context.Context, query AdminDialogListQuery) ([]domain.Dialog, error)
 }
+
+type TeacherDialogRepository interface {
+	FindTeacherByContext(ctx context.Context, spaceID, studentID, personalTeacherID uuid.UUID, contextType domain.TeacherContextType, contextID *uuid.UUID) (domain.Dialog, error)
+	LockTeacherContext(ctx context.Context, spaceID, studentID, personalTeacherID uuid.UUID, contextType domain.TeacherContextType, contextID *uuid.UUID) error
+}

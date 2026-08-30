@@ -50,6 +50,21 @@ func TestMigrations_AreReversibleAndKeepReadStatePerMember(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	teacherEvolution, err := os.ReadFile(filepath.Join(root, "004_teacher_dialogs.up.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	teacherText := string(teacherEvolution)
+	for _, required := range []string{
+		"type IN (1, 2, 3)", "personal_teacher_id", "teacher_context_type",
+		"learning_action_id", "author_type", "dialog.teacher.requested",
+		"uq_dialog_outbox_sequence_subject",
+	} {
+		if !strings.Contains(teacherText, required) {
+			t.Fatalf("teacher dialog migration is missing %q", required)
+		}
+	}
 	if !strings.Contains(string(groupEvolution), "member_count BETWEEN 1 AND 1000") || !strings.Contains(string(groupEvolution), "DROP CONSTRAINT chk_dialog_personal_shape") {
 		t.Fatal("group singleton evolution must be explicit and upgrade existing databases")
 	}

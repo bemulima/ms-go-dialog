@@ -44,7 +44,7 @@ WHERE EXISTS (
 ON CONFLICT DO NOTHING;
 SQL
 
-for migration in db/migrations/*.up.sql; do
+for migration in db/migrations/[0-9]*.up.sql; do
     filename=$(basename "$migration")
     version=${filename%.up.sql}
     applied=$(run_psql -Atc "SELECT COUNT(*) FROM dialog_schema_migration WHERE version='$version';")

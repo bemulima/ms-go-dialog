@@ -21,6 +21,7 @@ subjects:
     - dialog.attachment.ready
     - dialog.attachment.failed
     - dialog.read.updated
+    - dialog.teacher.requested
 required_envelope_fields:
     - schema_version
     - event_id
@@ -29,8 +30,24 @@ required_envelope_fields:
     - event_sequence
 consumer_rules:
     - deduplicate by event_id
-    - compare event_sequence independently per dialog
-    - reconcile gaps through REST snapshots and message changes
+    - WebSocket lifecycle consumers compare event_sequence independently per dialog
+    - WebSocket lifecycle consumers reconcile gaps through REST snapshots and message changes
+teacher_requested:
+    audience: ms-go-teacher-agent only; not projected to WebSocket
+    source: committed student-authored message in a teacher dialog
+    sequence: shares the source message mutation event_sequence
+    contains:
+        - source_message_id
+        - source_message_sequence
+        - student_id
+        - personal_teacher_id
+        - context_type
+        - optional context_id
+        - optional learning_action_id
+    excludes:
+        - message body
+        - mastery
+        - dialog history
 ephemeral:
     transport: Core NATS
     subject: dialog.realtime.typing.<dialog_uuid>

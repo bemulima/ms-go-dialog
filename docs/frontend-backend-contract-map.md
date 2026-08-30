@@ -23,14 +23,18 @@ If a new message arrives while the user is at the bottom and it becomes visible,
 | UI action | REST command/query | Realtime evidence |
 | --- | --- | --- |
 | Open or create personal chat | `PUT /dialog/personal/ensure` | `dialog.created` |
+| Open an already provisioned PersonalTeacher chat | ordinary dialog list/get | `dialog.created` and normal high-water marks |
 | Create group | `POST /dialog/group/create` | `dialog.created` |
 | Rename/manage group | `PUT /dialog/update`, member routes | `dialog.updated`, `member.*` |
 | Initial messages | `GET /message/window` | `connection.ready` high-water marks |
 | Older/newer page | `GET /message/list` | none required |
 | Send/edit/delete | message command routes | `message.created/updated/deleted` |
+| Ask Teacher in task/project context | message create with required `learning_action_id` | source `message.created`, later response `message.created` |
 | Reply | `reply_to_message_id` on create | message payload contains reference |
 | Upload image/file | attachment upload, then ID on message create | `attachment.ready/failed` |
 | Render attachment | attachment signed-url route | ready status |
 | Scroll-read | `PUT /dialog/read/{dialogID}` | `read.updated` |
 | Read all/down button | `PUT /dialog/read-all/{dialogID}` | `read.updated` |
 | Typing | WebSocket `typing.start/stop` with `dialog_id` | ephemeral `typing.started/stopped` |
+
+Teacher messages are not synthetic user messages. Render by `author_type`: `user` uses `sender_id`; `personal_teacher` uses `personal_teacher_id` and has `sender_id: null`. The browser cannot submit a PersonalTeacher author or call the internal append route.

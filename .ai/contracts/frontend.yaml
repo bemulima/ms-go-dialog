@@ -20,3 +20,8 @@ realtime:
     deduplication: event_id
 attachments:
     flow: upload temporary attachment, bind IDs on message create, wait for ready event, request signed URL
+teacher_dialogs:
+    discovery: returned through the normal authenticated dialog list after internal provisioning
+    author_discriminator: author_type is user or personal_teacher; sender_id is null for teacher messages
+    task_request: lesson_task, practice_task, and project messages require learning_action_id
+    response_delivery: normal message.created REST/WebSocket projection

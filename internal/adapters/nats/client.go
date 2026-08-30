@@ -15,6 +15,7 @@ import (
 const LifecycleStream = "DIALOG_EVENTS"
 
 var lifecycleSubjects = []string{string(domain.EventDialogCreated), string(domain.EventDialogUpdated), string(domain.EventDialogClosed), string(domain.EventDialogMemberAdded), string(domain.EventDialogMemberRemoved), string(domain.EventDialogMemberRoleUpdated), string(domain.EventDialogMessageCreated), string(domain.EventDialogMessageUpdated), string(domain.EventDialogMessageDeleted), string(domain.EventDialogMessageHidden), string(domain.EventDialogMessageRestored), string(domain.EventDialogAttachmentReady), string(domain.EventDialogAttachmentFailed), string(domain.EventDialogReadUpdated)}
+var durableSubjects = append(append([]string(nil), lifecycleSubjects...), string(domain.EventDialogTeacherRequested))
 
 type Client struct {
 	Conn *natsgo.Conn
@@ -30,13 +31,53 @@ func (c *Client) EnsureLifecycleStream(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if _, err = js.StreamInfo(LifecycleStream, natsgo.Context(ctx)); err == nil {
-		return nil
-	} else if !errors.Is(err, natsgo.ErrStreamNotFound) {
+	if info, streamErr := js.StreamInfo(LifecycleStream, natsgo.Context(ctx)); streamErr == nil {
+		desiredSubjects := mergeSubjects(info.Config.Subjects, durableSubjects)
+		if sameSubjects(info.Config.Subjects, desiredSubjects) {
+			return nil
+		}
+		config := info.Config
+		config.Subjects = desiredSubjects
+		_, err = js.UpdateStream(&config, natsgo.Context(ctx))
 		return err
+	} else if !errors.Is(streamErr, natsgo.ErrStreamNotFound) {
+		return streamErr
 	}
-	_, err = js.AddStream(&natsgo.StreamConfig{Name: LifecycleStream, Subjects: append([]string(nil), lifecycleSubjects...), Retention: natsgo.LimitsPolicy, Storage: natsgo.FileStorage, MaxAge: 7 * 24 * time.Hour, Duplicates: 10 * time.Minute}, natsgo.Context(ctx))
+	_, err = js.AddStream(&natsgo.StreamConfig{Name: LifecycleStream, Subjects: append([]string(nil), durableSubjects...), Retention: natsgo.LimitsPolicy, Storage: natsgo.FileStorage, MaxAge: 7 * 24 * time.Hour, Duplicates: 10 * time.Minute}, natsgo.Context(ctx))
 	return err
+}
+
+func mergeSubjects(existing, required []string) []string {
+	result := append([]string(nil), existing...)
+	seen := make(map[string]struct{}, len(result))
+	for _, subject := range result {
+		seen[subject] = struct{}{}
+	}
+	for _, subject := range required {
+		if _, ok := seen[subject]; ok {
+			continue
+		}
+		seen[subject] = struct{}{}
+		result = append(result, subject)
+	}
+	return result
+}
+
+func sameSubjects(first, second []string) bool {
+	if len(first) != len(second) {
+		return false
+	}
+	items := make(map[string]int, len(first))
+	for _, subject := range first {
+		items[subject]++
+	}
+	for _, subject := range second {
+		items[subject]--
+		if items[subject] < 0 {
+			return false
+		}
+	}
+	return true
 }
 func (c *Client) PublishLifecycle(ctx context.Context, event domain.OutboxEvent) error {
 	if err := event.Validate(); err != nil {

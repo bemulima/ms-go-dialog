@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/bemulima/ms-go-dialog/internal/domain"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -25,20 +26,32 @@ func scanSpace(row pgx.Row) (domain.Space, error) {
 }
 
 const dialogColumns = `id, space_id, type, status, personal_key, title, created_by, version,
-member_count, message_count, max_message_sequence, max_event_sequence,
+member_count, student_id, personal_teacher_id, teacher_context_type, context_id,
+message_count, max_message_sequence, max_event_sequence,
 last_message_id, last_message_at, created_at, updated_at`
 
 func scanDialog(row pgx.Row) (domain.Dialog, error) {
 	var item domain.Dialog
 	var title *string
+	var studentID, personalTeacherID *uuid.UUID
+	var teacherContextType *string
 	err := row.Scan(
 		&item.ID, &item.SpaceID, &item.Type, &item.Status, &item.PersonalKey, &title,
-		&item.CreatedBy, &item.Version, &item.MemberCount, &item.MessageCount,
+		&item.CreatedBy, &item.Version, &item.MemberCount, &studentID, &personalTeacherID, &teacherContextType, &item.ContextID, &item.MessageCount,
 		&item.MaxMessageSequence, &item.MaxEventSequence, &item.LastMessageID,
 		&item.LastMessageAt, &item.CreatedAt, &item.UpdatedAt,
 	)
 	if title != nil {
 		item.Title = *title
+	}
+	if studentID != nil {
+		item.StudentID = *studentID
+	}
+	if personalTeacherID != nil {
+		item.PersonalTeacherID = *personalTeacherID
+	}
+	if teacherContextType != nil {
+		item.TeacherContextType = domain.TeacherContextType(*teacherContextType)
 	}
 	return item, mapError(err)
 }
@@ -58,20 +71,27 @@ func scanMember(row pgx.Row) (domain.Member, error) {
 	return item, mapError(err)
 }
 
-const messageColumns = `id, dialog_id, sender_id, reply_to_message_id, body, links,
+const messageColumns = `id, dialog_id, author_type, sender_id, personal_teacher_id, learning_action_id, reply_to_message_id, body, links,
 status, version, message_sequence, last_event_sequence, idempotency_key,
 edited_at, deleted_at, created_at, updated_at`
 
 func scanMessage(row pgx.Row) (domain.Message, error) {
 	var item domain.Message
 	var links []byte
+	var senderID, personalTeacherID *uuid.UUID
 	err := row.Scan(
-		&item.ID, &item.DialogID, &item.SenderID, &item.ReplyToMessageID, &item.Body, &links,
+		&item.ID, &item.DialogID, &item.AuthorType, &senderID, &personalTeacherID, &item.LearningActionID, &item.ReplyToMessageID, &item.Body, &links,
 		&item.Status, &item.Version, &item.MessageSequence, &item.LastEventSequence,
 		&item.IdempotencyKey, &item.EditedAt, &item.DeletedAt, &item.CreatedAt, &item.UpdatedAt,
 	)
 	if err != nil {
 		return domain.Message{}, mapError(err)
+	}
+	if senderID != nil {
+		item.SenderID = *senderID
+	}
+	if personalTeacherID != nil {
+		item.PersonalTeacherID = *personalTeacherID
 	}
 	if err := json.Unmarshal(links, &item.Links); err != nil {
 		return domain.Message{}, err

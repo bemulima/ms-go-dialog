@@ -3,7 +3,28 @@ package domain
 import (
 	"errors"
 	"testing"
+	"time"
+
+	"github.com/google/uuid"
 )
+
+func TestMessage_ValidatesFirstClassTeacherAuthor(t *testing.T) {
+	now := time.Now().UTC()
+	sourceID := uuid.New()
+	item := Message{
+		ID: uuid.New(), DialogID: uuid.New(), AuthorType: MessageAuthorPersonalTeacher,
+		PersonalTeacherID: uuid.New(), ReplyToMessageID: &sourceID, Body: "response",
+		Status: MessageStatusActive, Version: 1, MessageSequence: 2, LastEventSequence: 2,
+		IdempotencyKey: uuid.New(), CreatedAt: now, UpdatedAt: now,
+	}
+	if err := item.Validate(); err != nil {
+		t.Fatalf("valid teacher author rejected: %v", err)
+	}
+	item.SenderID = uuid.New()
+	if err := item.Validate(); err == nil {
+		t.Fatal("teacher message with user sender was accepted")
+	}
+}
 
 func TestMessageContent_ValidatesLinksAndAttachments(t *testing.T) {
 	policy := DefaultPolicy()

@@ -53,6 +53,12 @@ GET    /api/v1/ws
 
 `PUT /dialog/read/{dialogID}` accepts only `{"through_message_sequence": 123}`. The service updates the authenticated member with `GREATEST(current, requested)` and returns authoritative read state. `PUT /dialog/read-all/{dialogID}` accepts no body and atomically advances only that member to the current maximum message sequence.
 
+### Teacher dialogs and message authors
+
+Internally provisioned teacher dialogs appear in the ordinary list/get/history APIs because the real student is their only member. Their response includes `student_id`, `personal_teacher_id`, `context_type`, and optional `context_id`.
+
+Message responses include `author_type`. Existing user messages keep `sender_id`; PersonalTeacher messages return `sender_id: null` and `personal_teacher_id`. `POST /message/create` accepts optional `learning_action_id`: it is required for student messages in `lesson_task`, `practice_task`, and `project` teacher dialogs and rejected everywhere else.
+
 ## Admin API
 
 ```http
@@ -67,3 +73,19 @@ PUT  /admin/v1/message/restore/{messageID}
 ```
 
 Administrative access to private message bodies is denied unless a future explicit report-review contract authorizes a bounded target.
+
+## Internal API
+
+The internal contour requires an exact `X-Internal-Token` and is never exposed through the gateway.
+
+```http
+PUT  /internal/v1/teacher-dialog/ensure
+GET  /internal/v1/teacher-dialog/{dialogID}/request/{sourceMessageID}?personal_teacher_id=<uuid>&before=20
+POST /internal/v1/teacher-dialog/{dialogID}/message
+```
+
+Ensure accepts `space_key`, `student_id`, `personal_teacher_id`, `context_type`, and optional `context_id`; it is idempotent for that binding.
+
+The request query returns the exact active student source message and no more than 49 preceding visible messages. It verifies the requested PersonalTeacher binding and never returns unrestricted history.
+
+Append accepts `personal_teacher_id`, `source_message_id`, `idempotency_key`, and `body`. It accepts no sender, targets, mastery, attachments, or LearningAction override. The response is authored by the bound PersonalTeacher, replies to the source, copies its LearningAction reference, and is idempotent per PersonalTeacher and key.
