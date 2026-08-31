@@ -12,7 +12,7 @@ func TestMessage_ValidatesFirstClassTeacherAuthor(t *testing.T) {
 	now := time.Now().UTC()
 	sourceID := uuid.New()
 	item := Message{
-		ID: uuid.New(), DialogID: uuid.New(), AuthorType: MessageAuthorPersonalTeacher,
+		ID: uuid.New(), DialogID: uuid.New(), AuthorType: MessageAuthorPersonalTeacher, Channel: MessageChannelWeb,
 		PersonalTeacherID: uuid.New(), ReplyToMessageID: &sourceID, Body: "response",
 		Status: MessageStatusActive, Version: 1, MessageSequence: 2, LastEventSequence: 2,
 		IdempotencyKey: uuid.New(), CreatedAt: now, UpdatedAt: now,
@@ -85,7 +85,7 @@ func TestLessonMessageContextNormalizesRevisionAndBoundsSelection(t *testing.T) 
 func TestMessageRejectsLessonContextOnTeacherResponse(t *testing.T) {
 	now := time.Now().UTC()
 	item := Message{
-		ID: uuid.New(), DialogID: uuid.New(), AuthorType: MessageAuthorPersonalTeacher,
+		ID: uuid.New(), DialogID: uuid.New(), AuthorType: MessageAuthorPersonalTeacher, Channel: MessageChannelWeb,
 		PersonalTeacherID: uuid.New(), Body: "response", LessonContext: &LessonMessageContext{ContentRevision: now.Format(time.RFC3339Nano)},
 		Status: MessageStatusActive, Version: 1, MessageSequence: 1, LastEventSequence: 1,
 		IdempotencyKey: uuid.New(), CreatedAt: now, UpdatedAt: now,

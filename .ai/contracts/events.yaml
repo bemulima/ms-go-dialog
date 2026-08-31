@@ -39,6 +39,7 @@ teacher_requested:
     contains:
         - source_message_id
         - source_message_sequence
+        - channel
         - student_id
         - personal_teacher_id
         - context_type

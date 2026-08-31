@@ -23,9 +23,11 @@
 - Raw HTML is rejected. Only absolute HTTP(S) links are accepted when links are enabled.
 - Create is idempotent per sender UUID key. Update/delete use expected integer version.
 - Message author is explicit: `user` has `sender_id`, while `personal_teacher` has `personal_teacher_id`; both at once are forbidden.
+- Every message has a transport channel. Existing/browser/proactive messages use `web`; a trusted Telegram adapter may append only to the exact bound student's active `general_teacher` dialog. A teacher response inherits its source channel.
 - Student messages in `lesson_task`, `practice_task`, and `project` teacher dialogs require an opaque `learning_action_id`. Other dialog contexts reject it. Dialog does not validate mastery or targets; Teacher verifies action ownership and OPEN state through Student.
 - Student messages in a `lesson` teacher dialog require `lesson_context` with a current RFC3339Nano `content_revision` and non-blank `selected_text` of at most 12,000 Unicode code points. Other contexts and PersonalTeacher-authored messages reject it. Dialog validates only shape and context binding; Teacher verifies the revision and exact substring against Course.
 - A committed student message in a teacher dialog atomically records both normal `dialog.message.created` evidence and a body-free `dialog.teacher.requested` trigger. A teacher-authored response never recursively emits a teacher request.
+- The teacher trigger contains bounded source-channel metadata so delivery retry never needs another conversation store. It still excludes the body and history.
 - Teacher responses are accepted only through the internal idempotent append command, must match the bound PersonalTeacher and source student message, inherit its LearningAction reference, and reply to that source message.
 - A proactive PersonalTeacher offer is accepted only through the internal command for the same student's active `general_teacher` dialog. It has no synthetic user source, reply, LearningAction, or lesson context, and is idempotent by the Teacher-supplied analytics event ID.
 - Delete keeps a tombstone, identity, order, reply references, and sequence, but clears the lesson selection together with message content.

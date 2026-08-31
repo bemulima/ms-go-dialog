@@ -11,7 +11,7 @@ Applied migrations are immutable. The initial group shape requires at least two 
 - `dialog_space`: integration key, Origin allowlist, personal/group and content policies.
 - `dialog`: type, lifecycle, personal pair hash, optional teacher binding (`student_id`, `personal_teacher_id`, `teacher_context_type`, `context_id`), counters, message/event high-water marks, last activity.
 - `dialog_member`: role, lifecycle, history boundary, independent read cursor/unread count, mute/archive state.
-- `dialog_message`: mutually exclusive user/PersonalTeacher author, optional LearningAction, optional lesson revision/selection JSON anchor, same-dialog reply, content, immutable message order, latest event sequence, version and tombstone.
+- `dialog_message`: mutually exclusive user/PersonalTeacher author, `web|telegram` channel, optional LearningAction, optional lesson revision/selection JSON anchor, same-dialog reply, content, immutable message order, latest event sequence, version and tombstone.
 - `dialog_attachment`: service authorization and lifecycle metadata while FileStorage owns bytes.
 - `dialog_outbox`: versioned lifecycle payload, finite claim lease, retries and publication evidence.
 - `dialog_ws_ticket`: SHA-256 ticket hash, user/space binding and short expiry.
@@ -40,3 +40,6 @@ database constraint that limits it to user-authored rows with a revision string
 and non-blank bounded selection. Message deletion clears the anchor. Its down
 migration fails closed while any anchored row exists, so rollback cannot
 silently erase selected-text provenance.
+
+Migration `006_message_channel` backfills `web` and adds the bounded channel.
+Its down migration fails closed while any non-web message exists.

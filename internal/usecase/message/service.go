@@ -102,6 +102,15 @@ type AppendTeacherProactiveInput struct {
 	Body              string
 }
 
+type AppendStudentChannelMessageInput struct {
+	DialogID          uuid.UUID
+	StudentID         uuid.UUID
+	PersonalTeacherID uuid.UUID
+	IdempotencyKey    uuid.UUID
+	Channel           domain.MessageChannel
+	Body              string
+}
+
 func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput) (CreateResult, error) {
 	if err := actor.Validate(); err != nil {
 		return CreateResult{}, err
@@ -175,7 +184,7 @@ func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput)
 		messageSequence := dialogItem.MaxMessageSequence + 1
 		eventSequence := dialogItem.MaxEventSequence + 1
 		item := domain.Message{
-			ID: s.newID(), DialogID: in.DialogID, AuthorType: domain.MessageAuthorUser, SenderID: actor.UserID,
+			ID: s.newID(), DialogID: in.DialogID, AuthorType: domain.MessageAuthorUser, Channel: domain.MessageChannelWeb, SenderID: actor.UserID,
 			LearningActionID: in.LearningActionID, LessonContext: in.LessonContext, ReplyToMessageID: in.ReplyToMessageID,
 			Body: content.Body, Links: content.Links, Status: domain.MessageStatusActive, Version: 1,
 			MessageSequence: messageSequence, LastEventSequence: eventSequence,
@@ -217,6 +226,90 @@ func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput)
 			}
 		}
 		result = CreateResult{Created: true, View: View{Message: item, Attachments: attachments}}
+		return nil
+	})
+	return result, err
+}
+
+// AppendStudentChannelMessage accepts a message from a trusted transport
+// adapter for an already bound student. It is deliberately restricted to the
+// general teacher dialog and produces the ordinary durable teacher request.
+func (s Service) AppendStudentChannelMessage(ctx context.Context, in AppendStudentChannelMessageInput) (CreateResult, error) {
+	if in.DialogID == uuid.Nil || in.StudentID == uuid.Nil || in.PersonalTeacherID == uuid.Nil ||
+		in.IdempotencyKey == uuid.Nil || in.Channel != domain.MessageChannelTelegram {
+		return CreateResult{}, fmt.Errorf("%w: invalid channel message identity", domain.ErrValidation)
+	}
+	var result CreateResult
+	err := s.Tx.WithinTransaction(ctx, func(txCtx context.Context) error {
+		if err := s.Messages.LockIdempotencyKey(txCtx, in.StudentID, in.IdempotencyKey); err != nil {
+			return err
+		}
+		existing, err := s.Messages.GetByIdempotencyKey(txCtx, in.StudentID, in.IdempotencyKey)
+		if err == nil {
+			if existing.DialogID != in.DialogID || existing.Body != in.Body || existing.Channel != in.Channel ||
+				existing.AuthorType != domain.MessageAuthorUser || existing.SenderID != in.StudentID ||
+				existing.LearningActionID != nil || existing.LessonContext != nil || existing.ReplyToMessageID != nil {
+				return domain.ErrIdempotencyConflict
+			}
+			result = CreateResult{View: View{Message: existing}}
+			return nil
+		}
+		if !errors.Is(err, domain.ErrNotFound) {
+			return err
+		}
+		dialogItem, err := s.Dialogs.GetByIDForUpdate(txCtx, in.DialogID)
+		if err != nil || dialogItem.Type != domain.DialogTypeTeacher || dialogItem.Status == domain.DialogStatusHidden {
+			return domain.ErrDialogNotFound
+		}
+		if dialogItem.Status != domain.DialogStatusActive {
+			return domain.ErrDialogClosed
+		}
+		if dialogItem.StudentID != in.StudentID || dialogItem.PersonalTeacherID != in.PersonalTeacherID ||
+			dialogItem.TeacherContextType != domain.TeacherContextGeneralTeacher {
+			return domain.ErrForbidden
+		}
+		space, err := s.Spaces.GetByID(txCtx, dialogItem.SpaceID)
+		if err != nil || space.Status != domain.SpaceStatusActive {
+			return domain.ErrDialogNotFound
+		}
+		content := domain.AnalyzeMessageContent(in.Body, 0, 0)
+		if err := content.Validate(space.Policy); err != nil {
+			return err
+		}
+		now := s.now()
+		item := domain.Message{
+			ID: s.newID(), DialogID: in.DialogID, AuthorType: domain.MessageAuthorUser, Channel: in.Channel,
+			SenderID: in.StudentID, Body: content.Body, Links: content.Links,
+			Status: domain.MessageStatusActive, Version: 1,
+			MessageSequence: dialogItem.MaxMessageSequence + 1, LastEventSequence: dialogItem.MaxEventSequence + 1,
+			IdempotencyKey: in.IdempotencyKey, CreatedAt: now, UpdatedAt: now,
+		}
+		if err := item.Validate(); err != nil {
+			return err
+		}
+		if err := s.Messages.Create(txCtx, item); err != nil {
+			return err
+		}
+		dialogItem.MessageCount++
+		dialogItem.MaxMessageSequence = item.MessageSequence
+		dialogItem.MaxEventSequence = item.LastEventSequence
+		dialogItem.LastMessageID = &item.ID
+		dialogItem.LastMessageAt = &now
+		dialogItem.Version++
+		dialogItem.UpdatedAt = now
+		if err := s.Dialogs.UpdateState(txCtx, dialogItem, dialogItem.Version-1); err != nil {
+			return err
+		}
+		if err := s.Members.IncrementUnreadRecipients(txCtx, item.DialogID, in.StudentID, item.LastEventSequence); err != nil {
+			return err
+		}
+		if err := s.addEvent(txCtx, item, nil, domain.EventDialogMessageCreated, in.StudentID, now); err != nil {
+			return err
+		}
+		if err := s.addTeacherRequestedEvent(txCtx, dialogItem, item, now); err != nil {
+			return err
+		}
+		result = CreateResult{Created: true, View: View{Message: item}}
 		return nil
 	})
 	return result, err
@@ -307,7 +400,7 @@ func (s Service) AppendTeacherResponse(ctx context.Context, in AppendTeacherResp
 
 		now := s.now()
 		item := domain.Message{
-			ID: s.newID(), DialogID: in.DialogID, AuthorType: domain.MessageAuthorPersonalTeacher,
+			ID: s.newID(), DialogID: in.DialogID, AuthorType: domain.MessageAuthorPersonalTeacher, Channel: source.Channel,
 			PersonalTeacherID: in.PersonalTeacherID, LearningActionID: source.LearningActionID,
 			ReplyToMessageID: &source.ID, Body: content.Body, Links: content.Links,
 			Status: domain.MessageStatusActive, Version: 1,
@@ -388,7 +481,7 @@ func (s Service) AppendTeacherProactive(ctx context.Context, in AppendTeacherPro
 		}
 		now := s.now()
 		item := domain.Message{
-			ID: s.newID(), DialogID: in.DialogID, AuthorType: domain.MessageAuthorPersonalTeacher,
+			ID: s.newID(), DialogID: in.DialogID, AuthorType: domain.MessageAuthorPersonalTeacher, Channel: domain.MessageChannelWeb,
 			PersonalTeacherID: in.PersonalTeacherID, Body: content.Body, Links: content.Links,
 			Status: domain.MessageStatusActive, Version: 1,
 			MessageSequence: dialogItem.MaxMessageSequence + 1, LastEventSequence: dialogItem.MaxEventSequence + 1,
@@ -772,7 +865,10 @@ func (s Service) resolveReplay(ctx context.Context, existing domain.Message, in 
 	if err != nil {
 		return err
 	}
-	if existing.DialogID != in.DialogID || existing.Body != in.Body || !sameUUID(existing.ReplyToMessageID, in.ReplyToMessageID) || !sameUUID(existing.LearningActionID, in.LearningActionID) || !sameLessonContext(existing.LessonContext, in.LessonContext) || !sameAttachmentIDs(attachments, in.AttachmentIDs) {
+	if existing.DialogID != in.DialogID || existing.AuthorType != domain.MessageAuthorUser || existing.Channel != domain.MessageChannelWeb ||
+		existing.Body != in.Body || !sameUUID(existing.ReplyToMessageID, in.ReplyToMessageID) ||
+		!sameUUID(existing.LearningActionID, in.LearningActionID) || !sameLessonContext(existing.LessonContext, in.LessonContext) ||
+		!sameAttachmentIDs(attachments, in.AttachmentIDs) {
 		return domain.ErrIdempotencyConflict
 	}
 	*result = CreateResult{View: View{Message: existing, Attachments: attachments}}
@@ -820,7 +916,7 @@ func (s Service) addEvent(ctx context.Context, item domain.Message, attachments 
 		"schema_version": 1, "event_id": eventID, "occurred_at": now,
 		"dialog_id": item.DialogID, "event_sequence": item.LastEventSequence,
 		"message_sequence": item.MessageSequence, "message_id": item.ID,
-		"author_type": item.AuthorType, "sender_id": nullableEventUUID(item.SenderID),
+		"author_type": item.AuthorType, "channel": item.Channel, "sender_id": nullableEventUUID(item.SenderID),
 		"personal_teacher_id": nullableEventUUID(item.PersonalTeacherID), "learning_action_id": item.LearningActionID,
 		"actor_id": nullableEventUUID(actorID), "status": item.Status,
 		"version": item.Version, "body": item.Body, "links": item.Links, "attachments": attachments,
@@ -843,7 +939,7 @@ func (s Service) addTeacherRequestedEvent(ctx context.Context, dialogItem domain
 		"source_message_id": item.ID, "source_message_sequence": item.MessageSequence,
 		"student_id": dialogItem.StudentID, "personal_teacher_id": dialogItem.PersonalTeacherID,
 		"context_type": dialogItem.TeacherContextType, "context_id": dialogItem.ContextID,
-		"learning_action_id": item.LearningActionID,
+		"learning_action_id": item.LearningActionID, "channel": item.Channel,
 	})
 	if err != nil {
 		return err

@@ -57,7 +57,7 @@ GET    /api/v1/ws
 
 Internally provisioned teacher dialogs appear in the ordinary list/get/history APIs because the real student is their only member. Their response includes `student_id`, `personal_teacher_id`, `context_type`, and optional `context_id`.
 
-Message responses include `author_type`. Existing user messages keep `sender_id`; PersonalTeacher messages return `sender_id: null` and `personal_teacher_id`. `POST /message/create` accepts optional `learning_action_id`: it is required for student messages in `lesson_task`, `practice_task`, and `project` teacher dialogs and rejected everywhere else.
+Message responses include `author_type` and `channel`. Existing user messages keep `sender_id`; PersonalTeacher messages return `sender_id: null` and `personal_teacher_id`. Browser-created messages use `web`; a teacher response inherits its source channel. `POST /message/create` accepts optional `learning_action_id`: it is required for student messages in `lesson_task`, `practice_task`, and `project` teacher dialogs and rejected everywhere else.
 
 For a `lesson` teacher dialog, `POST /message/create` instead requires:
 
@@ -99,6 +99,7 @@ PUT  /internal/v1/teacher-dialog/ensure
 GET  /internal/v1/teacher-dialog/{dialogID}/request/{sourceMessageID}?personal_teacher_id=<uuid>&before=20
 POST /internal/v1/teacher-dialog/{dialogID}/message
 POST /internal/v1/teacher-dialog/{dialogID}/proactive-message
+POST /internal/v1/teacher-dialog/{dialogID}/student-channel-message
 ```
 
 Ensure accepts `space_key`, `student_id`, `personal_teacher_id`, `context_type`, and optional `context_id`; it is idempotent for that binding.
@@ -109,5 +110,11 @@ returns `201` for the first commit or `200` for an identical replay. The
 created message has no user source, reply, LearningAction, or lesson context.
 
 The request query returns the exact active student source message and no more than 49 preceding visible messages. It verifies the requested PersonalTeacher binding and never returns unrestricted history. For `lesson`, the source includes its revision/selection anchor so Teacher can verify it against Course; the integration event remains body- and context-free.
+
+Student-channel append accepts the bound `student_id`, `personal_teacher_id`, a
+UUID `idempotency_key`, literal `telegram` channel, and body. It is restricted
+to the active `general_teacher` dialog and returns the ordinary message
+contract. It accepts no sender override, attachments, reply, LearningAction, or
+lesson context.
 
 Append accepts `personal_teacher_id`, `source_message_id`, `idempotency_key`, and `body`. It accepts no sender, targets, mastery, attachments, or LearningAction override. The response is authored by the bound PersonalTeacher, replies to the source, copies its LearningAction reference, and is idempotent per PersonalTeacher and key.

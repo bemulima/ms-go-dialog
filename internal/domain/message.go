@@ -35,6 +35,17 @@ func (t MessageAuthorType) Valid() bool {
 	return t == MessageAuthorUser || t == MessageAuthorPersonalTeacher
 }
 
+type MessageChannel string
+
+const (
+	MessageChannelWeb      MessageChannel = "web"
+	MessageChannelTelegram MessageChannel = "telegram"
+)
+
+func (channel MessageChannel) Valid() bool {
+	return channel == MessageChannelWeb || channel == MessageChannelTelegram
+}
+
 type Link struct {
 	URL string `json:"url"`
 }
@@ -124,6 +135,7 @@ type Message struct {
 	ID                uuid.UUID
 	DialogID          uuid.UUID
 	AuthorType        MessageAuthorType
+	Channel           MessageChannel
 	SenderID          uuid.UUID
 	PersonalTeacherID uuid.UUID
 	LearningActionID  *uuid.UUID
@@ -143,7 +155,7 @@ type Message struct {
 }
 
 func (m Message) Validate() error {
-	if m.ID == uuid.Nil || m.DialogID == uuid.Nil || !m.AuthorType.Valid() || m.IdempotencyKey == uuid.Nil ||
+	if m.ID == uuid.Nil || m.DialogID == uuid.Nil || !m.AuthorType.Valid() || !m.Channel.Valid() || m.IdempotencyKey == uuid.Nil ||
 		m.Version < 1 || m.MessageSequence < 1 || m.LastEventSequence < m.MessageSequence ||
 		m.Status < MessageStatusActive || m.Status > MessageStatusHidden {
 		return fmt.Errorf("%w: invalid message identity or state", ErrValidation)

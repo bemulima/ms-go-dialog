@@ -38,4 +38,4 @@ If a new message arrives while the user is at the bottom and it becomes visible,
 | Read all/down button | `PUT /dialog/read-all/{dialogID}` | `read.updated` |
 | Typing | WebSocket `typing.start/stop` with `dialog_id` | ephemeral `typing.started/stopped` |
 
-Teacher messages are not synthetic user messages. Render by `author_type`: `user` uses `sender_id`; `personal_teacher` uses `personal_teacher_id` and has `sender_id: null`. The browser cannot submit a PersonalTeacher author or call the internal append route.
+Teacher messages are not synthetic user messages. Render by `author_type`: `user` uses `sender_id`; `personal_teacher` uses `personal_teacher_id` and has `sender_id: null`. `channel` is provenance (`web` or `telegram`), not a separate thread; all messages remain in the same ordered history. The browser cannot submit a PersonalTeacher author, select a channel, or call an internal append route.

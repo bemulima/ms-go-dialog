@@ -54,6 +54,7 @@ route_groups:
         - GET /teacher-dialog/{dialogID}/request/{sourceMessageID}
         - POST /teacher-dialog/{dialogID}/message
         - POST /teacher-dialog/{dialogID}/proactive-message
+        - POST /teacher-dialog/{dialogID}/student-channel-message
 pagination:
     message_order: message_sequence
     cursor: opaque and dialog scoped
@@ -63,3 +64,4 @@ teacher_dialog:
     provisioning: internal command from ms-go-teacher-agent; browser cannot select personal_teacher_id
     request_context: exact source message plus at most 49 preceding messages; no unrestricted history
     response_append: idempotent per personal_teacher_id and key; source message is the reply target
+    channel_append: trusted Telegram adapter only; exact general binding and deterministic UUID idempotency key

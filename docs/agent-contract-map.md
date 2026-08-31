@@ -31,3 +31,4 @@ Change routing:
 - frontend/read UX: frontend/backend map, message window query, per-member read transaction, `read.updated` event.
 - operations: health/observability adapters, runtime composition, operations contract, HTTP machine contract.
 - teacher dialog: Dialog domain/migration, internal ensure/read/append contour, body-free durable trigger, Teacher-owned consumer contract.
+- teacher transport channel: message provenance, trusted internal student-channel append, and the same body-free teacher trigger; Teacher owns provider linking/delivery.

@@ -17,6 +17,7 @@ invariants:
     - message mutation and outbox evidence commit atomically
     - a teacher dialog has one real student member and one logical personal_teacher_id binding
     - user and personal-teacher message authors are mutually exclusive
+    - every message channel is web or telegram; a teacher response inherits its source channel
     - task and project teacher requests retain the opaque learning_action_id supplied on the source message
     - lesson teacher requests retain an RFC3339Nano current-content revision and exact non-blank selected text only on the user source message
     - message deletion clears lesson_context together with user content
@@ -30,4 +31,5 @@ migration_policy:
     ledger: dialog_schema_migration via scripts/migrate.sh
     destructive_change_requires: .ai/workflows/change-contract.yaml
     lesson_context_rollback: migration 005 fails closed while anchored messages exist
+    message_channel_rollback: migration 006 fails closed while non-web messages exist
 repository_ports: internal/domain/repository

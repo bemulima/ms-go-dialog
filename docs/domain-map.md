@@ -11,7 +11,7 @@ DialogSpace
 └── Dialog (personal, group, or contextual personal-teacher)
     ├── DialogMember (one independent read state per user)
     ├── Teacher binding (teacher dialogs: one student + logical PersonalTeacher + educational context)
-    ├── DialogMessage (ordered flat stream, explicit user/PersonalTeacher author, optional LearningAction/reply reference)
+    ├── DialogMessage (ordered flat stream, explicit user/PersonalTeacher author, web/Telegram channel, optional LearningAction/reply reference)
     │   └── DialogAttachment
     ├── RealtimeTicket
     ├── max_message_sequence

@@ -97,6 +97,7 @@ type messageResponse struct {
 	ID                uuid.UUID                    `json:"id"`
 	DialogID          uuid.UUID                    `json:"dialog_id"`
 	AuthorType        domain.MessageAuthorType     `json:"author_type"`
+	Channel           domain.MessageChannel        `json:"channel"`
 	SenderID          *uuid.UUID                   `json:"sender_id"`
 	PersonalTeacherID *uuid.UUID                   `json:"personal_teacher_id,omitempty"`
 	LearningActionID  *uuid.UUID                   `json:"learning_action_id,omitempty"`
@@ -121,7 +122,7 @@ func newMessageResponse(view message.View) messageResponse {
 		attachments = append(attachments, newAttachmentResponse(item))
 	}
 	return messageResponse{
-		ID: view.Message.ID, DialogID: view.Message.DialogID, AuthorType: view.Message.AuthorType,
+		ID: view.Message.ID, DialogID: view.Message.DialogID, AuthorType: view.Message.AuthorType, Channel: view.Message.Channel,
 		SenderID: uuidPointer(view.Message.SenderID), PersonalTeacherID: uuidPointer(view.Message.PersonalTeacherID), LearningActionID: view.Message.LearningActionID,
 		LessonContext:    view.Message.LessonContext,
 		ReplyToMessageID: view.Message.ReplyToMessageID, Body: view.Message.Body, Links: view.Message.Links,

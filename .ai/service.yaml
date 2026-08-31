@@ -56,6 +56,9 @@ capabilities:
     - name: proactive_general_teacher_delivery
       status: implemented
       source_path: docs/integration-contract.md
+    - name: trusted_teacher_channel_ingress
+      status: implemented
+      source_path: docs/integration-contract.md
 relations:
     - name: depends_on
       value: postgres

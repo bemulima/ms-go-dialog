@@ -77,6 +77,15 @@ func TestMigrations_AreReversibleAndKeepReadStatePerMember(t *testing.T) {
 			t.Fatalf("lesson message context migration is missing %q", required)
 		}
 	}
+	channelEvolution, err := os.ReadFile(filepath.Join(root, "006_message_channel.up.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{"channel VARCHAR(32)", "'web'", "'telegram'"} {
+		if !strings.Contains(string(channelEvolution), required) {
+			t.Fatalf("message channel migration is missing %q", required)
+		}
+	}
 
 	runner, err := os.ReadFile(filepath.Join("..", "..", "scripts", "migrate.sh"))
 	if err != nil {

@@ -278,7 +278,7 @@ func TestTeacherRequestContextAndAppendResponse(t *testing.T) {
 	dialogItem.LastMessageID = &sourceID
 	dialogItem.LastMessageAt = &now
 	source := domain.Message{
-		ID: sourceID, DialogID: dialogID, AuthorType: domain.MessageAuthorUser, SenderID: studentID,
+		ID: sourceID, DialogID: dialogID, AuthorType: domain.MessageAuthorUser, Channel: domain.MessageChannelWeb, SenderID: studentID,
 		LearningActionID: &learningActionID, Body: "Почему тест падает?", Status: domain.MessageStatusActive,
 		Version: 1, MessageSequence: 1, LastEventSequence: 2, IdempotencyKey: uuid.New(), CreatedAt: now, UpdatedAt: now,
 	}
@@ -321,6 +321,39 @@ func TestTeacherRequestContextAndAppendResponse(t *testing.T) {
 	})
 	if err != nil || replay.Created || replay.View.Message.ID != message.ID || len(outbox.items) != 1 {
 		t.Fatalf("teacher response replay mismatch: replay=%+v err=%v events=%d", replay, err, len(outbox.items))
+	}
+}
+
+func TestAppendStudentChannelMessageUsesGeneralDialogAndNormalTeacherRequest(t *testing.T) {
+	now := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+	dialogID, spaceID, studentID, teacherID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	dialogItem := teacherDialog(dialogID, spaceID, studentID, teacherID, uuid.New(), now)
+	dialogItem.TeacherContextType, dialogItem.ContextID = domain.TeacherContextGeneralTeacher, nil
+	messages := &fakeMessages{items: map[uuid.UUID]domain.Message{}}
+	outbox := &fakeOutbox{}
+	service := Service{
+		Spaces: fakeSpaces{item: activeTestSpace(spaceID, studentID, now)}, Dialogs: &fakeDialogs{item: dialogItem},
+		Members:  &fakeMembers{items: map[uuid.UUID]domain.Member{studentID: activeMember(dialogID, studentID, 0, 0, now)}},
+		Messages: messages, Outbox: outbox, Tx: fakeTx{}, Now: func() time.Time { return now }, NewID: uuid.New,
+	}
+	key := uuid.New()
+	input := AppendStudentChannelMessageInput{
+		DialogID: dialogID, StudentID: studentID, PersonalTeacherID: teacherID,
+		IdempotencyKey: key, Channel: domain.MessageChannelTelegram, Body: "Объясни интерфейсы",
+	}
+	result, err := service.AppendStudentChannelMessage(context.Background(), input)
+	if err != nil {
+		t.Fatalf("append Telegram message: %v", err)
+	}
+	if !result.Created || result.View.Message.Channel != domain.MessageChannelTelegram || result.View.Message.SenderID != studentID {
+		t.Fatalf("unexpected channel message: %+v", result)
+	}
+	if len(outbox.items) != 2 || outbox.items[0].Subject != domain.EventDialogMessageCreated || outbox.items[1].Subject != domain.EventDialogTeacherRequested {
+		t.Fatalf("unexpected channel outbox: %+v", outbox.items)
+	}
+	replay, err := service.AppendStudentChannelMessage(context.Background(), input)
+	if err != nil || replay.Created || replay.View.Message.ID != result.View.Message.ID || len(outbox.items) != 2 {
+		t.Fatalf("channel replay mismatch: replay=%+v err=%v events=%d", replay, err, len(outbox.items))
 	}
 }
 
@@ -501,7 +534,13 @@ func (f *fakeMessages) GetByID(_ context.Context, id uuid.UUID) (domain.Message,
 func (*fakeMessages) GetByIDForUpdate(context.Context, uuid.UUID) (domain.Message, error) {
 	return domain.Message{}, domain.ErrNotFound
 }
-func (*fakeMessages) GetByIdempotencyKey(context.Context, uuid.UUID, uuid.UUID) (domain.Message, error) {
+
+func (f *fakeMessages) GetByIdempotencyKey(_ context.Context, senderID, key uuid.UUID) (domain.Message, error) {
+	for _, item := range f.items {
+		if item.AuthorType == domain.MessageAuthorUser && item.SenderID == senderID && item.IdempotencyKey == key {
+			return item, nil
+		}
+	}
 	return domain.Message{}, domain.ErrNotFound
 }
 func (*fakeMessages) LockIdempotencyKey(context.Context, uuid.UUID, uuid.UUID) error { return nil }
@@ -527,7 +566,7 @@ func (f *fakeMessages) Window(_ context.Context, q repository.MessageWindowQuery
 
 func messageAt(dialogID, senderID uuid.UUID, sequence int64, now time.Time) domain.Message {
 	return domain.Message{
-		ID: uuid.New(), DialogID: dialogID, AuthorType: domain.MessageAuthorUser, SenderID: senderID, IdempotencyKey: uuid.New(),
+		ID: uuid.New(), DialogID: dialogID, AuthorType: domain.MessageAuthorUser, Channel: domain.MessageChannelWeb, SenderID: senderID, IdempotencyKey: uuid.New(),
 		Body: "message", Status: domain.MessageStatusActive, Version: 1,
 		MessageSequence: sequence, LastEventSequence: sequence, CreatedAt: now, UpdatedAt: now,
 	}

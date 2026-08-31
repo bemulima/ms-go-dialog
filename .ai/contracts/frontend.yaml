@@ -23,6 +23,7 @@ attachments:
 teacher_dialogs:
     discovery: returned through the normal authenticated dialog list after internal provisioning
     author_discriminator: author_type is user or personal_teacher; sender_id is null for teacher messages
+    channel_provenance: channel is web or telegram; all transports share the same ordered history
     task_request: lesson_task, practice_task, and project messages require learning_action_id
     lesson_request: lesson messages require Course updated_at as lesson_context.content_revision plus the exact non-empty selected_text
     lesson_model_boundary: Dialog preserves the anchor; Teacher verifies it against Course and sends only the selected fragment to prompt execution

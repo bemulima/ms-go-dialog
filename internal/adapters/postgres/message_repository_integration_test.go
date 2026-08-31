@@ -46,7 +46,7 @@ func TestMessageRepository_WindowAgainstPostgres(t *testing.T) {
 			return err
 		}
 		message := domain.Message{
-			ID: uuid.New(), DialogID: dialogID, AuthorType: domain.MessageAuthorUser, SenderID: senderID, IdempotencyKey: uuid.New(),
+			ID: uuid.New(), DialogID: dialogID, AuthorType: domain.MessageAuthorUser, Channel: domain.MessageChannelWeb, SenderID: senderID, IdempotencyKey: uuid.New(),
 			Body: "integration message", Links: []domain.Link{}, Status: domain.MessageStatusActive, Version: 1,
 			MessageSequence: 1, LastEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 		}
@@ -120,7 +120,7 @@ func TestTeacherDialogRepositoriesAgainstPostgres(t *testing.T) {
 		sourceID := uuid.New()
 		messages := MessageRepository{Pool: pool}
 		if err := messages.Create(txCtx, domain.Message{
-			ID: sourceID, DialogID: dialogID, AuthorType: domain.MessageAuthorUser, SenderID: studentID,
+			ID: sourceID, DialogID: dialogID, AuthorType: domain.MessageAuthorUser, Channel: domain.MessageChannelTelegram, SenderID: studentID,
 			LearningActionID: &learningActionID, Body: "source", Links: []domain.Link{}, Status: domain.MessageStatusActive,
 			Version: 1, MessageSequence: 1, LastEventSequence: 1, IdempotencyKey: uuid.New(), CreatedAt: now, UpdatedAt: now,
 		}); err != nil {
@@ -128,7 +128,7 @@ func TestTeacherDialogRepositoriesAgainstPostgres(t *testing.T) {
 		}
 		teacherKey := uuid.New()
 		if err := messages.Create(txCtx, domain.Message{
-			ID: uuid.New(), DialogID: dialogID, AuthorType: domain.MessageAuthorPersonalTeacher, PersonalTeacherID: teacherID,
+			ID: uuid.New(), DialogID: dialogID, AuthorType: domain.MessageAuthorPersonalTeacher, Channel: domain.MessageChannelTelegram, PersonalTeacherID: teacherID,
 			LearningActionID: &learningActionID, ReplyToMessageID: &sourceID, Body: "response", Links: []domain.Link{},
 			Status: domain.MessageStatusActive, Version: 1, MessageSequence: 2, LastEventSequence: 2,
 			IdempotencyKey: teacherKey, CreatedAt: now, UpdatedAt: now,

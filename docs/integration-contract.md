@@ -26,6 +26,10 @@ JetStream `DIALOG_EVENTS` carries durable `dialog.*` subjects from the PostgreSQ
 
 `dialog.teacher.requested` is a dedicated at-least-once integration trigger for `ms-go-teacher-agent`. It is emitted only after a student-authored teacher-dialog message commits and contains the source IDs, student, bound PersonalTeacher, educational context, and optional LearningAction reference. It deliberately excludes the message body, mastery, and history. Teacher deduplicates by `event_id`, then uses the bounded internal read contract.
 
+The trigger also contains `channel` (`web` or `telegram`). Teacher persists this
+bounded routing fact with its durable job. It does not create channel-specific
+pedagogy or history.
+
 For `lesson`, that bounded read includes the source message's
 `lesson_context.content_revision` and exact `selected_text`. The event itself
 still excludes both. Teacher must fetch current Course content, require an exact
@@ -35,5 +39,13 @@ course content.
 ## Teacher Agent
 
 `ms-go-teacher-agent` owns logical PersonalTeacher identity and pedagogy. It provisions teacher bindings through `PUT /internal/v1/teacher-dialog/ensure`, reads the exact source plus a bounded prior window through `GET /internal/v1/teacher-dialog/{dialogID}/request/{sourceMessageID}`, and appends the eventual response through `POST /internal/v1/teacher-dialog/{dialogID}/message`. A deterministic proactive intervention may use `POST /internal/v1/teacher-dialog/{dialogID}/proactive-message`, but only for the same student's general teacher dialog; it has no synthetic student source and is idempotent by the analytics event ID. All calls require the exact `X-Internal-Token`; the gateway and browser must never route these endpoints.
+
+After its own one-time account linking, Teacher's Telegram adapter may append a
+private text update through
+`POST /internal/v1/teacher-dialog/{dialogID}/student-channel-message`. Dialog
+requires the exact bound student and PersonalTeacher, `telegram` channel, an
+idempotency UUID derived from the provider update, and an active general
+teacher context. The command commits an ordinary student message and ordinary
+teacher request; Dialog remains the only history owner.
 
 Dialog checks binding, context, source authorship, content policy, and append idempotency. Teacher verifies the opaque `learning_action_id` against `ms-go-student`, applies deterministic pedagogy before any model invocation, and does not persist a competing conversation history.
