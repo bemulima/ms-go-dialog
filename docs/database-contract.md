@@ -11,7 +11,7 @@ Applied migrations are immutable. The initial group shape requires at least two 
 - `dialog_space`: integration key, Origin allowlist, personal/group and content policies.
 - `dialog`: type, lifecycle, personal pair hash, optional teacher binding (`student_id`, `personal_teacher_id`, `teacher_context_type`, `context_id`), counters, message/event high-water marks, last activity.
 - `dialog_member`: role, lifecycle, history boundary, independent read cursor/unread count, mute/archive state.
-- `dialog_message`: mutually exclusive user/PersonalTeacher author, optional LearningAction and same-dialog reply, content, immutable message order, latest event sequence, version and tombstone.
+- `dialog_message`: mutually exclusive user/PersonalTeacher author, optional LearningAction, optional lesson revision/selection JSON anchor, same-dialog reply, content, immutable message order, latest event sequence, version and tombstone.
 - `dialog_attachment`: service authorization and lifecycle metadata while FileStorage owns bytes.
 - `dialog_outbox`: versioned lifecycle payload, finite claim lease, retries and publication evidence.
 - `dialog_ws_ticket`: SHA-256 ticket hash, user/space binding and short expiry.
@@ -34,3 +34,9 @@ Attachment activation and deletion batches are claimed atomically with `FOR UPDA
 `dialog.max_message_sequence` increments only for message creation. `dialog.max_event_sequence` increments for every durable change. `dialog_message.message_sequence` never changes; `last_event_sequence` advances on edits, deletes, moderation, or attachment projection changes.
 
 Migration `004_teacher_dialogs` is additive and preserves existing personal/group rows. Its down migration fails closed while teacher-dialog, teacher-message, LearningAction, or teacher-request data exists instead of silently deleting it.
+
+Migration `005_lesson_message_context` adds the optional JSON anchor with a
+database constraint that limits it to user-authored rows with a revision string
+and non-blank bounded selection. Message deletion clears the anchor. Its down
+migration fails closed while any anchored row exists, so rollback cannot
+silently erase selected-text provenance.

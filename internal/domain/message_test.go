@@ -64,3 +64,33 @@ func TestMessageContent_SeparatesImageAndFilePolicy(t *testing.T) {
 		t.Fatalf("expected files disabled, got %v", err)
 	}
 }
+
+func TestLessonMessageContextNormalizesRevisionAndBoundsSelection(t *testing.T) {
+	context, err := NormalizeLessonMessageContext(&LessonMessageContext{
+		ContentRevision: "2026-08-31T15:00:00+03:00",
+		SelectedText:    "for i := 0; i < n; i++",
+	})
+	if err != nil {
+		t.Fatalf("valid lesson context rejected: %v", err)
+	}
+	if context.ContentRevision != "2026-08-31T12:00:00Z" {
+		t.Fatalf("revision was not canonicalized: %s", context.ContentRevision)
+	}
+	context.SelectedText = " "
+	if _, err := NormalizeLessonMessageContext(context); !errors.Is(err, ErrValidation) {
+		t.Fatalf("whitespace selection error = %v", err)
+	}
+}
+
+func TestMessageRejectsLessonContextOnTeacherResponse(t *testing.T) {
+	now := time.Now().UTC()
+	item := Message{
+		ID: uuid.New(), DialogID: uuid.New(), AuthorType: MessageAuthorPersonalTeacher,
+		PersonalTeacherID: uuid.New(), Body: "response", LessonContext: &LessonMessageContext{ContentRevision: now.Format(time.RFC3339Nano)},
+		Status: MessageStatusActive, Version: 1, MessageSequence: 1, LastEventSequence: 1,
+		IdempotencyKey: uuid.New(), CreatedAt: now, UpdatedAt: now,
+	}
+	if err := item.Validate(); !errors.Is(err, ErrValidation) {
+		t.Fatalf("teacher lesson context error = %v", err)
+	}
+}

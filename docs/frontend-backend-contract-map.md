@@ -30,6 +30,7 @@ If a new message arrives while the user is at the bottom and it becomes visible,
 | Older/newer page | `GET /message/list` | none required |
 | Send/edit/delete | message command routes | `message.created/updated/deleted` |
 | Ask Teacher in task/project context | message create with required `learning_action_id` | source `message.created`, later response `message.created` |
+| Ask Teacher about selected lesson text | message create with Course `updated_at` as `lesson_context.content_revision` and the exact non-empty selection | source `message.created`, later response `message.created`; stale/mismatched content fails closed |
 | Reply | `reply_to_message_id` on create | message payload contains reference |
 | Upload image/file | attachment upload, then ID on message create | `attachment.ready/failed` |
 | Render attachment | attachment signed-url route | ready status |

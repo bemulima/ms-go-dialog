@@ -18,13 +18,20 @@ func (r MessageRepository) Create(ctx context.Context, item domain.Message) erro
 	if err != nil {
 		return err
 	}
+	var lessonContext any
+	if item.LessonContext != nil {
+		lessonContext, err = json.Marshal(item.LessonContext)
+		if err != nil {
+			return err
+		}
+	}
 	_, err = runner(ctx, r.Pool).Exec(ctx, `INSERT INTO dialog_message (
-id, dialog_id, author_type, sender_id, personal_teacher_id, learning_action_id, reply_to_message_id, body, links, status, version,
+id, dialog_id, author_type, sender_id, personal_teacher_id, learning_action_id, lesson_context, reply_to_message_id, body, links, status, version,
 message_sequence, last_event_sequence, idempotency_key, edited_at, deleted_at,
 created_at, updated_at
-) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
-		item.ID, item.DialogID, item.AuthorType, nullableUUID(item.SenderID), nullableUUID(item.PersonalTeacherID), item.LearningActionID, item.ReplyToMessageID, item.Body, links,
-		item.Status, item.Version, item.MessageSequence, item.LastEventSequence,
+) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+		item.ID, item.DialogID, item.AuthorType, nullableUUID(item.SenderID), nullableUUID(item.PersonalTeacherID), item.LearningActionID, lessonContext,
+		item.ReplyToMessageID, item.Body, links, item.Status, item.Version, item.MessageSequence, item.LastEventSequence,
 		item.IdempotencyKey, item.EditedAt, item.DeletedAt, item.CreatedAt, item.UpdatedAt)
 	return mapError(err)
 }
@@ -152,7 +159,7 @@ WHERE id=$7 AND version=$8 AND status=1`, item.Body, links, item.Version,
 
 func (r MessageRepository) MarkDeleted(ctx context.Context, item domain.Message, expectedVersion int) error {
 	command, err := runner(ctx, r.Pool).Exec(ctx, `UPDATE dialog_message SET
-body='', links='[]'::jsonb, status=$1, version=$2, last_event_sequence=$3,
+body='', links='[]'::jsonb, lesson_context=NULL, status=$1, version=$2, last_event_sequence=$3,
 deleted_at=$4, updated_at=$5 WHERE id=$6 AND version=$7 AND status=1`,
 		item.Status, item.Version, item.LastEventSequence, item.DeletedAt,
 		item.UpdatedAt, item.ID, expectedVersion)

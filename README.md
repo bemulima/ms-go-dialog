@@ -37,6 +37,11 @@ DIALOG_TEST_DATABASE_URL='postgres://postgres:postgres@localhost:5444/ms_dialog?
 
 The external gateway namespace is `/api/dialog/v1/*`; the service owns `/api/v1/*`. `X-User-ID` and `X-User-Role` are trusted only from `ms-gateway`. WebSocket authentication uses a short-lived single-use ticket in `Sec-WebSocket-Protocol`, never a bearer token in the URL.
 
+Lesson-context messages preserve a current Course revision plus the exact
+student-selected text in `lesson_context`; other teacher contexts use their
+existing LearningAction binding. Dialog owns only this message anchor. Teacher
+verifies it against current Course content before generating a response.
+
 Runtime modes are `api`, `realtime`, `worker`, and `all`. PostgreSQL is always required; realtime/worker modes require NATS JetStream, participant membership mutations require the private `ms-go-user` batch API, attachment operations require FileStorage, and generic-file uploads require ClamAV. See [integration contract](docs/integration-contract.md) and [frontend/backend map](docs/frontend-backend-contract-map.md).
 
 Operational endpoints are `GET /healthz` (process liveness), `GET /readyz` (mode-aware PostgreSQL/NATS readiness), and `GET /metrics` (Prometheus text format). They belong on the private service port and must not be routed through the public dialog namespace. See [operations](docs/operations.md).

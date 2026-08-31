@@ -59,6 +59,22 @@ Internally provisioned teacher dialogs appear in the ordinary list/get/history A
 
 Message responses include `author_type`. Existing user messages keep `sender_id`; PersonalTeacher messages return `sender_id: null` and `personal_teacher_id`. `POST /message/create` accepts optional `learning_action_id`: it is required for student messages in `lesson_task`, `practice_task`, and `project` teacher dialogs and rejected everywhere else.
 
+For a `lesson` teacher dialog, `POST /message/create` instead requires:
+
+```json
+{
+  "lesson_context": {
+    "content_revision": "2026-08-31T12:00:00.123Z",
+    "selected_text": "the exact text selected in the lesson"
+  }
+}
+```
+
+The revision must be RFC3339Nano and the selected text is preserved byte for
+byte, non-blank, and limited to 12,000 Unicode code points. Message responses
+return the same `lesson_context`. Every non-lesson context rejects this object;
+Dialog does not claim the revision or selection is canonical.
+
 ## Admin API
 
 ```http
@@ -86,6 +102,6 @@ POST /internal/v1/teacher-dialog/{dialogID}/message
 
 Ensure accepts `space_key`, `student_id`, `personal_teacher_id`, `context_type`, and optional `context_id`; it is idempotent for that binding.
 
-The request query returns the exact active student source message and no more than 49 preceding visible messages. It verifies the requested PersonalTeacher binding and never returns unrestricted history.
+The request query returns the exact active student source message and no more than 49 preceding visible messages. It verifies the requested PersonalTeacher binding and never returns unrestricted history. For `lesson`, the source includes its revision/selection anchor so Teacher can verify it against Course; the integration event remains body- and context-free.
 
 Append accepts `personal_teacher_id`, `source_message_id`, `idempotency_key`, and `body`. It accepts no sender, targets, mastery, attachments, or LearningAction override. The response is authored by the bound PersonalTeacher, replies to the source, copies its LearningAction reference, and is idempotent per PersonalTeacher and key.

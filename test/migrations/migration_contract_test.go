@@ -68,6 +68,15 @@ func TestMigrations_AreReversibleAndKeepReadStatePerMember(t *testing.T) {
 	if !strings.Contains(string(groupEvolution), "member_count BETWEEN 1 AND 1000") || !strings.Contains(string(groupEvolution), "DROP CONSTRAINT chk_dialog_personal_shape") {
 		t.Fatal("group singleton evolution must be explicit and upgrade existing databases")
 	}
+	lessonContextEvolution, err := os.ReadFile(filepath.Join(root, "005_lesson_message_context.up.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{"lesson_context JSONB", "content_revision", "selected_text", "author_type = 'user'"} {
+		if !strings.Contains(string(lessonContextEvolution), required) {
+			t.Fatalf("lesson message context migration is missing %q", required)
+		}
+	}
 
 	runner, err := os.ReadFile(filepath.Join("..", "..", "scripts", "migrate.sh"))
 	if err != nil {

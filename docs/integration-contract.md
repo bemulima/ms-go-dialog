@@ -26,6 +26,12 @@ JetStream `DIALOG_EVENTS` carries durable `dialog.*` subjects from the PostgreSQ
 
 `dialog.teacher.requested` is a dedicated at-least-once integration trigger for `ms-go-teacher-agent`. It is emitted only after a student-authored teacher-dialog message commits and contains the source IDs, student, bound PersonalTeacher, educational context, and optional LearningAction reference. It deliberately excludes the message body, mastery, and history. Teacher deduplicates by `event_id`, then uses the bounded internal read contract.
 
+For `lesson`, that bounded read includes the source message's
+`lesson_context.content_revision` and exact `selected_text`. The event itself
+still excludes both. Teacher must fetch current Course content, require an exact
+revision match and substring match, and must not treat Dialog as canonical
+course content.
+
 ## Teacher Agent
 
 `ms-go-teacher-agent` owns logical PersonalTeacher identity and pedagogy. It provisions teacher bindings through `PUT /internal/v1/teacher-dialog/ensure`, reads the exact source plus a bounded prior window through `GET /internal/v1/teacher-dialog/{dialogID}/request/{sourceMessageID}`, and appends the eventual response through `POST /internal/v1/teacher-dialog/{dialogID}/message`. All calls require the exact `X-Internal-Token`; the gateway and browser must never route these endpoints.

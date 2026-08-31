@@ -48,6 +48,32 @@ type MessageContent struct {
 	ContainsRawHTML bool
 }
 
+const MaxLessonSelectedTextRunes = 12000
+
+// LessonMessageContext anchors a user question to the exact current Course
+// revision visible when it was sent. SelectedText is always treated as
+// untrusted until Course verifies it.
+type LessonMessageContext struct {
+	ContentRevision string `json:"content_revision"`
+	SelectedText    string `json:"selected_text,omitempty"`
+}
+
+func NormalizeLessonMessageContext(input *LessonMessageContext) (*LessonMessageContext, error) {
+	if input == nil {
+		return nil, nil
+	}
+	revision, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(input.ContentRevision))
+	if err != nil || revision.IsZero() || !utf8.ValidString(input.SelectedText) ||
+		utf8.RuneCountInString(input.SelectedText) > MaxLessonSelectedTextRunes ||
+		strings.TrimSpace(input.SelectedText) == "" {
+		return nil, fmt.Errorf("%w: invalid lesson message context", ErrValidation)
+	}
+	return &LessonMessageContext{
+		ContentRevision: revision.UTC().Format(time.RFC3339Nano),
+		SelectedText:    input.SelectedText,
+	}, nil
+}
+
 func AnalyzeMessageContent(body string, imageCount, fileCount int) MessageContent {
 	matches := httpLinkPattern.FindAllString(body, -1)
 	links := make([]Link, 0, len(matches))
@@ -101,6 +127,7 @@ type Message struct {
 	SenderID          uuid.UUID
 	PersonalTeacherID uuid.UUID
 	LearningActionID  *uuid.UUID
+	LessonContext     *LessonMessageContext
 	ReplyToMessageID  *uuid.UUID
 	Body              string
 	Links             []Link
@@ -127,6 +154,13 @@ func (m Message) Validate() error {
 	}
 	if m.LearningActionID != nil && *m.LearningActionID == uuid.Nil {
 		return fmt.Errorf("%w: invalid learning action", ErrValidation)
+	}
+	if m.LessonContext != nil {
+		normalized, err := NormalizeLessonMessageContext(m.LessonContext)
+		if err != nil || m.AuthorType != MessageAuthorUser || normalized.ContentRevision != m.LessonContext.ContentRevision ||
+			normalized.SelectedText != m.LessonContext.SelectedText {
+			return fmt.Errorf("%w: invalid lesson message context", ErrValidation)
+		}
 	}
 	if m.ReplyToMessageID != nil && *m.ReplyToMessageID == m.ID {
 		return fmt.Errorf("%w: a message cannot reply to itself", ErrValidation)

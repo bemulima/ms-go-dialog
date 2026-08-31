@@ -94,24 +94,25 @@ func newAttachmentResponse(item domain.Attachment) attachmentResponse {
 }
 
 type messageResponse struct {
-	ID                uuid.UUID                `json:"id"`
-	DialogID          uuid.UUID                `json:"dialog_id"`
-	AuthorType        domain.MessageAuthorType `json:"author_type"`
-	SenderID          *uuid.UUID               `json:"sender_id"`
-	PersonalTeacherID *uuid.UUID               `json:"personal_teacher_id,omitempty"`
-	LearningActionID  *uuid.UUID               `json:"learning_action_id,omitempty"`
-	ReplyToMessageID  *uuid.UUID               `json:"reply_to_message_id"`
-	Body              string                   `json:"body"`
-	Links             []domain.Link            `json:"links"`
-	Status            domain.MessageStatus     `json:"status"`
-	Version           int                      `json:"version"`
-	MessageSequence   int64                    `json:"message_sequence"`
-	LastEventSequence int64                    `json:"last_event_sequence"`
-	Attachments       []attachmentResponse     `json:"attachments"`
-	EditedAt          *time.Time               `json:"edited_at"`
-	DeletedAt         *time.Time               `json:"deleted_at"`
-	CreatedAt         time.Time                `json:"created_at"`
-	UpdatedAt         time.Time                `json:"updated_at"`
+	ID                uuid.UUID                    `json:"id"`
+	DialogID          uuid.UUID                    `json:"dialog_id"`
+	AuthorType        domain.MessageAuthorType     `json:"author_type"`
+	SenderID          *uuid.UUID                   `json:"sender_id"`
+	PersonalTeacherID *uuid.UUID                   `json:"personal_teacher_id,omitempty"`
+	LearningActionID  *uuid.UUID                   `json:"learning_action_id,omitempty"`
+	LessonContext     *domain.LessonMessageContext `json:"lesson_context,omitempty"`
+	ReplyToMessageID  *uuid.UUID                   `json:"reply_to_message_id"`
+	Body              string                       `json:"body"`
+	Links             []domain.Link                `json:"links"`
+	Status            domain.MessageStatus         `json:"status"`
+	Version           int                          `json:"version"`
+	MessageSequence   int64                        `json:"message_sequence"`
+	LastEventSequence int64                        `json:"last_event_sequence"`
+	Attachments       []attachmentResponse         `json:"attachments"`
+	EditedAt          *time.Time                   `json:"edited_at"`
+	DeletedAt         *time.Time                   `json:"deleted_at"`
+	CreatedAt         time.Time                    `json:"created_at"`
+	UpdatedAt         time.Time                    `json:"updated_at"`
 }
 
 func newMessageResponse(view message.View) messageResponse {
@@ -122,6 +123,7 @@ func newMessageResponse(view message.View) messageResponse {
 	return messageResponse{
 		ID: view.Message.ID, DialogID: view.Message.DialogID, AuthorType: view.Message.AuthorType,
 		SenderID: uuidPointer(view.Message.SenderID), PersonalTeacherID: uuidPointer(view.Message.PersonalTeacherID), LearningActionID: view.Message.LearningActionID,
+		LessonContext:    view.Message.LessonContext,
 		ReplyToMessageID: view.Message.ReplyToMessageID, Body: view.Message.Body, Links: view.Message.Links,
 		Status: view.Message.Status, Version: view.Message.Version, MessageSequence: view.Message.MessageSequence,
 		LastEventSequence: view.Message.LastEventSequence, Attachments: attachments,

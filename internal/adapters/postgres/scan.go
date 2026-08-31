@@ -71,16 +71,17 @@ func scanMember(row pgx.Row) (domain.Member, error) {
 	return item, mapError(err)
 }
 
-const messageColumns = `id, dialog_id, author_type, sender_id, personal_teacher_id, learning_action_id, reply_to_message_id, body, links,
+const messageColumns = `id, dialog_id, author_type, sender_id, personal_teacher_id, learning_action_id, lesson_context, reply_to_message_id, body, links,
 status, version, message_sequence, last_event_sequence, idempotency_key,
 edited_at, deleted_at, created_at, updated_at`
 
 func scanMessage(row pgx.Row) (domain.Message, error) {
 	var item domain.Message
 	var links []byte
+	var lessonContext []byte
 	var senderID, personalTeacherID *uuid.UUID
 	err := row.Scan(
-		&item.ID, &item.DialogID, &item.AuthorType, &senderID, &personalTeacherID, &item.LearningActionID, &item.ReplyToMessageID, &item.Body, &links,
+		&item.ID, &item.DialogID, &item.AuthorType, &senderID, &personalTeacherID, &item.LearningActionID, &lessonContext, &item.ReplyToMessageID, &item.Body, &links,
 		&item.Status, &item.Version, &item.MessageSequence, &item.LastEventSequence,
 		&item.IdempotencyKey, &item.EditedAt, &item.DeletedAt, &item.CreatedAt, &item.UpdatedAt,
 	)
@@ -95,6 +96,11 @@ func scanMessage(row pgx.Row) (domain.Message, error) {
 	}
 	if err := json.Unmarshal(links, &item.Links); err != nil {
 		return domain.Message{}, err
+	}
+	if len(lessonContext) > 0 {
+		if err := json.Unmarshal(lessonContext, &item.LessonContext); err != nil {
+			return domain.Message{}, err
+		}
 	}
 	return item, nil
 }

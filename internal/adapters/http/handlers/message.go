@@ -16,12 +16,13 @@ type MessageHandler struct{ Service *messageuc.Service }
 
 func (h MessageHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var request struct {
-		DialogID         uuid.UUID   `json:"dialog_id"`
-		ReplyToMessageID *uuid.UUID  `json:"reply_to_message_id"`
-		Body             string      `json:"body"`
-		AttachmentIDs    []uuid.UUID `json:"attachment_ids"`
-		IdempotencyKey   uuid.UUID   `json:"idempotency_key"`
-		LearningActionID *uuid.UUID  `json:"learning_action_id"`
+		DialogID         uuid.UUID                    `json:"dialog_id"`
+		ReplyToMessageID *uuid.UUID                   `json:"reply_to_message_id"`
+		Body             string                       `json:"body"`
+		AttachmentIDs    []uuid.UUID                  `json:"attachment_ids"`
+		IdempotencyKey   uuid.UUID                    `json:"idempotency_key"`
+		LearningActionID *uuid.UUID                   `json:"learning_action_id"`
+		LessonContext    *domain.LessonMessageContext `json:"lesson_context"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
 		WriteError(w, r, domain.ErrValidation)
@@ -29,7 +30,8 @@ func (h MessageHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := h.Service.Create(r.Context(), middleware.Actor(r), messageuc.CreateInput{
 		DialogID: request.DialogID, ReplyToMessageID: request.ReplyToMessageID,
-		Body: request.Body, AttachmentIDs: request.AttachmentIDs, IdempotencyKey: request.IdempotencyKey, LearningActionID: request.LearningActionID,
+		Body: request.Body, AttachmentIDs: request.AttachmentIDs, IdempotencyKey: request.IdempotencyKey,
+		LearningActionID: request.LearningActionID, LessonContext: request.LessonContext,
 	})
 	if err != nil {
 		WriteError(w, r, err)

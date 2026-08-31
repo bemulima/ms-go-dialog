@@ -18,6 +18,8 @@ invariants:
     - a teacher dialog has one real student member and one logical personal_teacher_id binding
     - user and personal-teacher message authors are mutually exclusive
     - task and project teacher requests retain the opaque learning_action_id supplied on the source message
+    - lesson teacher requests retain an RFC3339Nano current-content revision and exact non-blank selected text only on the user source message
+    - message deletion clears lesson_context together with user content
     - message.created and teacher.requested evidence for one source mutation may share one event sequence and differ by subject
     - attachment binding never crosses sender or dialog ownership
     - attachment workers use finite leased SKIP LOCKED claims across replicas
@@ -26,4 +28,5 @@ migration_policy:
     format: ordered reversible up/down pairs
     ledger: dialog_schema_migration via scripts/migrate.sh
     destructive_change_requires: .ai/workflows/change-contract.yaml
+    lesson_context_rollback: migration 005 fails closed while anchored messages exist
 repository_ports: internal/domain/repository

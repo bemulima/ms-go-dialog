@@ -235,6 +235,38 @@ func TestCreate_TeacherDialogPublishesDedicatedRequest(t *testing.T) {
 	}
 }
 
+func TestCreate_LessonTeacherDialogRequiresRevisionAnchor(t *testing.T) {
+	now := time.Date(2026, 8, 31, 15, 0, 0, 0, time.UTC)
+	dialogID, spaceID, studentID, teacherID, lessonID := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	dialogItem := teacherDialog(dialogID, spaceID, studentID, teacherID, lessonID, now)
+	dialogItem.TeacherContextType = domain.TeacherContextLesson
+	service := Service{
+		Spaces: fakeSpaces{item: activeTestSpace(spaceID, studentID, now)}, Dialogs: &fakeDialogs{item: dialogItem},
+		Members:  &fakeMembers{items: map[uuid.UUID]domain.Member{studentID: activeMember(dialogID, studentID, 0, 0, now)}},
+		Messages: &fakeMessages{items: map[uuid.UUID]domain.Message{}}, Outbox: &fakeOutbox{}, Tx: fakeTx{},
+		Now: func() time.Time { return now }, NewID: uuid.New,
+	}
+
+	_, err := service.Create(context.Background(), domain.Actor{UserID: studentID, Role: "STUDENT"}, CreateInput{
+		DialogID: dialogID, Body: "Объясни этот фрагмент", IdempotencyKey: uuid.New(),
+	})
+	if !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("missing lesson context error = %v", err)
+	}
+	result, err := service.Create(context.Background(), domain.Actor{UserID: studentID, Role: "STUDENT"}, CreateInput{
+		DialogID: dialogID, Body: "Объясни этот фрагмент", IdempotencyKey: uuid.New(),
+		LessonContext: &domain.LessonMessageContext{
+			ContentRevision: now.Format(time.RFC3339Nano), SelectedText: "for i := 0; i < n; i++",
+		},
+	})
+	if err != nil {
+		t.Fatalf("create anchored lesson message: %v", err)
+	}
+	if !result.Created || result.View.Message.LessonContext == nil || result.View.Message.LessonContext.SelectedText == "" {
+		t.Fatalf("lesson anchor was not stored: %+v", result)
+	}
+}
+
 func TestTeacherRequestContextAndAppendResponse(t *testing.T) {
 	now := time.Date(2026, 8, 30, 14, 0, 0, 0, time.UTC)
 	dialogID, spaceID, studentID, teacherID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
