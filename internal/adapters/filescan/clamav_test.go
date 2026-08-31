@@ -13,7 +13,7 @@ func TestClamAVScan_ContextCancellationInterruptsBlockedConnection(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 	accepted := make(chan struct{})
 	serverDone := make(chan struct{})
 	go func() {
@@ -22,7 +22,7 @@ func TestClamAVScan_ContextCancellationInterruptsBlockedConnection(t *testing.T)
 		if acceptErr != nil {
 			return
 		}
-		defer connection.Close()
+		defer func() { _ = connection.Close() }()
 		close(accepted)
 		_, _ = io.Copy(io.Discard, connection)
 	}()

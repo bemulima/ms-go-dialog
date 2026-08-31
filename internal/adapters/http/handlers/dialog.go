@@ -3,7 +3,6 @@ package handlers
 import (
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/bemulima/ms-go-dialog/internal/adapters/http/middleware"
 	"github.com/bemulima/ms-go-dialog/internal/domain"
@@ -263,11 +262,4 @@ func queryInt(r *http.Request, name string, fallback int) int {
 		return -1
 	}
 	return value
-}
-
-func dialogActivity(item domain.Dialog) time.Time {
-	if item.LastMessageAt != nil {
-		return *item.LastMessageAt
-	}
-	return item.CreatedAt
 }

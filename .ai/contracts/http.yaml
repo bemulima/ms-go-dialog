@@ -53,6 +53,7 @@ route_groups:
         - PUT /teacher-dialog/ensure
         - GET /teacher-dialog/{dialogID}/request/{sourceMessageID}
         - POST /teacher-dialog/{dialogID}/message
+        - POST /teacher-dialog/{dialogID}/proactive-message
 pagination:
     message_order: message_sequence
     cursor: opaque and dialog scoped

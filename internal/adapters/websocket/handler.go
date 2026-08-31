@@ -75,7 +75,7 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	defer connection.Close()
+	defer func() { _ = connection.Close() }()
 	if h.Metrics != nil {
 		h.Metrics.WebSocketOpened()
 		defer h.Metrics.WebSocketClosed()

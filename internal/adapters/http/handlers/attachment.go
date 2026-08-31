@@ -34,7 +34,7 @@ func (h AttachmentHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, r, domain.ErrInvalidAttachment)
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	if header.Size < 1 || header.Size > domain.HardMaxFileBytes {
 		WriteError(w, r, domain.ErrInvalidAttachment)
 		return

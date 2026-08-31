@@ -41,7 +41,7 @@ func (c Client) UploadTemporary(ctx context.Context, input attachmentuc.Temporar
 	if err != nil {
 		return attachmentuc.StoredFile{}, fmt.Errorf("upload temporary file: %w", err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusCreated {
 		return attachmentuc.StoredFile{}, responseError("upload temporary file", response)
 	}
@@ -108,7 +108,7 @@ func (c Client) SignedGETURL(ctx context.Context, id uuid.UUID, minutes int) (st
 	if err != nil {
 		return "", err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
 		return "", responseError("request signed URL", response)
 	}
@@ -136,7 +136,7 @@ func (c Client) noBody(ctx context.Context, method, path string, success int, no
 	if err != nil {
 		return err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode == success || (notFoundOK && response.StatusCode == http.StatusNotFound) {
 		return nil
 	}

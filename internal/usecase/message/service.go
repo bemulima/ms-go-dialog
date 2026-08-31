@@ -95,6 +95,13 @@ type AppendTeacherResponseInput struct {
 	Body              string
 }
 
+type AppendTeacherProactiveInput struct {
+	DialogID          uuid.UUID
+	PersonalTeacherID uuid.UUID
+	IdempotencyKey    uuid.UUID
+	Body              string
+}
+
 func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput) (CreateResult, error) {
 	if err := actor.Validate(); err != nil {
 		return CreateResult{}, err
@@ -303,6 +310,86 @@ func (s Service) AppendTeacherResponse(ctx context.Context, in AppendTeacherResp
 			ID: s.newID(), DialogID: in.DialogID, AuthorType: domain.MessageAuthorPersonalTeacher,
 			PersonalTeacherID: in.PersonalTeacherID, LearningActionID: source.LearningActionID,
 			ReplyToMessageID: &source.ID, Body: content.Body, Links: content.Links,
+			Status: domain.MessageStatusActive, Version: 1,
+			MessageSequence: dialogItem.MaxMessageSequence + 1, LastEventSequence: dialogItem.MaxEventSequence + 1,
+			IdempotencyKey: in.IdempotencyKey, CreatedAt: now, UpdatedAt: now,
+		}
+		if err := item.Validate(); err != nil {
+			return err
+		}
+		if err := s.Messages.Create(txCtx, item); err != nil {
+			return err
+		}
+		dialogItem.MessageCount++
+		dialogItem.MaxMessageSequence = item.MessageSequence
+		dialogItem.MaxEventSequence = item.LastEventSequence
+		dialogItem.LastMessageID = &item.ID
+		dialogItem.LastMessageAt = &now
+		dialogItem.Version++
+		dialogItem.UpdatedAt = now
+		if err := s.Dialogs.UpdateState(txCtx, dialogItem, dialogItem.Version-1); err != nil {
+			return err
+		}
+		if err := s.Members.IncrementUnreadRecipients(txCtx, item.DialogID, uuid.Nil, item.LastEventSequence); err != nil {
+			return err
+		}
+		if err := s.addEvent(txCtx, item, nil, domain.EventDialogMessageCreated, uuid.Nil, now); err != nil {
+			return err
+		}
+		result = CreateResult{Created: true, View: View{Message: item}}
+		return nil
+	})
+	return result, err
+}
+
+// AppendTeacherProactive appends a bounded proactive offer to the student's
+// general teacher dialog. It never creates a synthetic student source message.
+func (s Service) AppendTeacherProactive(ctx context.Context, in AppendTeacherProactiveInput) (CreateResult, error) {
+	if in.DialogID == uuid.Nil || in.PersonalTeacherID == uuid.Nil || in.IdempotencyKey == uuid.Nil {
+		return CreateResult{}, fmt.Errorf("%w: proactive teacher identities are required", domain.ErrValidation)
+	}
+	var result CreateResult
+	err := s.Tx.WithinTransaction(ctx, func(txCtx context.Context) error {
+		if s.TeacherMessages == nil {
+			return fmt.Errorf("teacher message repository is not configured")
+		}
+		if err := s.TeacherMessages.LockTeacherIdempotencyKey(txCtx, in.PersonalTeacherID, in.IdempotencyKey); err != nil {
+			return err
+		}
+		existing, err := s.TeacherMessages.GetByTeacherIdempotencyKey(txCtx, in.PersonalTeacherID, in.IdempotencyKey)
+		if err == nil {
+			if existing.DialogID != in.DialogID || existing.Body != in.Body || existing.ReplyToMessageID != nil || existing.LearningActionID != nil {
+				return domain.ErrIdempotencyConflict
+			}
+			result = CreateResult{View: View{Message: existing}}
+			return nil
+		}
+		if !errors.Is(err, domain.ErrNotFound) {
+			return err
+		}
+
+		dialogItem, err := s.Dialogs.GetByIDForUpdate(txCtx, in.DialogID)
+		if err != nil || dialogItem.Type != domain.DialogTypeTeacher || dialogItem.Status == domain.DialogStatusHidden {
+			return domain.ErrDialogNotFound
+		}
+		if dialogItem.Status != domain.DialogStatusActive {
+			return domain.ErrDialogClosed
+		}
+		if dialogItem.PersonalTeacherID != in.PersonalTeacherID || dialogItem.TeacherContextType != domain.TeacherContextGeneralTeacher {
+			return domain.ErrForbidden
+		}
+		space, err := s.Spaces.GetByID(txCtx, dialogItem.SpaceID)
+		if err != nil || space.Status != domain.SpaceStatusActive {
+			return domain.ErrDialogNotFound
+		}
+		content := domain.AnalyzeMessageContent(in.Body, 0, 0)
+		if err := content.Validate(space.Policy); err != nil {
+			return err
+		}
+		now := s.now()
+		item := domain.Message{
+			ID: s.newID(), DialogID: in.DialogID, AuthorType: domain.MessageAuthorPersonalTeacher,
+			PersonalTeacherID: in.PersonalTeacherID, Body: content.Body, Links: content.Links,
 			Status: domain.MessageStatusActive, Version: 1,
 			MessageSequence: dialogItem.MaxMessageSequence + 1, LastEventSequence: dialogItem.MaxEventSequence + 1,
 			IdempotencyKey: in.IdempotencyKey, CreatedAt: now, UpdatedAt: now,
@@ -789,9 +876,10 @@ func (s Service) addReadEvent(ctx context.Context, item domain.Dialog, member do
 func attachmentKinds(items []domain.Attachment) (int, int) {
 	images, files := 0, 0
 	for _, item := range items {
-		if item.Kind == domain.AttachmentKindImage {
+		switch item.Kind {
+		case domain.AttachmentKindImage:
 			images++
-		} else if item.Kind == domain.AttachmentKindFile {
+		case domain.AttachmentKindFile:
 			files++
 		}
 	}

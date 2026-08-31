@@ -23,7 +23,7 @@ Applied migrations are immutable. The initial group shape requires at least two 
 - Group and initial membership set commit together.
 - Message, dialog counters/sequences, recipient unread increments, attachment binding, and outbox insert commit together.
 - A student teacher-dialog message also inserts `dialog.teacher.requested` in that same transaction. It shares the source mutation's event sequence with `dialog.message.created`; outbox uniqueness therefore includes subject.
-- An internally appended PersonalTeacher response, dialog counters, student unread increment, and `dialog.message.created` evidence commit together.
+- An internally appended PersonalTeacher response or general-dialog proactive offer, dialog counters, student unread increment, and `dialog.message.created` evidence commit together.
 - Read cursor, unread decrement, event sequence, and outbox insert commit together for one member only.
 - Attachment ready/failed transitions and their message/dialog event evidence commit together after idempotent FileStorage work for active messages. Hidden messages finish the attachment transition without public event evidence; a later moderation restore carries the authoritative attachment snapshot.
 

@@ -98,9 +98,15 @@ The internal contour requires an exact `X-Internal-Token` and is never exposed t
 PUT  /internal/v1/teacher-dialog/ensure
 GET  /internal/v1/teacher-dialog/{dialogID}/request/{sourceMessageID}?personal_teacher_id=<uuid>&before=20
 POST /internal/v1/teacher-dialog/{dialogID}/message
+POST /internal/v1/teacher-dialog/{dialogID}/proactive-message
 ```
 
 Ensure accepts `space_key`, `student_id`, `personal_teacher_id`, `context_type`, and optional `context_id`; it is idempotent for that binding.
+
+Proactive append accepts `personal_teacher_id`, UUID `idempotency_key`, and
+`body`. It is valid only for the bound active `general_teacher` dialog and
+returns `201` for the first commit or `200` for an identical replay. The
+created message has no user source, reply, LearningAction, or lesson context.
 
 The request query returns the exact active student source message and no more than 49 preceding visible messages. It verifies the requested PersonalTeacher binding and never returns unrestricted history. For `lesson`, the source includes its revision/selection anchor so Teacher can verify it against Course; the integration event remains body- and context-free.
 

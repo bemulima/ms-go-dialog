@@ -324,6 +324,60 @@ func TestTeacherRequestContextAndAppendResponse(t *testing.T) {
 	}
 }
 
+func TestAppendTeacherProactiveUsesGeneralDialogAndIsIdempotent(t *testing.T) {
+	now := time.Date(2026, 8, 31, 18, 0, 0, 0, time.UTC)
+	dialogID, spaceID, studentID, teacherID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	dialogItem := teacherDialog(dialogID, spaceID, studentID, teacherID, uuid.New(), now)
+	dialogItem.TeacherContextType, dialogItem.ContextID = domain.TeacherContextGeneralTeacher, nil
+	messages := &fakeMessages{items: map[uuid.UUID]domain.Message{}}
+	outbox := &fakeOutbox{}
+	service := Service{
+		Spaces: fakeSpaces{item: activeTestSpace(spaceID, studentID, now)}, Dialogs: &fakeDialogs{item: dialogItem},
+		Members:  &fakeMembers{items: map[uuid.UUID]domain.Member{studentID: activeMember(dialogID, studentID, 0, 0, now)}},
+		Messages: messages, TeacherMessages: messages, Outbox: outbox, Tx: fakeTx{},
+		Now: func() time.Time { return now }, NewID: uuid.New,
+	}
+	idempotencyKey := uuid.New()
+	result, err := service.AppendTeacherProactive(context.Background(), AppendTeacherProactiveInput{
+		DialogID: dialogID, PersonalTeacherID: teacherID, IdempotencyKey: idempotencyKey,
+		Body: "Похоже, ты зациклился. Хочешь небольшую подсказку?",
+	})
+	if err != nil {
+		t.Fatalf("append proactive message: %v", err)
+	}
+	message := result.View.Message
+	if !result.Created || message.AuthorType != domain.MessageAuthorPersonalTeacher || message.ReplyToMessageID != nil || message.LearningActionID != nil {
+		t.Fatalf("unexpected proactive message: %+v", result)
+	}
+	if len(outbox.items) != 1 || outbox.items[0].Subject != domain.EventDialogMessageCreated {
+		t.Fatalf("unexpected proactive outbox: %+v", outbox.items)
+	}
+	replay, err := service.AppendTeacherProactive(context.Background(), AppendTeacherProactiveInput{
+		DialogID: dialogID, PersonalTeacherID: teacherID, IdempotencyKey: idempotencyKey,
+		Body: "Похоже, ты зациклился. Хочешь небольшую подсказку?",
+	})
+	if err != nil || replay.Created || replay.View.Message.ID != message.ID || len(outbox.items) != 1 {
+		t.Fatalf("proactive replay mismatch: replay=%+v err=%v events=%d", replay, err, len(outbox.items))
+	}
+}
+
+func TestAppendTeacherProactiveRejectsContextDialog(t *testing.T) {
+	now := time.Now().UTC()
+	dialogID, spaceID, studentID, teacherID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	dialogItem := teacherDialog(dialogID, spaceID, studentID, teacherID, uuid.New(), now)
+	service := Service{
+		Spaces: fakeSpaces{item: activeTestSpace(spaceID, studentID, now)}, Dialogs: &fakeDialogs{item: dialogItem},
+		Messages: &fakeMessages{items: map[uuid.UUID]domain.Message{}}, TeacherMessages: &fakeMessages{items: map[uuid.UUID]domain.Message{}},
+		Outbox: &fakeOutbox{}, Tx: fakeTx{}, Now: func() time.Time { return now }, NewID: uuid.New,
+	}
+	_, err := service.AppendTeacherProactive(context.Background(), AppendTeacherProactiveInput{
+		DialogID: dialogID, PersonalTeacherID: teacherID, IdempotencyKey: uuid.New(), Body: "Offer",
+	})
+	if !errors.Is(err, domain.ErrForbidden) {
+		t.Fatalf("expected contextual dialog rejection, got %v", err)
+	}
+}
+
 type fakeTx struct{}
 
 func (fakeTx) WithinTransaction(ctx context.Context, fn func(context.Context) error) error {

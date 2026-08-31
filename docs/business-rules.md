@@ -27,6 +27,7 @@
 - Student messages in a `lesson` teacher dialog require `lesson_context` with a current RFC3339Nano `content_revision` and non-blank `selected_text` of at most 12,000 Unicode code points. Other contexts and PersonalTeacher-authored messages reject it. Dialog validates only shape and context binding; Teacher verifies the revision and exact substring against Course.
 - A committed student message in a teacher dialog atomically records both normal `dialog.message.created` evidence and a body-free `dialog.teacher.requested` trigger. A teacher-authored response never recursively emits a teacher request.
 - Teacher responses are accepted only through the internal idempotent append command, must match the bound PersonalTeacher and source student message, inherit its LearningAction reference, and reply to that source message.
+- A proactive PersonalTeacher offer is accepted only through the internal command for the same student's active `general_teacher` dialog. It has no synthetic user source, reply, LearningAction, or lesson context, and is idempotent by the Teacher-supplied analytics event ID.
 - Delete keeps a tombstone, identity, order, reply references, and sequence, but clears the lesson selection together with message content.
 
 ## Read state

@@ -13,7 +13,8 @@ func TestActorRateLimiterEnforcesBurst(t *testing.T) {
 		t.Fatal(err)
 	}
 	actor := uuid.New()
-	if !limiter.Allow(actor) || !limiter.Allow(actor) || limiter.Allow(actor) {
+	first, second, third := limiter.Allow(actor), limiter.Allow(actor), limiter.Allow(actor)
+	if !first || !second || third {
 		t.Fatal("burst was not enforced")
 	}
 }

@@ -107,3 +107,33 @@ func (h TeacherDialogHandler) AppendResponse(w http.ResponseWriter, r *http.Requ
 	}
 	writeJSON(w, status, newMessageResponse(result.View))
 }
+
+func (h TeacherDialogHandler) AppendProactive(w http.ResponseWriter, r *http.Request) {
+	dialogID, err := uuid.Parse(chi.URLParam(r, "dialogID"))
+	if err != nil {
+		WriteError(w, r, domain.ErrValidation)
+		return
+	}
+	var request struct {
+		PersonalTeacherID uuid.UUID `json:"personal_teacher_id"`
+		IdempotencyKey    uuid.UUID `json:"idempotency_key"`
+		Body              string    `json:"body"`
+	}
+	if err := decodeJSON(w, r, &request); err != nil {
+		WriteError(w, r, domain.ErrValidation)
+		return
+	}
+	result, err := h.Messages.AppendTeacherProactive(r.Context(), messageuc.AppendTeacherProactiveInput{
+		DialogID: dialogID, PersonalTeacherID: request.PersonalTeacherID,
+		IdempotencyKey: request.IdempotencyKey, Body: request.Body,
+	})
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	status := http.StatusOK
+	if result.Created {
+		status = http.StatusCreated
+	}
+	writeJSON(w, status, newMessageResponse(result.View))
+}

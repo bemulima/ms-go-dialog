@@ -34,6 +34,6 @@ course content.
 
 ## Teacher Agent
 
-`ms-go-teacher-agent` owns logical PersonalTeacher identity and pedagogy. It provisions teacher bindings through `PUT /internal/v1/teacher-dialog/ensure`, reads the exact source plus a bounded prior window through `GET /internal/v1/teacher-dialog/{dialogID}/request/{sourceMessageID}`, and appends the eventual response through `POST /internal/v1/teacher-dialog/{dialogID}/message`. All calls require the exact `X-Internal-Token`; the gateway and browser must never route these endpoints.
+`ms-go-teacher-agent` owns logical PersonalTeacher identity and pedagogy. It provisions teacher bindings through `PUT /internal/v1/teacher-dialog/ensure`, reads the exact source plus a bounded prior window through `GET /internal/v1/teacher-dialog/{dialogID}/request/{sourceMessageID}`, and appends the eventual response through `POST /internal/v1/teacher-dialog/{dialogID}/message`. A deterministic proactive intervention may use `POST /internal/v1/teacher-dialog/{dialogID}/proactive-message`, but only for the same student's general teacher dialog; it has no synthetic student source and is idempotent by the analytics event ID. All calls require the exact `X-Internal-Token`; the gateway and browser must never route these endpoints.
 
 Dialog checks binding, context, source authorship, content policy, and append idempotency. Teacher verifies the opaque `learning_action_id` against `ms-go-student`, applies deterministic pedagogy before any model invocation, and does not persist a competing conversation history.

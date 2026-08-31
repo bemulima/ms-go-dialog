@@ -38,7 +38,7 @@ func main() {
 	header := http.Header{"Origin": []string{*origin}}
 	connection, response, err := dialer.Dial(*url, header)
 	if response != nil && response.Body != nil {
-		defer response.Body.Close()
+		defer func() { _ = response.Body.Close() }()
 	}
 	if err != nil {
 		fatalf("connect: %v", err)
@@ -86,7 +86,7 @@ func main() {
 		fatalf("single-use ticket was accepted twice")
 	}
 	if reusedResponse != nil && reusedResponse.Body != nil {
-		defer reusedResponse.Body.Close()
+		defer func() { _ = reusedResponse.Body.Close() }()
 	}
 	if reusedErr == nil || reusedResponse == nil || reusedResponse.StatusCode != http.StatusUnauthorized {
 		fatalf("reused ticket must return HTTP 401")

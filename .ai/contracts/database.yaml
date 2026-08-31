@@ -21,6 +21,7 @@ invariants:
     - lesson teacher requests retain an RFC3339Nano current-content revision and exact non-blank selected text only on the user source message
     - message deletion clears lesson_context together with user content
     - message.created and teacher.requested evidence for one source mutation may share one event sequence and differ by subject
+    - proactive PersonalTeacher messages are restricted to general_teacher dialogs and have no synthetic user source, reply, learning action, or lesson context
     - attachment binding never crosses sender or dialog ownership
     - attachment workers use finite leased SKIP LOCKED claims across replicas
 migration_policy:

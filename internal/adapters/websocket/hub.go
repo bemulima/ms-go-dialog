@@ -114,7 +114,8 @@ func (h *Hub) BroadcastLifecycle(subject domain.EventSubject, payload []byte) {
 		return
 	}
 	h.mu.Lock()
-	if subject == domain.EventDialogCreated {
+	switch subject {
+	case domain.EventDialogCreated:
 		for _, userID := range route.ParticipantIDs {
 			for item := range h.users[userID] {
 				if item.session.SpaceID == route.SpaceID {
@@ -122,7 +123,7 @@ func (h *Hub) BroadcastLifecycle(subject domain.EventSubject, payload []byte) {
 				}
 			}
 		}
-	} else if subject == domain.EventDialogMemberAdded {
+	case domain.EventDialogMemberAdded:
 		for item := range h.users[route.UserID] {
 			if item.session.SpaceID == route.SpaceID {
 				h.addDialogLocked(item, route.DialogID)

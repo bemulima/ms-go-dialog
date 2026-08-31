@@ -53,6 +53,9 @@ capabilities:
     - name: durable_teacher_request_delivery
       status: implemented
       source_path: docs/realtime-delivery.md
+    - name: proactive_general_teacher_delivery
+      status: implemented
+      source_path: docs/integration-contract.md
 relations:
     - name: depends_on
       value: postgres

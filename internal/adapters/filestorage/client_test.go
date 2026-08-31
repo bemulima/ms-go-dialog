@@ -37,7 +37,7 @@ func TestClientUploadTemporaryStreamsExpectedContract(t *testing.T) {
 			http.Error(w, "file missing", http.StatusBadRequest)
 			return
 		}
-		defer file.Close()
+		defer func() { _ = file.Close() }()
 		payload, err := io.ReadAll(file)
 		if err != nil {
 			t.Errorf("read file: %v", err)

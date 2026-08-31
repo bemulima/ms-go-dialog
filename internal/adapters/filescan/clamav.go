@@ -33,7 +33,7 @@ func (c ClamAV) Scan(ctx context.Context, data []byte) error {
 	if err != nil {
 		return fmt.Errorf("%w: %v", domain.ErrFileScanUnavailable, err)
 	}
-	defer connection.Close()
+	defer func() { _ = connection.Close() }()
 	watchDone := make(chan struct{})
 	defer close(watchDone)
 	go func() {
