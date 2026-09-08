@@ -86,6 +86,55 @@ func TestMigrations_AreReversibleAndKeepReadStatePerMember(t *testing.T) {
 			t.Fatalf("message channel migration is missing %q", required)
 		}
 	}
+	assistantUIEvolution, err := os.ReadFile(filepath.Join(root, "007_assistant_ui.up.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{"assistant_ui JSONB", "assistant-ui.v1", "jsonb_array_length", "jsonb_path_exists", "personal_teacher", "<= 32"} {
+		if !strings.Contains(string(assistantUIEvolution), required) {
+			t.Fatalf("assistant UI migration is missing %q", required)
+		}
+	}
+	assistantUIDown, err := os.ReadFile(filepath.Join(root, "007_assistant_ui.down.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(assistantUIDown), "cannot roll back assistant UI while structured messages exist") {
+		t.Fatal("assistant UI rollback must fail closed while structured messages exist")
+	}
+	lessonContextV1, err := os.ReadFile(filepath.Join(root, "008_lesson_message_context_v1.up.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{
+		"lesson-message-context.v1", "lesson_overview", "selection", "course_id", "lesson_id",
+		"selected_text", "char_length(lesson_context->>'selected_text') <= 12000",
+	} {
+		if !strings.Contains(string(lessonContextV1), required) {
+			t.Fatalf("lesson context v1 migration is missing %q", required)
+		}
+	}
+	lessonContextV1Down, err := os.ReadFile(filepath.Join(root, "008_lesson_message_context_v1.down.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(lessonContextV1Down), "cannot roll back lesson message context v1 while versioned anchors exist") {
+		t.Fatal("lesson context v1 rollback must fail closed while versioned anchors exist")
+	}
+	teacherContextContracts, err := os.ReadFile(filepath.Join(root, "009_teacher_context_contracts.up.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(teacherContextContracts), "dialog.teacher.context-mutated") {
+		t.Fatal("teacher context contract migration must allowlist the mutation subject")
+	}
+	teacherContextContractsDown, err := os.ReadFile(filepath.Join(root, "009_teacher_context_contracts.down.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(teacherContextContractsDown), "cannot roll back teacher context contracts while mutation events exist") {
+		t.Fatal("teacher context contract rollback must fail closed while mutation events exist")
+	}
 
 	runner, err := os.ReadFile(filepath.Join("..", "..", "scripts", "migrate.sh"))
 	if err != nil {

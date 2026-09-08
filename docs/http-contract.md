@@ -59,21 +59,69 @@ Internally provisioned teacher dialogs appear in the ordinary list/get/history A
 
 Message responses include `author_type` and `channel`. Existing user messages keep `sender_id`; PersonalTeacher messages return `sender_id: null` and `personal_teacher_id`. Browser-created messages use `web`; a teacher response inherits its source channel. `POST /message/create` accepts optional `learning_action_id`: it is required for student messages in `lesson_task`, `practice_task`, and `project` teacher dialogs and rejected everywhere else.
 
-For a `lesson` teacher dialog, `POST /message/create` instead requires:
+For a `lesson` teacher dialog, new `POST /message/create` producers send one of
+the following strict `lesson-message-context.v1` anchors:
 
 ```json
 {
   "lesson_context": {
+    "schema": "lesson-message-context.v1",
+    "mode": "lesson_overview",
+    "course_id": "a72d65b0-38a2-41d6-b4e6-5a716a2e4b91",
+    "lesson_id": "90aa3491-4c6a-46cb-8c8f-7e57db13fe8e",
+    "content_revision": "2026-08-31T12:00:00.123Z"
+  }
+}
+```
+
+or:
+
+```json
+{
+  "lesson_context": {
+    "schema": "lesson-message-context.v1",
+    "mode": "selection",
+    "course_id": "a72d65b0-38a2-41d6-b4e6-5a716a2e4b91",
+    "lesson_id": "90aa3491-4c6a-46cb-8c8f-7e57db13fe8e",
     "content_revision": "2026-08-31T12:00:00.123Z",
     "selected_text": "the exact text selected in the lesson"
   }
 }
 ```
 
-The revision must be RFC3339Nano and the selected text is preserved byte for
-byte, non-blank, and limited to 12,000 Unicode code points. Message responses
-return the same `lesson_context`. Every non-lesson context rejects this object;
-Dialog does not claim the revision or selection is canonical.
+`course_id` and `lesson_id` are non-zero UUIDs, and `lesson_id` must match the
+dialog's `context_id`. The revision must be RFC3339Nano. Overview mode forbids
+even a null `selected_text`; selection mode requires exact non-blank text of at
+most 12,000 Unicode code points. Unknown fields are rejected. Dialog preserves
+selected text without trimming or reformatting. Create replay compares the
+complete normalized anchor. `PUT /message/update/{messageID}` has no
+`lesson_context` input and rejects one as unknown, so a body edit cannot replace
+the anchor; delete clears it. Message get/list/window/changes and internal
+Teacher request history return the stored anchor, while a tombstone omits it.
+Every non-lesson context rejects this object. Dialog does not claim Course
+ownership or content validity.
+
+For compatibility, the legacy exact object
+`{"content_revision":"...","selected_text":"..."}` remains readable,
+replayable, and temporarily accepted. It receives no fabricated IDs or mode.
+Deploy Dialog migration/application first, then the v1 lesson producer, and
+only then deploy a Teacher consumer that requires v1 for newly created source
+messages. Historical legacy rows remain supported.
+
+PersonalTeacher-authored message responses may also include `assistant_ui`:
+
+```json
+{
+  "schema": "assistant-ui.v1",
+  "blocks": [{"type": "choice", "data": {}}]
+}
+```
+
+Dialog validates only the exact root schema, JSON/object shape, at most 32
+blocks, and at most 65,536 encoded JSON bytes. Block discriminators and data are
+opaque. `body` remains present as the mandatory plain-text fallback. Browser
+`POST /message/create` and `PUT /message/update/{messageID}` reject
+`assistant_ui` as an unknown field.
 
 ## Admin API
 
@@ -88,7 +136,11 @@ PUT  /admin/v1/message/hide/{messageID}
 PUT  /admin/v1/message/restore/{messageID}
 ```
 
-Administrative access to private message bodies is denied unless a future explicit report-review contract authorizes a bounded target.
+Administrative dialog listing does not expose message bodies or anchors. The
+existing role-protected hide/restore command for an exact message ID returns the
+same message projection, so an anchored target includes `lesson_context`; its
+moderation event does likewise. This does not create a separate lesson lookup
+or broaden the moderation authorization boundary.
 
 ## Internal API
 
@@ -100,12 +152,13 @@ GET  /internal/v1/teacher-dialog/{dialogID}/request/{sourceMessageID}?personal_t
 POST /internal/v1/teacher-dialog/{dialogID}/message
 POST /internal/v1/teacher-dialog/{dialogID}/proactive-message
 POST /internal/v1/teacher-dialog/{dialogID}/student-channel-message
+POST /internal/v1/teacher-dialog/{dialogID}/assistant-ui-source
 ```
 
 Ensure accepts `space_key`, `student_id`, `personal_teacher_id`, `context_type`, and optional `context_id`; it is idempotent for that binding.
 
-Proactive append accepts `personal_teacher_id`, UUID `idempotency_key`, and
-`body`. It is valid only for the bound active `general_teacher` dialog and
+Proactive append accepts `personal_teacher_id`, UUID `idempotency_key`,
+mandatory `body`, and optional bounded `assistant_ui`. It is valid only for the bound active `general_teacher` dialog and
 returns `201` for the first commit or `200` for an identical replay. The
 created message has no user source, reply, LearningAction, or lesson context.
 
@@ -117,4 +170,18 @@ to the active `general_teacher` dialog and returns the ordinary message
 contract. It accepts no sender override, attachments, reply, LearningAction, or
 lesson context.
 
-Append accepts `personal_teacher_id`, `source_message_id`, `idempotency_key`, and `body`. It accepts no sender, targets, mastery, attachments, or LearningAction override. The response is authored by the bound PersonalTeacher, replies to the source, copies its LearningAction reference, and is idempotent per PersonalTeacher and key.
+Append accepts `personal_teacher_id`, `source_message_id`, `idempotency_key`, mandatory `body`, and optional bounded `assistant_ui`. It accepts no sender, targets, mastery, attachments, or LearningAction override. The response is authored by the bound PersonalTeacher, replies to the source, copies its LearningAction reference, and is idempotent per PersonalTeacher and key across the normalized complete `body + assistant_ui` representation.
+
+Stored-block source lookup accepts the exact body
+`{"student_id":"<uuid>","personal_teacher_id":"<uuid>","message_id":"<uuid>"}`
+of at most 4,096 bytes. For an active bound teacher dialog and its active
+PersonalTeacher-authored message with non-empty stored structured UI, it returns
+the exact `dialog-assistant-ui-source.v1` object: `schema`, binding
+`dialog_id`/`student_id`/`personal_teacher_id`/`context_type` and optional
+`context_id`, `message_id`, immutable `message_sequence`, current
+`message_version`, and canonical `assistant_ui`. It never returns message body,
+links, attachments, lesson context, or LearningAction. Wrong, absent, inactive,
+or cross-binding targets all return the same `404 message_not_found`. Malformed,
+unknown-field, and oversized requests return `400`. Dialog validates only the
+existing `assistant-ui.v1` root envelope; Teacher owns block semantics and ID
+resolution. This endpoint exists only under the exact-token internal router.

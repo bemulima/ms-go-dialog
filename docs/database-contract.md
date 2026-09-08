@@ -11,7 +11,7 @@ Applied migrations are immutable. The initial group shape requires at least two 
 - `dialog_space`: integration key, Origin allowlist, personal/group and content policies.
 - `dialog`: type, lifecycle, personal pair hash, optional teacher binding (`student_id`, `personal_teacher_id`, `teacher_context_type`, `context_id`), counters, message/event high-water marks, last activity.
 - `dialog_member`: role, lifecycle, history boundary, independent read cursor/unread count, mute/archive state.
-- `dialog_message`: mutually exclusive user/PersonalTeacher author, `web|telegram` channel, optional LearningAction, optional lesson revision/selection JSON anchor, same-dialog reply, content, immutable message order, latest event sequence, version and tombstone.
+- `dialog_message`: mutually exclusive user/PersonalTeacher author, `web|telegram` channel, optional LearningAction, optional immutable legacy or `lesson-message-context.v1` JSON anchor, optional opaque PersonalTeacher `assistant_ui` JSONB envelope, same-dialog reply, content, immutable message order, latest event sequence, version and tombstone.
 - `dialog_attachment`: service authorization and lifecycle metadata while FileStorage owns bytes.
 - `dialog_outbox`: versioned lifecycle payload, finite claim lease, retries and publication evidence.
 - `dialog_ws_ticket`: SHA-256 ticket hash, user/space binding and short expiry.
@@ -23,6 +23,7 @@ Applied migrations are immutable. The initial group shape requires at least two 
 - Group and initial membership set commit together.
 - Message, dialog counters/sequences, recipient unread increments, attachment binding, and outbox insert commit together.
 - A student teacher-dialog message also inserts `dialog.teacher.requested` in that same transaction. It shares the source mutation's event sequence with `dialog.message.created`; outbox uniqueness therefore includes subject.
+- Updating or deleting an active student message in an active teacher dialog also inserts body-free `dialog.teacher.context-mutated` in the same transaction. It shares the ordinary lifecycle mutation's event sequence and cannot commit independently.
 - An internally appended PersonalTeacher response or general-dialog proactive offer, dialog counters, student unread increment, and `dialog.message.created` evidence commit together.
 - Read cursor, unread decrement, event sequence, and outbox insert commit together for one member only.
 - Attachment ready/failed transitions and their message/dialog event evidence commit together after idempotent FileStorage work for active messages. Hidden messages finish the attachment transition without public event evidence; a later moderation restore carries the authoritative attachment snapshot.
@@ -43,3 +44,22 @@ silently erase selected-text provenance.
 
 Migration `006_message_channel` backfills `web` and adds the bounded channel.
 Its down migration fails closed while any non-web message exists.
+
+Migration `007_assistant_ui` adds nullable JSONB without rewriting existing
+messages. Its constraint limits the value to a non-deleted PersonalTeacher
+message with the exact `assistant-ui.v1` root shape and no more than 32 blocks;
+the application additionally enforces object blocks and a 65,536-byte encoded
+cap while leaving block semantics opaque. Its down migration fails closed while
+any structured message exists.
+
+Migration `008_lesson_message_context_v1` widens the existing JSONB constraint
+to an exact legacy-or-v1 union without rewriting rows. V1 stores exact schema,
+mode, Course/lesson UUID strings, RFC3339Nano revision, and mode-dependent
+selection; application validation binds the lesson UUID to the dialog context
+and enforces the revision parser and Unicode count. Update SQL never replaces
+the anchor, while delete clears it. The down migration fails closed while any
+v1 anchor exists, then restores the legacy-only constraint.
+
+Migration `009_teacher_context_contracts` additively allowlists the body-free
+`dialog.teacher.context-mutated` outbox subject. No table or message row shape
+changes. Its down migration fails closed while such events remain.

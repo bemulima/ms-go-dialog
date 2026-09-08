@@ -25,12 +25,17 @@
 - Message author is explicit: `user` has `sender_id`, while `personal_teacher` has `personal_teacher_id`; both at once are forbidden.
 - Every message has a transport channel. Existing/browser/proactive messages use `web`; a trusted Telegram adapter may append only to the exact bound student's active `general_teacher` dialog. A teacher response inherits its source channel.
 - Student messages in `lesson_task`, `practice_task`, and `project` teacher dialogs require an opaque `learning_action_id`. Other dialog contexts reject it. Dialog does not validate mastery or targets; Teacher verifies action ownership and OPEN state through Student.
-- Student messages in a `lesson` teacher dialog require `lesson_context` with a current RFC3339Nano `content_revision` and non-blank `selected_text` of at most 12,000 Unicode code points. Other contexts and PersonalTeacher-authored messages reject it. Dialog validates only shape and context binding; Teacher verifies the revision and exact substring against Course.
+- New student messages in a `lesson` teacher dialog use `lesson-message-context.v1`: exact `schema`, `mode`, Course UUID, lesson UUID, and RFC3339Nano `content_revision`. `lesson_overview` forbids `selected_text`; `selection` requires a non-blank selection of at most 12,000 Unicode code points. The lesson UUID must equal the dialog's immutable lesson context ID. Other dialog contexts and PersonalTeacher-authored messages reject the anchor. Dialog validates only shape and binding; Teacher verifies Course ownership, revision, and any exact substring.
+- Selected text is copied exactly without trimming or reformatting. The complete anchor is immutable after append and participates in create-idempotency replay. Body edits retain it; deletion clears it with the private message content.
+- Existing legacy `{content_revision, selected_text}` anchors remain readable, replayable, and temporarily accepted during producer rollout. They are not upgraded or assigned invented Course/lesson IDs.
 - A committed student message in a teacher dialog atomically records both normal `dialog.message.created` evidence and a body-free `dialog.teacher.requested` trigger. A teacher-authored response never recursively emits a teacher request.
 - The teacher trigger contains bounded source-channel metadata so delivery retry never needs another conversation store. It still excludes the body and history.
 - Teacher responses are accepted only through the internal idempotent append command, must match the bound PersonalTeacher and source student message, inherit its LearningAction reference, and reply to that source message.
+- Internal PersonalTeacher response/proactive append may carry `assistant_ui`. Dialog requires the exact `assistant-ui.v1` root envelope, at most 32 object blocks, and at most 65,536 encoded JSON bytes; it preserves block objects opaquely and does not validate their pedagogical discriminators or data.
+- Structured UI never replaces text: the existing body policy remains mandatory for an internal PersonalTeacher append. Browser create/update cannot set `assistant_ui`, and user-authored messages cannot store it.
+- Teacher append idempotency compares the normalized complete `body + assistant_ui` representation. Reusing a key with a changed or absent envelope conflicts.
 - A proactive PersonalTeacher offer is accepted only through the internal command for the same student's active `general_teacher` dialog. It has no synthetic user source, reply, LearningAction, or lesson context, and is idempotent by the Teacher-supplied analytics event ID.
-- Delete keeps a tombstone, identity, order, reply references, and sequence, but clears the lesson selection together with message content.
+- Delete keeps a tombstone, identity, order, reply references, and sequence, but clears the complete lesson anchor and structured UI together with message content.
 
 ## Read state
 

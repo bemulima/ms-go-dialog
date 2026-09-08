@@ -15,7 +15,7 @@ import (
 const LifecycleStream = "DIALOG_EVENTS"
 
 var lifecycleSubjects = []string{string(domain.EventDialogCreated), string(domain.EventDialogUpdated), string(domain.EventDialogClosed), string(domain.EventDialogMemberAdded), string(domain.EventDialogMemberRemoved), string(domain.EventDialogMemberRoleUpdated), string(domain.EventDialogMessageCreated), string(domain.EventDialogMessageUpdated), string(domain.EventDialogMessageDeleted), string(domain.EventDialogMessageHidden), string(domain.EventDialogMessageRestored), string(domain.EventDialogAttachmentReady), string(domain.EventDialogAttachmentFailed), string(domain.EventDialogReadUpdated)}
-var durableSubjects = append(append([]string(nil), lifecycleSubjects...), string(domain.EventDialogTeacherRequested))
+var durableSubjects = append(append([]string(nil), lifecycleSubjects...), string(domain.EventDialogTeacherRequested), string(domain.EventDialogTeacherContextMutated))
 
 type Client struct {
 	Conn *natsgo.Conn

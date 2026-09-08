@@ -11,7 +11,7 @@ DialogSpace
 └── Dialog (personal, group, or contextual personal-teacher)
     ├── DialogMember (one independent read state per user)
     ├── Teacher binding (teacher dialogs: one student + logical PersonalTeacher + educational context)
-    ├── DialogMessage (ordered flat stream, explicit user/PersonalTeacher author, web/Telegram channel, optional LearningAction/reply reference)
+    ├── DialogMessage (ordered flat stream, explicit user/PersonalTeacher author, web/Telegram channel, optional immutable lesson anchor, LearningAction/reply reference, and opaque Teacher assistant UI)
     │   └── DialogAttachment
     ├── RealtimeTicket
     ├── max_message_sequence
@@ -37,3 +37,4 @@ Database transaction
 10. Recover gaps from REST using event sequence and current snapshots.
 11. Ensure one teacher dialog for a student, logical PersonalTeacher, and bounded educational context.
 12. Emit a body-free durable teacher request for each committed student message in a teacher dialog and append the eventual teacher response idempotently.
+13. Persist and replay strict versioned lesson anchors without owning or querying Course content.

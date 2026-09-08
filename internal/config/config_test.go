@@ -17,8 +17,9 @@ func TestConfig_ValidateModesAndTicketTTL(t *testing.T) {
 		ShutdownTimeoutSeconds:    10,
 		ClamAVTimeoutSeconds:      30,
 		UserServiceBaseURL:        "http://ms-user-service:8080",
+		UserServiceInternalToken:  "user-secret",
 		UserServiceTimeoutSeconds: 3,
-		InternalAPIToken:          "secret",
+		InternalAPIToken:          "dialog-secret",
 	}
 	if err := valid.Validate(); err != nil {
 		t.Fatalf("valid config rejected: %v", err)
@@ -47,5 +48,10 @@ func TestConfig_ValidateModesAndTicketTTL(t *testing.T) {
 	invalid.UserServiceTimeoutSeconds = 31
 	if err := invalid.Validate(); err == nil {
 		t.Fatal("user service timeout above hard maximum accepted")
+	}
+	invalid = valid
+	invalid.UserServiceInternalToken = ""
+	if err := invalid.Validate(); err == nil {
+		t.Fatal("empty user service internal token accepted")
 	}
 }

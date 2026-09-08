@@ -19,9 +19,12 @@ invariants:
     - user and personal-teacher message authors are mutually exclusive
     - every message channel is web or telegram; a teacher response inherits its source channel
     - task and project teacher requests retain the opaque learning_action_id supplied on the source message
-    - lesson teacher requests retain an RFC3339Nano current-content revision and exact non-blank selected text only on the user source message
-    - message deletion clears lesson_context together with user content
+    - new lesson teacher requests retain an exact lesson-message-context.v1 overview or selection anchor only on the user source message
+    - v1 lesson_id equals the lesson teacher dialog context_id; legacy revision/selection anchors remain readable and replayable
+    - body updates retain the immutable lesson_context; message deletion clears it together with user content
+    - assistant_ui is nullable JSONB limited to PersonalTeacher-authored non-deleted messages and the assistant-ui.v1 envelope
     - message.created and teacher.requested evidence for one source mutation may share one event sequence and differ by subject
+    - a student message update/delete in an active teacher dialog atomically stores ordinary lifecycle evidence and body-free dialog.teacher.context-mutated evidence with one event sequence
     - proactive PersonalTeacher messages are restricted to general_teacher dialogs and have no synthetic user source, reply, learning action, or lesson context
     - attachment binding never crosses sender or dialog ownership
     - attachment workers use finite leased SKIP LOCKED claims across replicas
@@ -30,6 +33,8 @@ migration_policy:
     format: ordered reversible up/down pairs
     ledger: dialog_schema_migration via scripts/migrate.sh
     destructive_change_requires: .ai/workflows/change-contract.yaml
-    lesson_context_rollback: migration 005 fails closed while anchored messages exist
+    lesson_context_rollback: migration 005 fails closed while anchored messages exist; migration 008 fails closed while v1 anchors exist
     message_channel_rollback: migration 006 fails closed while non-web messages exist
+    assistant_ui_rollback: migration 007 fails closed while structured messages exist
+    teacher_context_contracts_rollback: migration 009 fails closed while body-free mutation events exist
 repository_ports: internal/domain/repository

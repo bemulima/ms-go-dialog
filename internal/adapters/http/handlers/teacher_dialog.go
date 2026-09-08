@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/bemulima/ms-go-dialog/internal/domain"
@@ -14,6 +15,8 @@ type TeacherDialogHandler struct {
 	Dialogs  *dialoguc.Service
 	Messages *messageuc.Service
 }
+
+const maxAssistantUISourceRequestBytes = 4 * 1024
 
 func (h TeacherDialogHandler) Ensure(w http.ResponseWriter, r *http.Request) {
 	var request struct {
@@ -77,6 +80,32 @@ func (h TeacherDialogHandler) RequestContext(w http.ResponseWriter, r *http.Requ
 	})
 }
 
+func (h TeacherDialogHandler) AssistantUISource(w http.ResponseWriter, r *http.Request) {
+	dialogID, err := uuid.Parse(chi.URLParam(r, "dialogID"))
+	if err != nil {
+		WriteError(w, r, domain.ErrValidation)
+		return
+	}
+	var request struct {
+		StudentID         uuid.UUID `json:"student_id"`
+		PersonalTeacherID uuid.UUID `json:"personal_teacher_id"`
+		MessageID         uuid.UUID `json:"message_id"`
+	}
+	if err := decodeJSONLimit(w, r, &request, maxAssistantUISourceRequestBytes); err != nil {
+		WriteError(w, r, domain.ErrValidation)
+		return
+	}
+	result, err := h.Messages.GetAssistantUISource(r.Context(), messageuc.AssistantUISourceInput{
+		DialogID: dialogID, StudentID: request.StudentID,
+		PersonalTeacherID: request.PersonalTeacherID, MessageID: request.MessageID,
+	})
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
 func (h TeacherDialogHandler) AppendResponse(w http.ResponseWriter, r *http.Request) {
 	dialogID, err := uuid.Parse(chi.URLParam(r, "dialogID"))
 	if err != nil {
@@ -84,10 +113,11 @@ func (h TeacherDialogHandler) AppendResponse(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	var request struct {
-		PersonalTeacherID uuid.UUID `json:"personal_teacher_id"`
-		SourceMessageID   uuid.UUID `json:"source_message_id"`
-		IdempotencyKey    uuid.UUID `json:"idempotency_key"`
-		Body              string    `json:"body"`
+		PersonalTeacherID uuid.UUID       `json:"personal_teacher_id"`
+		SourceMessageID   uuid.UUID       `json:"source_message_id"`
+		IdempotencyKey    uuid.UUID       `json:"idempotency_key"`
+		Body              string          `json:"body"`
+		AssistantUI       json.RawMessage `json:"assistant_ui"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
 		WriteError(w, r, domain.ErrValidation)
@@ -96,6 +126,7 @@ func (h TeacherDialogHandler) AppendResponse(w http.ResponseWriter, r *http.Requ
 	result, err := h.Messages.AppendTeacherResponse(r.Context(), messageuc.AppendTeacherResponseInput{
 		DialogID: dialogID, PersonalTeacherID: request.PersonalTeacherID,
 		SourceMessageID: request.SourceMessageID, IdempotencyKey: request.IdempotencyKey, Body: request.Body,
+		AssistantUI: request.AssistantUI,
 	})
 	if err != nil {
 		WriteError(w, r, err)
@@ -115,9 +146,10 @@ func (h TeacherDialogHandler) AppendProactive(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var request struct {
-		PersonalTeacherID uuid.UUID `json:"personal_teacher_id"`
-		IdempotencyKey    uuid.UUID `json:"idempotency_key"`
-		Body              string    `json:"body"`
+		PersonalTeacherID uuid.UUID       `json:"personal_teacher_id"`
+		IdempotencyKey    uuid.UUID       `json:"idempotency_key"`
+		Body              string          `json:"body"`
+		AssistantUI       json.RawMessage `json:"assistant_ui"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
 		WriteError(w, r, domain.ErrValidation)
@@ -125,7 +157,7 @@ func (h TeacherDialogHandler) AppendProactive(w http.ResponseWriter, r *http.Req
 	}
 	result, err := h.Messages.AppendTeacherProactive(r.Context(), messageuc.AppendTeacherProactiveInput{
 		DialogID: dialogID, PersonalTeacherID: request.PersonalTeacherID,
-		IdempotencyKey: request.IdempotencyKey, Body: request.Body,
+		IdempotencyKey: request.IdempotencyKey, Body: request.Body, AssistantUI: request.AssistantUI,
 	})
 	if err != nil {
 		WriteError(w, r, err)

@@ -196,7 +196,7 @@ func (s Service) moderate(ctx context.Context, actor domain.Actor, id uuid.UUID,
 			return err
 		}
 		eventID := s.newID()
-		payload, err := json.Marshal(map[string]any{
+		eventPayload := map[string]any{
 			"schema_version": 1, "event_id": eventID, "occurred_at": now,
 			"dialog_id": item.DialogID, "space_id": dialogItem.SpaceID, "event_sequence": eventSequence,
 			"message_sequence": item.MessageSequence, "message_id": item.ID,
@@ -204,7 +204,11 @@ func (s Service) moderate(ctx context.Context, actor domain.Actor, id uuid.UUID,
 			"personal_teacher_id": optionalUUID(item.PersonalTeacherID), "learning_action_id": item.LearningActionID,
 			"status": item.Status, "version": item.Version, "actor_id": actor.UserID,
 			"body": item.Body, "links": item.Links, "attachments": attachments,
-		})
+		}
+		if item.LessonContext != nil {
+			eventPayload["lesson_context"] = item.LessonContext
+		}
+		payload, err := json.Marshal(eventPayload)
 		if err != nil {
 			return err
 		}

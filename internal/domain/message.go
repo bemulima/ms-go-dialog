@@ -1,7 +1,10 @@
 package domain
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
 	"regexp"
 	"strings"
@@ -61,28 +64,179 @@ type MessageContent struct {
 
 const MaxLessonSelectedTextRunes = 12000
 
+const LessonMessageContextSchemaV1 = "lesson-message-context.v1"
+
+type LessonMessageContextMode string
+
+const (
+	LessonMessageContextOverview  LessonMessageContextMode = "lesson_overview"
+	LessonMessageContextSelection LessonMessageContextMode = "selection"
+)
+
+const (
+	AssistantUISchemaV1  = "assistant-ui.v1"
+	MaxAssistantUIBlocks = 32
+	MaxAssistantUIBytes  = 64 * 1024
+)
+
+// NormalizeAssistantUI validates only the Dialog-owned transport envelope and
+// returns a stable JSON representation. Block discriminators and data remain
+// opaque and are validated by their pedagogical owner and consuming frontend.
+func NormalizeAssistantUI(input json.RawMessage) (json.RawMessage, error) {
+	if len(input) == 0 {
+		return nil, nil
+	}
+	if len(input) > MaxAssistantUIBytes || !json.Valid(input) {
+		return nil, fmt.Errorf("%w: invalid assistant UI envelope", ErrValidation)
+	}
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(input, &root); err != nil || root == nil || len(root) != 2 {
+		return nil, fmt.Errorf("%w: invalid assistant UI envelope", ErrValidation)
+	}
+	var schema string
+	if err := json.Unmarshal(root["schema"], &schema); err != nil || schema != AssistantUISchemaV1 {
+		return nil, fmt.Errorf("%w: unsupported assistant UI schema", ErrValidation)
+	}
+	var blocks []json.RawMessage
+	if len(root["blocks"]) == 0 || bytes.Equal(bytes.TrimSpace(root["blocks"]), []byte("null")) {
+		return nil, fmt.Errorf("%w: invalid assistant UI blocks", ErrValidation)
+	}
+	if err := json.Unmarshal(root["blocks"], &blocks); err != nil || len(blocks) > MaxAssistantUIBlocks {
+		return nil, fmt.Errorf("%w: invalid assistant UI blocks", ErrValidation)
+	}
+	for _, block := range blocks {
+		trimmed := bytes.TrimSpace(block)
+		if len(trimmed) < 2 || trimmed[0] != '{' || trimmed[len(trimmed)-1] != '}' {
+			return nil, fmt.Errorf("%w: assistant UI blocks must be objects", ErrValidation)
+		}
+	}
+	decoder := json.NewDecoder(bytes.NewReader(input))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return nil, fmt.Errorf("%w: invalid assistant UI envelope", ErrValidation)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return nil, fmt.Errorf("%w: invalid assistant UI envelope", ErrValidation)
+	}
+	canonical, err := json.Marshal(value)
+	if err != nil || len(canonical) > MaxAssistantUIBytes {
+		return nil, fmt.Errorf("%w: assistant UI envelope is too large", ErrValidation)
+	}
+	return canonical, nil
+}
+
 // LessonMessageContext anchors a user question to the exact current Course
 // revision visible when it was sent. SelectedText is always treated as
 // untrusted until Course verifies it.
 type LessonMessageContext struct {
-	ContentRevision string `json:"content_revision"`
-	SelectedText    string `json:"selected_text,omitempty"`
+	Schema          string                   `json:"schema,omitempty"`
+	Mode            LessonMessageContextMode `json:"mode,omitempty"`
+	CourseID        *uuid.UUID               `json:"course_id,omitempty"`
+	LessonID        *uuid.UUID               `json:"lesson_id,omitempty"`
+	ContentRevision string                   `json:"content_revision"`
+	SelectedText    *string                  `json:"selected_text,omitempty"`
+
+	selectedTextPresent bool
+}
+
+func (context *LessonMessageContext) UnmarshalJSON(input []byte) error {
+	type wireContext struct {
+		Schema          string                   `json:"schema"`
+		Mode            LessonMessageContextMode `json:"mode"`
+		CourseID        *uuid.UUID               `json:"course_id"`
+		LessonID        *uuid.UUID               `json:"lesson_id"`
+		ContentRevision string                   `json:"content_revision"`
+		SelectedText    *string                  `json:"selected_text"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(input))
+	decoder.DisallowUnknownFields()
+	var decoded wireContext
+	if err := decoder.Decode(&decoded); err != nil {
+		return fmt.Errorf("%w: invalid lesson message context", ErrValidation)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return fmt.Errorf("%w: invalid lesson message context", ErrValidation)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(input, &fields); err != nil || fields == nil {
+		return fmt.Errorf("%w: invalid lesson message context", ErrValidation)
+	}
+	_, selectedTextPresent := fields["selected_text"]
+	*context = LessonMessageContext{
+		Schema: decoded.Schema, Mode: decoded.Mode, CourseID: decoded.CourseID, LessonID: decoded.LessonID,
+		ContentRevision: decoded.ContentRevision, SelectedText: decoded.SelectedText,
+		selectedTextPresent: selectedTextPresent,
+	}
+	return nil
 }
 
 func NormalizeLessonMessageContext(input *LessonMessageContext) (*LessonMessageContext, error) {
 	if input == nil {
 		return nil, nil
 	}
-	revision, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(input.ContentRevision))
-	if err != nil || revision.IsZero() || !utf8.ValidString(input.SelectedText) ||
-		utf8.RuneCountInString(input.SelectedText) > MaxLessonSelectedTextRunes ||
-		strings.TrimSpace(input.SelectedText) == "" {
+	revisionText := strings.TrimSpace(input.ContentRevision)
+	if input.Schema != "" && revisionText != input.ContentRevision {
+		return nil, fmt.Errorf("%w: invalid lesson message context revision", ErrValidation)
+	}
+	revision, err := time.Parse(time.RFC3339Nano, revisionText)
+	if err != nil || revision.IsZero() {
 		return nil, fmt.Errorf("%w: invalid lesson message context", ErrValidation)
 	}
-	return &LessonMessageContext{
-		ContentRevision: revision.UTC().Format(time.RFC3339Nano),
-		SelectedText:    input.SelectedText,
-	}, nil
+	selectedTextPresent := input.selectedTextPresent || input.SelectedText != nil
+	validSelection := input.SelectedText != nil && utf8.ValidString(*input.SelectedText) &&
+		utf8.RuneCountInString(*input.SelectedText) <= MaxLessonSelectedTextRunes && strings.TrimSpace(*input.SelectedText) != ""
+	if input.Schema == "" {
+		if input.Mode != "" || input.CourseID != nil || input.LessonID != nil || !selectedTextPresent || !validSelection {
+			return nil, fmt.Errorf("%w: invalid legacy lesson message context", ErrValidation)
+		}
+	} else if input.Schema != LessonMessageContextSchemaV1 || input.CourseID == nil || *input.CourseID == uuid.Nil ||
+		input.LessonID == nil || *input.LessonID == uuid.Nil ||
+		(input.Mode == LessonMessageContextOverview && selectedTextPresent) ||
+		(input.Mode == LessonMessageContextSelection && (!selectedTextPresent || !validSelection)) ||
+		(input.Mode != LessonMessageContextOverview && input.Mode != LessonMessageContextSelection) {
+		return nil, fmt.Errorf("%w: invalid lesson message context v1", ErrValidation)
+	}
+	result := &LessonMessageContext{
+		Schema: input.Schema, Mode: input.Mode, ContentRevision: revision.UTC().Format(time.RFC3339Nano),
+		selectedTextPresent: selectedTextPresent,
+	}
+	if input.CourseID != nil {
+		courseID := *input.CourseID
+		result.CourseID = &courseID
+	}
+	if input.LessonID != nil {
+		lessonID := *input.LessonID
+		result.LessonID = &lessonID
+	}
+	if input.SelectedText != nil {
+		selectedText := *input.SelectedText
+		result.SelectedText = &selectedText
+	}
+	return result, nil
+}
+
+func LessonMessageContextsEqual(first, second *LessonMessageContext) bool {
+	if first == nil || second == nil {
+		return first == nil && second == nil
+	}
+	return first.Schema == second.Schema && first.Mode == second.Mode && sameOptionalUUID(first.CourseID, second.CourseID) &&
+		sameOptionalUUID(first.LessonID, second.LessonID) && first.ContentRevision == second.ContentRevision &&
+		sameOptionalString(first.SelectedText, second.SelectedText)
+}
+
+func sameOptionalUUID(first, second *uuid.UUID) bool {
+	if first == nil || second == nil {
+		return first == nil && second == nil
+	}
+	return *first == *second
+}
+
+func sameOptionalString(first, second *string) bool {
+	if first == nil || second == nil {
+		return first == nil && second == nil
+	}
+	return *first == *second
 }
 
 func AnalyzeMessageContent(body string, imageCount, fileCount int) MessageContent {
@@ -140,6 +294,7 @@ type Message struct {
 	PersonalTeacherID uuid.UUID
 	LearningActionID  *uuid.UUID
 	LessonContext     *LessonMessageContext
+	AssistantUI       json.RawMessage
 	ReplyToMessageID  *uuid.UUID
 	Body              string
 	Links             []Link
@@ -169,9 +324,13 @@ func (m Message) Validate() error {
 	}
 	if m.LessonContext != nil {
 		normalized, err := NormalizeLessonMessageContext(m.LessonContext)
-		if err != nil || m.AuthorType != MessageAuthorUser || normalized.ContentRevision != m.LessonContext.ContentRevision ||
-			normalized.SelectedText != m.LessonContext.SelectedText {
+		if err != nil || m.AuthorType != MessageAuthorUser || !LessonMessageContextsEqual(normalized, m.LessonContext) {
 			return fmt.Errorf("%w: invalid lesson message context", ErrValidation)
+		}
+	}
+	if len(m.AssistantUI) > 0 {
+		if _, err := NormalizeAssistantUI(m.AssistantUI); err != nil || m.AuthorType != MessageAuthorPersonalTeacher || m.Status == MessageStatusDeleted {
+			return fmt.Errorf("%w: invalid assistant UI message binding", ErrValidation)
 		}
 	}
 	if m.ReplyToMessageID != nil && *m.ReplyToMessageID == m.ID {

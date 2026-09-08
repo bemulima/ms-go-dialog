@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/bemulima/ms-go-dialog/internal/domain"
@@ -102,6 +103,7 @@ type messageResponse struct {
 	PersonalTeacherID *uuid.UUID                   `json:"personal_teacher_id,omitempty"`
 	LearningActionID  *uuid.UUID                   `json:"learning_action_id,omitempty"`
 	LessonContext     *domain.LessonMessageContext `json:"lesson_context,omitempty"`
+	AssistantUI       json.RawMessage              `json:"assistant_ui,omitempty"`
 	ReplyToMessageID  *uuid.UUID                   `json:"reply_to_message_id"`
 	Body              string                       `json:"body"`
 	Links             []domain.Link                `json:"links"`
@@ -125,6 +127,7 @@ func newMessageResponse(view message.View) messageResponse {
 		ID: view.Message.ID, DialogID: view.Message.DialogID, AuthorType: view.Message.AuthorType, Channel: view.Message.Channel,
 		SenderID: uuidPointer(view.Message.SenderID), PersonalTeacherID: uuidPointer(view.Message.PersonalTeacherID), LearningActionID: view.Message.LearningActionID,
 		LessonContext:    view.Message.LessonContext,
+		AssistantUI:      view.Message.AssistantUI,
 		ReplyToMessageID: view.Message.ReplyToMessageID, Body: view.Message.Body, Links: view.Message.Links,
 		Status: view.Message.Status, Version: view.Message.Version, MessageSequence: view.Message.MessageSequence,
 		LastEventSequence: view.Message.LastEventSequence, Attachments: attachments,

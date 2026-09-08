@@ -32,3 +32,5 @@ Change routing:
 - operations: health/observability adapters, runtime composition, operations contract, HTTP machine contract.
 - teacher dialog: Dialog domain/migration, internal ensure/read/append contour, body-free durable trigger, Teacher-owned consumer contract.
 - teacher transport channel: message provenance, trusted internal student-channel append, and the same body-free teacher trigger; Teacher owns provider linking/delivery.
+- structured Teacher UI: bounded opaque Dialog message storage/internal append/REST/outbox; Teacher owns pedagogical validation and no action protocol is defined here.
+- lesson message anchor: strict immutable Dialog persistence/API/replay; Course owns content and Teacher owns revision/substring verification.

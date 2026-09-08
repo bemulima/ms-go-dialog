@@ -22,6 +22,7 @@ subjects:
     - dialog.attachment.failed
     - dialog.read.updated
     - dialog.teacher.requested
+    - dialog.teacher.context-mutated
 required_envelope_fields:
     - schema_version
     - event_id
@@ -47,8 +48,47 @@ teacher_requested:
         - optional learning_action_id
     excludes:
         - message body
+        - lesson_context
         - mastery
         - dialog history
+teacher_context_mutated:
+    schema_version: 1
+    audience: ms-go-teacher-agent only; not projected to WebSocket
+    source: committed update or delete of an active student-authored message in an active teacher dialog
+    context_types: general_teacher, lesson, lesson_task, practice_task, project
+    sequence: shares the ordinary message mutation event_sequence
+    contains:
+        - event_type
+        - student_id
+        - personal_teacher_id
+        - context_type
+        - optional context_id
+        - message_id
+        - message_sequence
+        - message_version
+        - last_event_sequence
+        - mutation
+    mutation_values: updated, deleted
+    excludes:
+        - body
+        - links
+        - attachments
+        - assistant_ui
+        - lesson_context
+        - learning_action_id
+        - mastery or code
+message_created:
+    schema_version: 1
+    compatibility: assistant_ui and lesson_context are additive optional fields; body-only v1 payloads are unchanged
+    lesson_context:
+        schema: lesson-message-context.v1 or historical legacy revision/selection
+        presence: anchored user-authored lesson messages only; omitted after deletion
+        access: ordinary message event and WebSocket membership/history ACL
+        semantics: immutable anchor; Dialog does not own Course verification
+    assistant_ui:
+        schema: assistant-ui.v1
+        presence: PersonalTeacher-authored structured messages only
+        body_fallback: always retained
 ephemeral:
     transport: Core NATS
     subject: dialog.realtime.typing.<dialog_uuid>

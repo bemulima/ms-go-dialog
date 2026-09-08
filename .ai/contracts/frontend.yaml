@@ -25,6 +25,15 @@ teacher_dialogs:
     author_discriminator: author_type is user or personal_teacher; sender_id is null for teacher messages
     channel_provenance: channel is web or telegram; all transports share the same ordered history
     task_request: lesson_task, practice_task, and project messages require learning_action_id
-    lesson_request: lesson messages require Course updated_at as lesson_context.content_revision plus the exact non-empty selected_text
-    lesson_model_boundary: Dialog preserves the anchor; Teacher verifies it against Course and sends only the selected fragment to prompt execution
+    lesson_request: new lesson messages use lesson-message-context.v1 with strict Course/lesson UUIDs, Course revision, and lesson_overview or selection mode
+    lesson_selection: omit selected_text for lesson_overview; preserve the exact non-blank selection without client normalization for selection
+    lesson_compatibility: render historical legacy revision/selection anchors but never invent missing v1 IDs or mode
+    lesson_model_boundary: Dialog preserves the immutable anchor; Teacher verifies it against Course and sends only verified source material to prompt execution
     response_delivery: normal message.created REST/WebSocket projection
+    structured_response:
+        field: optional assistant_ui
+        envelope_schema: assistant-ui.v1
+        limits: 32 object blocks and 65536 encoded JSON bytes
+        semantics: opaque to Dialog; consumers validate supported block discriminators independently and always retain body fallback
+        browser_write: forbidden on create and update
+        stored_source_projection: internal-only; browser and admin clients cannot call it

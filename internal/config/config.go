@@ -24,6 +24,7 @@ type Config struct {
 	ClamAVAddress                string `envconfig:"CLAMAV_ADDRESS" default:"localhost:3310"`
 	ClamAVTimeoutSeconds         int    `envconfig:"CLAMAV_TIMEOUT_SECONDS" default:"30"`
 	UserServiceBaseURL           string `envconfig:"USER_SERVICE_BASE_URL" default:"http://localhost:8082"`
+	UserServiceInternalToken     string `envconfig:"USER_SERVICE_INTERNAL_TOKEN" default:"change-me"`
 	UserServiceTimeoutSeconds    int    `envconfig:"USER_SERVICE_TIMEOUT_SECONDS" default:"3"`
 	InternalAPIToken             string `envconfig:"INTERNAL_API_TOKEN" default:"change-me"`
 	ServiceMode                  string `envconfig:"SERVICE_MODE" default:"all"`
@@ -86,7 +87,8 @@ func (c Config) Validate() error {
 	if c.ClamAVTimeoutSeconds < 1 || c.ClamAVTimeoutSeconds > 300 {
 		return fmt.Errorf("file scan configuration is invalid")
 	}
-	if strings.TrimSpace(c.UserServiceBaseURL) == "" || c.UserServiceTimeoutSeconds < 1 || c.UserServiceTimeoutSeconds > 30 || strings.TrimSpace(c.InternalAPIToken) == "" {
+	if strings.TrimSpace(c.UserServiceBaseURL) == "" || strings.TrimSpace(c.UserServiceInternalToken) == "" ||
+		c.UserServiceTimeoutSeconds < 1 || c.UserServiceTimeoutSeconds > 30 || strings.TrimSpace(c.InternalAPIToken) == "" {
 		return fmt.Errorf("user service configuration is invalid")
 	}
 	return nil

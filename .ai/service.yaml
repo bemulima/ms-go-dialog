@@ -59,6 +59,18 @@ capabilities:
     - name: trusted_teacher_channel_ingress
       status: implemented
       source_path: docs/integration-contract.md
+    - name: opaque_structured_teacher_ui
+      status: implemented
+      source_path: docs/business-rules.md
+    - name: versioned_lesson_message_context
+      status: implemented
+      source_path: docs/business-rules.md
+    - name: teacher_summary_invalidation_events
+      status: implemented
+      source_path: docs/realtime-delivery.md
+    - name: internal_assistant_ui_source_projection
+      status: implemented
+      source_path: docs/http-contract.md
 relations:
     - name: depends_on
       value: postgres
@@ -73,6 +85,8 @@ relations:
     - name: binds_logical_teacher_from
       value: ms-go-teacher-agent
     - name: emits_teacher_requests_to
+      value: ms-go-teacher-agent
+    - name: emits_teacher_context_invalidation_to
       value: ms-go-teacher-agent
 contracts:
     - .ai/contracts/database.yaml

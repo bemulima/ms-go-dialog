@@ -30,7 +30,7 @@ If a new message arrives while the user is at the bottom and it becomes visible,
 | Older/newer page | `GET /message/list` | none required |
 | Send/edit/delete | message command routes | `message.created/updated/deleted` |
 | Ask Teacher in task/project context | message create with required `learning_action_id` | source `message.created`, later response `message.created` |
-| Ask Teacher about selected lesson text | message create with Course `updated_at` as `lesson_context.content_revision` and the exact non-empty selection | source `message.created`, later response `message.created`; stale/mismatched content fails closed |
+| Ask Teacher about a lesson | message create with `lesson-message-context.v1`; `lesson_overview` has no selection, `selection` carries exact non-empty text | source `message.created` includes the anchor, later response is another `message.created`; stale/mismatched content fails closed in Teacher |
 | Reply | `reply_to_message_id` on create | message payload contains reference |
 | Upload image/file | attachment upload, then ID on message create | `attachment.ready/failed` |
 | Render attachment | attachment signed-url route | ready status |
@@ -39,3 +39,15 @@ If a new message arrives while the user is at the bottom and it becomes visible,
 | Typing | WebSocket `typing.start/stop` with `dialog_id` | ephemeral `typing.started/stopped` |
 
 Teacher messages are not synthetic user messages. Render by `author_type`: `user` uses `sender_id`; `personal_teacher` uses `personal_teacher_id` and has `sender_id: null`. `channel` is provenance (`web` or `telegram`), not a separate thread; all messages remain in the same ordered history. The browser cannot submit a PersonalTeacher author, select a channel, or call an internal append route.
+
+A PersonalTeacher message may include an optional opaque `assistant_ui` with
+schema `assistant-ui.v1`. Consumers independently validate supported block
+discriminators and drop unsupported/malformed blocks, while always rendering
+the mandatory escaped `body` fallback. Browser message create/update cannot
+write the field.
+
+New lesson producers send the exact v1 schema with Course/lesson UUIDs and the
+Course revision. Never add `selected_text` in overview mode; never trim or
+rebuild the selection in selection mode. Treat the returned anchor as immutable
+message evidence. Legacy revision/selection objects remain renderable during
+rollout but must not be upgraded client-side by inventing IDs.

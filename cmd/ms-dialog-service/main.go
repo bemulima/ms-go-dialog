@@ -70,7 +70,7 @@ func run() error {
 		Spaces: spaces, Dialogs: dialogs, TeacherDialogs: dialogs, Members: members, Blocks: blocks, Outbox: outbox, Tx: tx,
 		Participants: &useradapter.Client{
 			BaseURL:       cfg.UserServiceBaseURL,
-			InternalToken: cfg.InternalAPIToken,
+			InternalToken: cfg.UserServiceInternalToken,
 			HTTPClient:    &http.Client{Timeout: time.Duration(cfg.UserServiceTimeoutSeconds) * time.Second},
 		},
 	}

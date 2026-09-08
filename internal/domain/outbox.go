@@ -13,21 +13,22 @@ import (
 type EventSubject string
 
 const (
-	EventDialogCreated           EventSubject = "dialog.created"
-	EventDialogUpdated           EventSubject = "dialog.updated"
-	EventDialogClosed            EventSubject = "dialog.closed"
-	EventDialogMemberAdded       EventSubject = "dialog.member.added"
-	EventDialogMemberRemoved     EventSubject = "dialog.member.removed"
-	EventDialogMemberRoleUpdated EventSubject = "dialog.member.role_updated"
-	EventDialogMessageCreated    EventSubject = "dialog.message.created"
-	EventDialogMessageUpdated    EventSubject = "dialog.message.updated"
-	EventDialogMessageDeleted    EventSubject = "dialog.message.deleted"
-	EventDialogMessageHidden     EventSubject = "dialog.message.hidden"
-	EventDialogMessageRestored   EventSubject = "dialog.message.restored"
-	EventDialogAttachmentReady   EventSubject = "dialog.attachment.ready"
-	EventDialogAttachmentFailed  EventSubject = "dialog.attachment.failed"
-	EventDialogReadUpdated       EventSubject = "dialog.read.updated"
-	EventDialogTeacherRequested  EventSubject = "dialog.teacher.requested"
+	EventDialogCreated               EventSubject = "dialog.created"
+	EventDialogUpdated               EventSubject = "dialog.updated"
+	EventDialogClosed                EventSubject = "dialog.closed"
+	EventDialogMemberAdded           EventSubject = "dialog.member.added"
+	EventDialogMemberRemoved         EventSubject = "dialog.member.removed"
+	EventDialogMemberRoleUpdated     EventSubject = "dialog.member.role_updated"
+	EventDialogMessageCreated        EventSubject = "dialog.message.created"
+	EventDialogMessageUpdated        EventSubject = "dialog.message.updated"
+	EventDialogMessageDeleted        EventSubject = "dialog.message.deleted"
+	EventDialogMessageHidden         EventSubject = "dialog.message.hidden"
+	EventDialogMessageRestored       EventSubject = "dialog.message.restored"
+	EventDialogAttachmentReady       EventSubject = "dialog.attachment.ready"
+	EventDialogAttachmentFailed      EventSubject = "dialog.attachment.failed"
+	EventDialogReadUpdated           EventSubject = "dialog.read.updated"
+	EventDialogTeacherRequested      EventSubject = "dialog.teacher.requested"
+	EventDialogTeacherContextMutated EventSubject = "dialog.teacher.context-mutated"
 )
 
 func (s EventSubject) Valid() bool {
@@ -37,7 +38,7 @@ func (s EventSubject) Valid() bool {
 		EventDialogMessageCreated, EventDialogMessageUpdated, EventDialogMessageDeleted,
 		EventDialogMessageHidden, EventDialogMessageRestored,
 		EventDialogAttachmentReady, EventDialogAttachmentFailed, EventDialogReadUpdated,
-		EventDialogTeacherRequested:
+		EventDialogTeacherRequested, EventDialogTeacherContextMutated:
 		return true
 	default:
 		return false

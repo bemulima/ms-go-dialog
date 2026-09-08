@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -127,21 +128,26 @@ func TestTeacherDialogRepositoriesAgainstPostgres(t *testing.T) {
 			return err
 		}
 		teacherKey := uuid.New()
+		assistantUI := json.RawMessage(`{"schema":"assistant-ui.v1","blocks":[{"type":"future","opaque":true}]}`)
+		normalizedAssistantUI, err := domain.NormalizeAssistantUI(assistantUI)
+		if err != nil {
+			return err
+		}
 		if err := messages.Create(txCtx, domain.Message{
 			ID: uuid.New(), DialogID: dialogID, AuthorType: domain.MessageAuthorPersonalTeacher, Channel: domain.MessageChannelTelegram, PersonalTeacherID: teacherID,
-			LearningActionID: &learningActionID, ReplyToMessageID: &sourceID, Body: "response", Links: []domain.Link{},
+			LearningActionID: &learningActionID, AssistantUI: assistantUI, ReplyToMessageID: &sourceID, Body: "response", Links: []domain.Link{},
 			Status: domain.MessageStatusActive, Version: 1, MessageSequence: 2, LastEventSequence: 2,
 			IdempotencyKey: teacherKey, CreatedAt: now, UpdatedAt: now,
 		}); err != nil {
 			return err
 		}
 		teacherMessage, err := messages.GetByTeacherIdempotencyKey(txCtx, teacherID, teacherKey)
-		if err != nil || teacherMessage.AuthorType != domain.MessageAuthorPersonalTeacher || teacherMessage.SenderID != uuid.Nil || teacherMessage.PersonalTeacherID != teacherID {
+		if err != nil || teacherMessage.AuthorType != domain.MessageAuthorPersonalTeacher || teacherMessage.SenderID != uuid.Nil || teacherMessage.PersonalTeacherID != teacherID || string(teacherMessage.AssistantUI) != string(normalizedAssistantUI) {
 			return fmt.Errorf("teacher message lookup mismatch: message=%+v err=%w", teacherMessage, err)
 		}
 
 		outbox := OutboxRepository{Pool: pool}
-		for _, subject := range []domain.EventSubject{domain.EventDialogMessageCreated, domain.EventDialogTeacherRequested} {
+		for _, subject := range []domain.EventSubject{domain.EventDialogMessageCreated, domain.EventDialogTeacherRequested, domain.EventDialogTeacherContextMutated} {
 			eventID := uuid.New()
 			if err := outbox.Add(txCtx, domain.OutboxEvent{
 				ID: eventID, DialogID: dialogID, AggregateType: "message", AggregateID: sourceID,

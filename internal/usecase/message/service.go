@@ -87,12 +87,20 @@ type TeacherRequestContext struct {
 	Messages []domain.Message
 }
 
+type AssistantUISourceInput struct {
+	DialogID          uuid.UUID
+	StudentID         uuid.UUID
+	PersonalTeacherID uuid.UUID
+	MessageID         uuid.UUID
+}
+
 type AppendTeacherResponseInput struct {
 	DialogID          uuid.UUID
 	PersonalTeacherID uuid.UUID
 	SourceMessageID   uuid.UUID
 	IdempotencyKey    uuid.UUID
 	Body              string
+	AssistantUI       json.RawMessage
 }
 
 type AppendTeacherProactiveInput struct {
@@ -100,6 +108,7 @@ type AppendTeacherProactiveInput struct {
 	PersonalTeacherID uuid.UUID
 	IdempotencyKey    uuid.UUID
 	Body              string
+	AssistantUI       json.RawMessage
 }
 
 type AppendStudentChannelMessageInput struct {
@@ -347,12 +356,38 @@ func (s Service) GetTeacherRequestContext(ctx context.Context, dialogID, persona
 	return TeacherRequestContext{Dialog: dialogItem, Source: source, Messages: items}, nil
 }
 
+func (s Service) GetAssistantUISource(ctx context.Context, in AssistantUISourceInput) (domain.DialogAssistantUISource, error) {
+	if in.DialogID == uuid.Nil || in.StudentID == uuid.Nil || in.PersonalTeacherID == uuid.Nil || in.MessageID == uuid.Nil {
+		return domain.DialogAssistantUISource{}, fmt.Errorf("%w: assistant UI source identities are required", domain.ErrValidation)
+	}
+	dialogItem, err := s.Dialogs.GetByID(ctx, in.DialogID)
+	if err != nil || dialogItem.Type != domain.DialogTypeTeacher || dialogItem.Status != domain.DialogStatusActive ||
+		dialogItem.StudentID != in.StudentID || dialogItem.PersonalTeacherID != in.PersonalTeacherID {
+		return domain.DialogAssistantUISource{}, domain.ErrMessageNotFound
+	}
+	item, err := s.Messages.GetByID(ctx, in.MessageID)
+	if err != nil || item.DialogID != dialogItem.ID || item.AuthorType != domain.MessageAuthorPersonalTeacher ||
+		item.Status != domain.MessageStatusActive || item.PersonalTeacherID != dialogItem.PersonalTeacherID || len(item.AssistantUI) == 0 {
+		return domain.DialogAssistantUISource{}, domain.ErrMessageNotFound
+	}
+	result, err := domain.NewDialogAssistantUISource(dialogItem, item)
+	if err != nil {
+		return domain.DialogAssistantUISource{}, domain.ErrMessageNotFound
+	}
+	return result, nil
+}
+
 func (s Service) AppendTeacherResponse(ctx context.Context, in AppendTeacherResponseInput) (CreateResult, error) {
 	if in.DialogID == uuid.Nil || in.PersonalTeacherID == uuid.Nil || in.SourceMessageID == uuid.Nil || in.IdempotencyKey == uuid.Nil {
 		return CreateResult{}, fmt.Errorf("%w: teacher response identities are required", domain.ErrValidation)
 	}
+	assistantUI, err := domain.NormalizeAssistantUI(in.AssistantUI)
+	if err != nil {
+		return CreateResult{}, err
+	}
+	in.AssistantUI = assistantUI
 	var result CreateResult
-	err := s.Tx.WithinTransaction(ctx, func(txCtx context.Context) error {
+	err = s.Tx.WithinTransaction(ctx, func(txCtx context.Context) error {
 		if s.TeacherMessages == nil {
 			return fmt.Errorf("teacher message repository is not configured")
 		}
@@ -361,7 +396,8 @@ func (s Service) AppendTeacherResponse(ctx context.Context, in AppendTeacherResp
 		}
 		existing, err := s.TeacherMessages.GetByTeacherIdempotencyKey(txCtx, in.PersonalTeacherID, in.IdempotencyKey)
 		if err == nil {
-			if existing.DialogID != in.DialogID || existing.Body != in.Body || existing.ReplyToMessageID == nil || *existing.ReplyToMessageID != in.SourceMessageID {
+			if existing.DialogID != in.DialogID || existing.Body != in.Body || !sameAssistantUI(existing.AssistantUI, in.AssistantUI) ||
+				existing.ReplyToMessageID == nil || *existing.ReplyToMessageID != in.SourceMessageID {
 				return domain.ErrIdempotencyConflict
 			}
 			result = CreateResult{View: View{Message: existing}}
@@ -402,7 +438,7 @@ func (s Service) AppendTeacherResponse(ctx context.Context, in AppendTeacherResp
 		item := domain.Message{
 			ID: s.newID(), DialogID: in.DialogID, AuthorType: domain.MessageAuthorPersonalTeacher, Channel: source.Channel,
 			PersonalTeacherID: in.PersonalTeacherID, LearningActionID: source.LearningActionID,
-			ReplyToMessageID: &source.ID, Body: content.Body, Links: content.Links,
+			AssistantUI: in.AssistantUI, ReplyToMessageID: &source.ID, Body: content.Body, Links: content.Links,
 			Status: domain.MessageStatusActive, Version: 1,
 			MessageSequence: dialogItem.MaxMessageSequence + 1, LastEventSequence: dialogItem.MaxEventSequence + 1,
 			IdempotencyKey: in.IdempotencyKey, CreatedAt: now, UpdatedAt: now,
@@ -441,8 +477,13 @@ func (s Service) AppendTeacherProactive(ctx context.Context, in AppendTeacherPro
 	if in.DialogID == uuid.Nil || in.PersonalTeacherID == uuid.Nil || in.IdempotencyKey == uuid.Nil {
 		return CreateResult{}, fmt.Errorf("%w: proactive teacher identities are required", domain.ErrValidation)
 	}
+	assistantUI, err := domain.NormalizeAssistantUI(in.AssistantUI)
+	if err != nil {
+		return CreateResult{}, err
+	}
+	in.AssistantUI = assistantUI
 	var result CreateResult
-	err := s.Tx.WithinTransaction(ctx, func(txCtx context.Context) error {
+	err = s.Tx.WithinTransaction(ctx, func(txCtx context.Context) error {
 		if s.TeacherMessages == nil {
 			return fmt.Errorf("teacher message repository is not configured")
 		}
@@ -451,7 +492,8 @@ func (s Service) AppendTeacherProactive(ctx context.Context, in AppendTeacherPro
 		}
 		existing, err := s.TeacherMessages.GetByTeacherIdempotencyKey(txCtx, in.PersonalTeacherID, in.IdempotencyKey)
 		if err == nil {
-			if existing.DialogID != in.DialogID || existing.Body != in.Body || existing.ReplyToMessageID != nil || existing.LearningActionID != nil {
+			if existing.DialogID != in.DialogID || existing.Body != in.Body || !sameAssistantUI(existing.AssistantUI, in.AssistantUI) ||
+				existing.ReplyToMessageID != nil || existing.LearningActionID != nil {
 				return domain.ErrIdempotencyConflict
 			}
 			result = CreateResult{View: View{Message: existing}}
@@ -482,7 +524,7 @@ func (s Service) AppendTeacherProactive(ctx context.Context, in AppendTeacherPro
 		now := s.now()
 		item := domain.Message{
 			ID: s.newID(), DialogID: in.DialogID, AuthorType: domain.MessageAuthorPersonalTeacher, Channel: domain.MessageChannelWeb,
-			PersonalTeacherID: in.PersonalTeacherID, Body: content.Body, Links: content.Links,
+			PersonalTeacherID: in.PersonalTeacherID, AssistantUI: in.AssistantUI, Body: content.Body, Links: content.Links,
 			Status: domain.MessageStatusActive, Version: 1,
 			MessageSequence: dialogItem.MaxMessageSequence + 1, LastEventSequence: dialogItem.MaxEventSequence + 1,
 			IdempotencyKey: in.IdempotencyKey, CreatedAt: now, UpdatedAt: now,
@@ -562,6 +604,9 @@ func (s Service) Update(ctx context.Context, actor domain.Actor, in UpdateInput)
 		if err := s.addEvent(txCtx, item, attachments, domain.EventDialogMessageUpdated, actor.UserID, now); err != nil {
 			return err
 		}
+		if err := s.addTeacherContextMutatedEvent(txCtx, dialogItem, item, domain.TeacherContextMutationUpdated, now); err != nil {
+			return err
+		}
 		result = View{Message: item, Attachments: attachments}
 		return nil
 	})
@@ -590,7 +635,7 @@ func (s Service) Delete(ctx context.Context, actor domain.Actor, in DeleteInput)
 			return domain.ErrForbidden
 		}
 		eventSequence := dialogItem.MaxEventSequence + 1
-		item.Body, item.Links, item.LessonContext, item.Status, item.LastEventSequence = "", nil, nil, domain.MessageStatusDeleted, eventSequence
+		item.Body, item.Links, item.LessonContext, item.AssistantUI, item.Status, item.LastEventSequence = "", nil, nil, nil, domain.MessageStatusDeleted, eventSequence
 		item.Version++
 		item.DeletedAt, item.UpdatedAt = &now, now
 		if err := s.Messages.MarkDeleted(txCtx, item, in.ExpectedVersion); err != nil {
@@ -609,6 +654,9 @@ func (s Service) Delete(ctx context.Context, actor domain.Actor, in DeleteInput)
 			return err
 		}
 		if err := s.addEvent(txCtx, item, nil, domain.EventDialogMessageDeleted, actor.UserID, now); err != nil {
+			return err
+		}
+		if err := s.addTeacherContextMutatedEvent(txCtx, dialogItem, item, domain.TeacherContextMutationDeleted, now); err != nil {
 			return err
 		}
 		result = View{Message: item}
@@ -912,7 +960,7 @@ func (s Service) readState(ctx context.Context, item domain.Dialog, member domai
 
 func (s Service) addEvent(ctx context.Context, item domain.Message, attachments []domain.Attachment, subject domain.EventSubject, actorID uuid.UUID, now time.Time) error {
 	eventID := s.newID()
-	payload, err := json.Marshal(map[string]any{
+	eventPayload := map[string]any{
 		"schema_version": 1, "event_id": eventID, "occurred_at": now,
 		"dialog_id": item.DialogID, "event_sequence": item.LastEventSequence,
 		"message_sequence": item.MessageSequence, "message_id": item.ID,
@@ -920,7 +968,14 @@ func (s Service) addEvent(ctx context.Context, item domain.Message, attachments 
 		"personal_teacher_id": nullableEventUUID(item.PersonalTeacherID), "learning_action_id": item.LearningActionID,
 		"actor_id": nullableEventUUID(actorID), "status": item.Status,
 		"version": item.Version, "body": item.Body, "links": item.Links, "attachments": attachments,
-	})
+	}
+	if len(item.AssistantUI) > 0 {
+		eventPayload["assistant_ui"] = item.AssistantUI
+	}
+	if item.LessonContext != nil {
+		eventPayload["lesson_context"] = item.LessonContext
+	}
+	payload, err := json.Marshal(eventPayload)
 	if err != nil {
 		return err
 	}
@@ -949,6 +1004,18 @@ func (s Service) addTeacherRequestedEvent(ctx context.Context, dialogItem domain
 		Subject: domain.EventDialogTeacherRequested, EventSequence: item.LastEventSequence, SchemaVersion: 1,
 		Payload: payload, NextAttemptAt: now, CreatedAt: now,
 	})
+}
+
+func (s Service) addTeacherContextMutatedEvent(ctx context.Context, dialogItem domain.Dialog, item domain.Message, mutation domain.TeacherContextMutation, now time.Time) error {
+	if dialogItem.Type != domain.DialogTypeTeacher || dialogItem.Status != domain.DialogStatusActive ||
+		item.AuthorType != domain.MessageAuthorUser || item.SenderID != dialogItem.StudentID {
+		return nil
+	}
+	event, err := domain.NewTeacherContextMutationOutbox(dialogItem, item, mutation, s.newID(), now)
+	if err != nil {
+		return err
+	}
+	return s.Outbox.Add(ctx, event)
 }
 
 func (s Service) addReadEvent(ctx context.Context, item domain.Dialog, member domain.Member, now time.Time) error {
@@ -1024,6 +1091,10 @@ func validateLearningContextBinding(item domain.Dialog, learningActionID *uuid.U
 		if learningActionID != nil || lessonContext == nil {
 			return fmt.Errorf("%w: lesson context does not match teacher dialog", domain.ErrValidation)
 		}
+		if lessonContext.Schema == domain.LessonMessageContextSchemaV1 &&
+			(item.ContextID == nil || lessonContext.LessonID == nil || *lessonContext.LessonID != *item.ContextID) {
+			return fmt.Errorf("%w: lesson anchor does not match teacher dialog", domain.ErrValidation)
+		}
 		return nil
 	}
 	if lessonContext != nil {
@@ -1036,10 +1107,13 @@ func validateLearningContextBinding(item domain.Dialog, learningActionID *uuid.U
 }
 
 func sameLessonContext(first, second *domain.LessonMessageContext) bool {
-	if first == nil || second == nil {
-		return first == nil && second == nil
-	}
-	return first.ContentRevision == second.ContentRevision && first.SelectedText == second.SelectedText
+	return domain.LessonMessageContextsEqual(first, second)
+}
+
+func sameAssistantUI(first, second json.RawMessage) bool {
+	left, leftErr := domain.NormalizeAssistantUI(first)
+	right, rightErr := domain.NormalizeAssistantUI(second)
+	return leftErr == nil && rightErr == nil && string(left) == string(right)
 }
 
 func sameAttachmentIDs(items []domain.Attachment, ids []uuid.UUID) bool {
