@@ -135,6 +135,31 @@ func TestMigrations_AreReversibleAndKeepReadStatePerMember(t *testing.T) {
 	if !strings.Contains(string(teacherContextContractsDown), "cannot roll back teacher context contracts while mutation events exist") {
 		t.Fatal("teacher context contract rollback must fail closed while mutation events exist")
 	}
+	teacherTurnOrdering, err := os.ReadFile(filepath.Join(root, "010_teacher_turn_ordering_v2.up.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{
+		"max_teacher_turn_sequence BIGINT NOT NULL DEFAULT 0", "teacher_turn_sequence BIGINT",
+		"chk_dialog_max_teacher_turn_sequence", "chk_dialog_message_teacher_turn_sequence",
+		"uq_dialog_message_teacher_turn_sequence", "WHERE teacher_turn_sequence IS NOT NULL",
+	} {
+		if !strings.Contains(string(teacherTurnOrdering), required) {
+			t.Fatalf("teacher turn ordering migration is missing %q", required)
+		}
+	}
+	teacherTurnOrderingDown, err := os.ReadFile(filepath.Join(root, "010_teacher_turn_ordering_v2.down.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{
+		"max_teacher_turn_sequence <> 0", "teacher_turn_sequence IS NOT NULL", "schema_version >= 2",
+		"cannot roll back teacher turn ordering v2 while ordered turns or v2 requests exist",
+	} {
+		if !strings.Contains(string(teacherTurnOrderingDown), required) {
+			t.Fatalf("teacher turn ordering rollback is not fail closed for %q", required)
+		}
+	}
 
 	runner, err := os.ReadFile(filepath.Join("..", "..", "scripts", "migrate.sh"))
 	if err != nil {

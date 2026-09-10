@@ -36,3 +36,14 @@ func TestMetricsRejectsInvalidCounterName(t *testing.T) {
 		t.Fatalf("invalid metric name was exposed: %s", response.Body.String())
 	}
 }
+
+func TestMetricsIncludesTeacherRequestedV2CounterWithoutLabels(t *testing.T) {
+	metrics := NewMetrics()
+	metrics.Increment(TeacherRequestedV2Total, 1)
+
+	response := httptest.NewRecorder()
+	metrics.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if !strings.Contains(response.Body.String(), TeacherRequestedV2Total+" 1") || strings.Contains(response.Body.String(), TeacherRequestedV2Total+"{") {
+		t.Fatalf("unexpected teacher requested v2 metrics: %s", response.Body.String())
+	}
+}

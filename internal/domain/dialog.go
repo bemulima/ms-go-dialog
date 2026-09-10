@@ -66,26 +66,27 @@ const (
 )
 
 type Dialog struct {
-	ID                 uuid.UUID
-	SpaceID            uuid.UUID
-	Type               DialogType
-	Status             DialogStatus
-	PersonalKey        []byte
-	Title              string
-	StudentID          uuid.UUID
-	PersonalTeacherID  uuid.UUID
-	TeacherContextType TeacherContextType
-	ContextID          *uuid.UUID
-	CreatedBy          uuid.UUID
-	Version            int
-	MemberCount        int
-	MessageCount       int64
-	MaxMessageSequence int64
-	MaxEventSequence   int64
-	LastMessageID      *uuid.UUID
-	LastMessageAt      *time.Time
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
+	ID                     uuid.UUID
+	SpaceID                uuid.UUID
+	Type                   DialogType
+	Status                 DialogStatus
+	PersonalKey            []byte
+	Title                  string
+	StudentID              uuid.UUID
+	PersonalTeacherID      uuid.UUID
+	TeacherContextType     TeacherContextType
+	ContextID              *uuid.UUID
+	CreatedBy              uuid.UUID
+	Version                int
+	MemberCount            int
+	MessageCount           int64
+	MaxMessageSequence     int64
+	MaxEventSequence       int64
+	MaxTeacherTurnSequence int64
+	LastMessageID          *uuid.UUID
+	LastMessageAt          *time.Time
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
 }
 
 func BuildPersonalKey(first, second uuid.UUID) ([32]byte, error) {
@@ -104,7 +105,8 @@ func BuildPersonalKey(first, second uuid.UUID) ([32]byte, error) {
 
 func (d Dialog) Validate() error {
 	if d.ID == uuid.Nil || d.SpaceID == uuid.Nil || d.CreatedBy == uuid.Nil || d.Version < 1 ||
-		d.MessageCount < 0 || d.MaxMessageSequence < 0 || d.MaxEventSequence < d.MaxMessageSequence {
+		d.MessageCount < 0 || d.MaxMessageSequence < 0 || d.MaxEventSequence < d.MaxMessageSequence ||
+		d.MaxTeacherTurnSequence < 0 {
 		return fmt.Errorf("%w: invalid dialog identity or counters", ErrValidation)
 	}
 	if d.Status < DialogStatusActive || d.Status > DialogStatusHidden {

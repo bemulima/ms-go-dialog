@@ -27,7 +27,7 @@ func scanSpace(row pgx.Row) (domain.Space, error) {
 
 const dialogColumns = `id, space_id, type, status, personal_key, title, created_by, version,
 member_count, student_id, personal_teacher_id, teacher_context_type, context_id,
-message_count, max_message_sequence, max_event_sequence,
+	message_count, max_message_sequence, max_event_sequence, max_teacher_turn_sequence,
 last_message_id, last_message_at, created_at, updated_at`
 
 func scanDialog(row pgx.Row) (domain.Dialog, error) {
@@ -38,7 +38,7 @@ func scanDialog(row pgx.Row) (domain.Dialog, error) {
 	err := row.Scan(
 		&item.ID, &item.SpaceID, &item.Type, &item.Status, &item.PersonalKey, &title,
 		&item.CreatedBy, &item.Version, &item.MemberCount, &studentID, &personalTeacherID, &teacherContextType, &item.ContextID, &item.MessageCount,
-		&item.MaxMessageSequence, &item.MaxEventSequence, &item.LastMessageID,
+		&item.MaxMessageSequence, &item.MaxEventSequence, &item.MaxTeacherTurnSequence, &item.LastMessageID,
 		&item.LastMessageAt, &item.CreatedAt, &item.UpdatedAt,
 	)
 	if title != nil {
@@ -72,7 +72,7 @@ func scanMember(row pgx.Row) (domain.Member, error) {
 }
 
 const messageColumns = `id, dialog_id, author_type, channel, sender_id, personal_teacher_id, learning_action_id, lesson_context, assistant_ui, reply_to_message_id, body, links,
-status, version, message_sequence, last_event_sequence, idempotency_key,
+	status, version, message_sequence, last_event_sequence, teacher_turn_sequence, idempotency_key,
 edited_at, deleted_at, created_at, updated_at`
 
 func scanMessage(row pgx.Row) (domain.Message, error) {
@@ -82,7 +82,7 @@ func scanMessage(row pgx.Row) (domain.Message, error) {
 	var senderID, personalTeacherID *uuid.UUID
 	err := row.Scan(
 		&item.ID, &item.DialogID, &item.AuthorType, &item.Channel, &senderID, &personalTeacherID, &item.LearningActionID, &lessonContext, &assistantUI, &item.ReplyToMessageID, &item.Body, &links,
-		&item.Status, &item.Version, &item.MessageSequence, &item.LastEventSequence,
+		&item.Status, &item.Version, &item.MessageSequence, &item.LastEventSequence, &item.TeacherTurnSequence,
 		&item.IdempotencyKey, &item.EditedAt, &item.DeletedAt, &item.CreatedAt, &item.UpdatedAt,
 	)
 	if err != nil {

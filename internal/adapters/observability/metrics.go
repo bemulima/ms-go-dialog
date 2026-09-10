@@ -21,6 +21,7 @@ const (
 	OutboxPublishedTotal           = "dialog_outbox_published_total"
 	OutboxFailedTotal              = "dialog_outbox_failed_total"
 	OutboxWorkerErrorsTotal        = "dialog_outbox_worker_errors_total"
+	TeacherRequestedV2Total        = "dialog_teacher_requested_v2_total"
 	TicketCleanupDeletedTotal      = "dialog_ticket_cleanup_deleted_total"
 	TicketCleanupErrorsTotal       = "dialog_ticket_cleanup_errors_total"
 )
@@ -33,6 +34,7 @@ var defaultCounterNames = []string{
 	OutboxPublishedTotal,
 	OutboxFailedTotal,
 	OutboxWorkerErrorsTotal,
+	TeacherRequestedV2Total,
 	TicketCleanupDeletedTotal,
 	TicketCleanupErrorsTotal,
 }

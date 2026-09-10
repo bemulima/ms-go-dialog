@@ -74,17 +74,28 @@ func run() error {
 			HTTPClient:    &http.Client{Timeout: time.Duration(cfg.UserServiceTimeoutSeconds) * time.Second},
 		},
 	}
+	metrics := observability.NewMetrics()
 	messageService := &messageuc.Service{
 		Spaces: spaces, Dialogs: dialogs, Members: members, Messages: messages, TeacherMessages: messages,
 		Attachments: attachments, Outbox: outbox, Tx: tx,
-		Blocks: blocks,
+		Blocks: blocks, TeacherOrderingV2Enabled: cfg.DialogTeacherOrderingV2Enabled,
+		OnTeacherRequestV2: func(observation messageuc.TeacherRequestV2Observation) {
+			metrics.Increment(observability.TeacherRequestedV2Total, 1)
+			logger.Info("teacher request v2 committed",
+				zap.String("dialog_id", observation.DialogID.String()),
+				zap.String("canonical_student_message_id", observation.CanonicalStudentMessageID.String()),
+				zap.Int64("teacher_turn_sequence", observation.TeacherTurnSequence),
+				zap.String("correlation_id", observation.CorrelationID.String()),
+				zap.String("causation_id", observation.CausationID.String()),
+				zap.String("source_event_id", observation.SourceEventID.String()),
+			)
+		},
 	}
 	attachmentService := &attachmentuc.Service{Spaces: spaces, Dialogs: dialogs, Members: members, Messages: messages, Attachments: attachments, Outbox: outbox, Tx: tx,
 		Files: &filestorage.Client{BaseURL: cfg.FileStorageServiceBaseURL}, Scanner: &filescan.ClamAV{Address: cfg.ClamAVAddress, Timeout: time.Duration(cfg.ClamAVTimeoutSeconds) * time.Second}, TTLMinutes: cfg.AttachmentTTLMinutes, SignedURLMinutes: cfg.AttachmentSignedURLMinutes, ActivationMaxAttempts: cfg.AttachmentActivationAttempts, WorkerLease: time.Duration(cfg.AttachmentWorkerLeaseSeconds) * time.Second}
 	adminService := &adminuc.Service{Spaces: spaces, Dialogs: dialogs, Members: members, Messages: messages, Attachments: attachments, Outbox: outbox, Tx: tx}
 	realtimeService := &realtimeuc.TicketService{Spaces: spaces, Members: members, Tickets: tickets, TTL: time.Duration(cfg.RealtimeTicketTTLSeconds) * time.Second}
 	dispatcher := &realtimeuc.Dispatcher{Outbox: outbox, Lease: time.Duration(cfg.OutboxLeaseSeconds) * time.Second}
-	metrics := observability.NewMetrics()
 	rateLimiter, err := httpmiddleware.NewActorRateLimiter(cfg.HTTPUserRateLimitRPS, cfg.HTTPUserRateLimitBurst, cfg.HTTPUserRateLimitMaxActors, time.Duration(cfg.HTTPUserRateLimitIdleSeconds)*time.Second)
 	if err != nil {
 		return fmt.Errorf("configure HTTP rate limiter: %w", err)

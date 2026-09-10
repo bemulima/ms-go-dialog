@@ -10,6 +10,8 @@ import (
 
 const DialogAssistantUISourceSchemaV1 = "dialog-assistant-ui-source.v1"
 
+const TeacherRequestedSchemaVersionV2 int16 = 2
+
 type TeacherContextMutation string
 
 const (
@@ -115,4 +117,75 @@ func validActiveTeacherBinding(dialog Dialog) bool {
 		return dialog.ContextID == nil
 	}
 	return dialog.ContextID != nil && *dialog.ContextID != uuid.Nil
+}
+
+// TeacherRequestedV2Payload is the body-free durable request contract for a
+// Dialog-owned direct student turn. Its source message is both the canonical
+// student message and correlation ID; causation is the source message.
+type TeacherRequestedV2Payload struct {
+	SchemaVersion         int16     `json:"schema_version"`
+	EventID               uuid.UUID `json:"event_id"`
+	OccurredAt            time.Time `json:"occurred_at"`
+	DialogID              uuid.UUID `json:"dialog_id"`
+	EventSequence         int64     `json:"event_sequence"`
+	SourceMessageID       uuid.UUID `json:"source_message_id"`
+	SourceMessageSequence int64     `json:"source_message_sequence"`
+	// SourceMessageVersion is absent on queued V2 events created before this
+	// additive field. Every newly emitted V2 event sets it to the positive
+	// version of its immutable source-message snapshot.
+	SourceMessageVersion *int `json:"source_message_version,omitempty"`
+	// ReplyToMessageID is explicit on every newly emitted V2 event, either as
+	// the source message's reply UUID or JSON null. Older queued V2 events may
+	// omit it and decode as nil.
+	ReplyToMessageID          *uuid.UUID         `json:"reply_to_message_id"`
+	StudentID                 uuid.UUID          `json:"student_id"`
+	PersonalTeacherID         uuid.UUID          `json:"personal_teacher_id"`
+	ContextType               TeacherContextType `json:"context_type"`
+	ContextID                 *uuid.UUID         `json:"context_id,omitempty"`
+	LearningActionID          *uuid.UUID         `json:"learning_action_id,omitempty"`
+	Channel                   MessageChannel     `json:"channel"`
+	CanonicalStudentMessageID uuid.UUID          `json:"canonical_student_message_id"`
+	TeacherTurnSequence       int64              `json:"teacher_turn_sequence"`
+	CorrelationID             uuid.UUID          `json:"correlation_id"`
+	CausationID               uuid.UUID          `json:"causation_id"`
+}
+
+// NewTeacherRequestedV2Outbox constructs one V2 trigger whose source message,
+// Dialog counter, and outbox row are committed by the caller in one database
+// transaction. The caller must already hold the Dialog row lock.
+func NewTeacherRequestedV2Outbox(dialog Dialog, message Message, eventID, correlationID uuid.UUID, occurredAt time.Time) (OutboxEvent, error) {
+	if eventID == uuid.Nil || correlationID == uuid.Nil || occurredAt.IsZero() || !validActiveTeacherBinding(dialog) ||
+		dialog.ID != message.DialogID || message.ID == uuid.Nil || message.AuthorType != MessageAuthorUser ||
+		message.SenderID != dialog.StudentID || !message.Channel.Valid() || message.MessageSequence < 1 || message.Version < 1 ||
+		message.Status != MessageStatusActive || dialog.MaxEventSequence != message.LastEventSequence ||
+		message.LastEventSequence < message.MessageSequence || message.TeacherTurnSequence == nil ||
+		*message.TeacherTurnSequence < 1 || dialog.MaxTeacherTurnSequence != *message.TeacherTurnSequence ||
+		(message.ReplyToMessageID != nil && *message.ReplyToMessageID == uuid.Nil) {
+		return OutboxEvent{}, fmt.Errorf("%w: invalid teacher request v2", ErrValidation)
+	}
+	sourceMessageVersion := message.Version
+	payload, err := json.Marshal(TeacherRequestedV2Payload{
+		SchemaVersion: TeacherRequestedSchemaVersionV2, EventID: eventID, OccurredAt: occurredAt.UTC(),
+		DialogID: dialog.ID, EventSequence: message.LastEventSequence,
+		SourceMessageID: message.ID, SourceMessageSequence: message.MessageSequence, SourceMessageVersion: &sourceMessageVersion,
+		ReplyToMessageID: message.ReplyToMessageID,
+		StudentID:        dialog.StudentID, PersonalTeacherID: dialog.PersonalTeacherID,
+		ContextType: dialog.TeacherContextType, ContextID: dialog.ContextID,
+		LearningActionID: message.LearningActionID, Channel: message.Channel,
+		CanonicalStudentMessageID: message.ID, TeacherTurnSequence: *message.TeacherTurnSequence,
+		CorrelationID: correlationID, CausationID: message.ID,
+	})
+	if err != nil {
+		return OutboxEvent{}, err
+	}
+	event := OutboxEvent{
+		ID: eventID, DialogID: dialog.ID, AggregateType: "teacher_request", AggregateID: message.ID,
+		Subject: EventDialogTeacherRequested, EventSequence: message.LastEventSequence,
+		SchemaVersion: TeacherRequestedSchemaVersionV2, Payload: payload,
+		NextAttemptAt: occurredAt.UTC(), CreatedAt: occurredAt.UTC(),
+	}
+	if err := event.Validate(); err != nil {
+		return OutboxEvent{}, err
+	}
+	return event, nil
 }

@@ -13,16 +13,22 @@ func TestConfig_ValidateModesAndTicketTTL(t *testing.T) {
 		AttachmentTTLMinutes: 60, AttachmentSignedURLMinutes: 5, AttachmentWorkerInterval: 5,
 		AttachmentWorkerBatch: 50, AttachmentWorkerLeaseSeconds: 120, AttachmentActivationAttempts: 5,
 		OutboxWorkerIntervalMS: 500, OutboxWorkerBatch: 100, OutboxLeaseSeconds: 30,
-		ReadinessTimeoutSeconds:   2,
-		ShutdownTimeoutSeconds:    10,
-		ClamAVTimeoutSeconds:      30,
-		UserServiceBaseURL:        "http://ms-user-service:8080",
-		UserServiceInternalToken:  "user-secret",
-		UserServiceTimeoutSeconds: 3,
-		InternalAPIToken:          "dialog-secret",
+		DialogTeacherOrderingV2Enabled: false,
+		ReadinessTimeoutSeconds:        2,
+		ShutdownTimeoutSeconds:         10,
+		ClamAVTimeoutSeconds:           30,
+		UserServiceBaseURL:             "http://ms-user-service:8080",
+		UserServiceInternalToken:       "user-secret",
+		UserServiceTimeoutSeconds:      3,
+		InternalAPIToken:               "dialog-secret",
 	}
 	if err := valid.Validate(); err != nil {
 		t.Fatalf("valid config rejected: %v", err)
+	}
+	enabled := valid
+	enabled.DialogTeacherOrderingV2Enabled = true
+	if err := enabled.Validate(); err != nil {
+		t.Fatalf("enabled teacher ordering v2 config rejected: %v", err)
 	}
 	invalid := valid
 	invalid.RealtimeTicketTTLSeconds = 31
@@ -53,5 +59,18 @@ func TestConfig_ValidateModesAndTicketTTL(t *testing.T) {
 	invalid.UserServiceInternalToken = ""
 	if err := invalid.Validate(); err == nil {
 		t.Fatal("empty user service internal token accepted")
+	}
+}
+
+func TestLoad_TeacherOrderingV2FlagDefaultsFalseAndCanEnable(t *testing.T) {
+	t.Setenv("DIALOG_TEACHER_ORDERING_V2_ENABLED", "false")
+	cfg, err := Load()
+	if err != nil || cfg.DialogTeacherOrderingV2Enabled {
+		t.Fatalf("default-disabled teacher ordering config: cfg=%+v err=%v", cfg, err)
+	}
+	t.Setenv("DIALOG_TEACHER_ORDERING_V2_ENABLED", "true")
+	cfg, err = Load()
+	if err != nil || !cfg.DialogTeacherOrderingV2Enabled {
+		t.Fatalf("enabled teacher ordering config: cfg=%+v err=%v", cfg, err)
 	}
 }

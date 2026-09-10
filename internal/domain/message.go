@@ -302,11 +302,15 @@ type Message struct {
 	Version           int
 	MessageSequence   int64
 	LastEventSequence int64
-	IdempotencyKey    uuid.UUID
-	EditedAt          *time.Time
-	DeletedAt         *time.Time
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	// TeacherTurnSequence is private durable ordering evidence for a
+	// student-authored teacher request. It is intentionally not a public REST,
+	// WebSocket, or ordinary lifecycle-event field.
+	TeacherTurnSequence *int64
+	IdempotencyKey      uuid.UUID
+	EditedAt            *time.Time
+	DeletedAt           *time.Time
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 func (m Message) Validate() error {
@@ -335,6 +339,9 @@ func (m Message) Validate() error {
 	}
 	if m.ReplyToMessageID != nil && *m.ReplyToMessageID == m.ID {
 		return fmt.Errorf("%w: a message cannot reply to itself", ErrValidation)
+	}
+	if m.TeacherTurnSequence != nil && *m.TeacherTurnSequence < 1 {
+		return fmt.Errorf("%w: invalid teacher turn sequence", ErrValidation)
 	}
 	if m.Status == MessageStatusDeleted && m.DeletedAt == nil {
 		return fmt.Errorf("%w: deleted message requires deletion time", ErrValidation)

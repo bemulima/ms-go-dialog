@@ -30,6 +30,24 @@ type Service struct {
 	Tx              repository.TransactionManager
 	Now             func() time.Time
 	NewID           func() uuid.UUID
+	// TeacherOrderingV2Enabled is the sole rollout switch for both private
+	// teacher_turn_sequence allocation and exactly one V2 request emission.
+	// When false, the V1 request code path remains byte-compatible.
+	TeacherOrderingV2Enabled bool
+	OnTeacherRequestV2       func(TeacherRequestV2Observation)
+}
+
+// TeacherRequestV2Observation is emitted only after the transaction that
+// stored the source message, dense sequence, and V2 outbox request commits.
+// It is for existing structured logs and zero-label metrics only; it is not a
+// browser or event contract.
+type TeacherRequestV2Observation struct {
+	DialogID                  uuid.UUID
+	CanonicalStudentMessageID uuid.UUID
+	TeacherTurnSequence       int64
+	CorrelationID             uuid.UUID
+	CausationID               uuid.UUID
+	SourceEventID             uuid.UUID
 }
 
 type CreateInput struct {
@@ -137,6 +155,7 @@ func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput)
 	in.LessonContext = lessonContext
 
 	var result CreateResult
+	var teacherRequestV2 *TeacherRequestV2Observation
 	err = s.Tx.WithinTransaction(ctx, func(txCtx context.Context) error {
 		if err := s.Messages.LockIdempotencyKey(txCtx, actor.UserID, in.IdempotencyKey); err != nil {
 			return err
@@ -189,6 +208,13 @@ func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput)
 			}
 		}
 
+		var teacherTurnSequence *int64
+		if dialogItem.Type == domain.DialogTypeTeacher {
+			teacherTurnSequence, err = s.allocateTeacherTurnSequence(&dialogItem)
+			if err != nil {
+				return err
+			}
+		}
 		now := s.now()
 		messageSequence := dialogItem.MaxMessageSequence + 1
 		eventSequence := dialogItem.MaxEventSequence + 1
@@ -196,7 +222,7 @@ func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput)
 			ID: s.newID(), DialogID: in.DialogID, AuthorType: domain.MessageAuthorUser, Channel: domain.MessageChannelWeb, SenderID: actor.UserID,
 			LearningActionID: in.LearningActionID, LessonContext: in.LessonContext, ReplyToMessageID: in.ReplyToMessageID,
 			Body: content.Body, Links: content.Links, Status: domain.MessageStatusActive, Version: 1,
-			MessageSequence: messageSequence, LastEventSequence: eventSequence,
+			MessageSequence: messageSequence, LastEventSequence: eventSequence, TeacherTurnSequence: teacherTurnSequence,
 			IdempotencyKey: in.IdempotencyKey, CreatedAt: now, UpdatedAt: now,
 		}
 		if err := item.Validate(); err != nil {
@@ -230,13 +256,18 @@ func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput)
 			return err
 		}
 		if dialogItem.Type == domain.DialogTypeTeacher {
-			if err := s.addTeacherRequestedEvent(txCtx, dialogItem, item, now); err != nil {
+			observation, err := s.addTeacherRequestedEvent(txCtx, dialogItem, item, now)
+			if err != nil {
 				return err
 			}
+			teacherRequestV2 = observation
 		}
 		result = CreateResult{Created: true, View: View{Message: item, Attachments: attachments}}
 		return nil
 	})
+	if err == nil {
+		s.observeTeacherRequestV2(teacherRequestV2)
+	}
 	return result, err
 }
 
@@ -249,6 +280,7 @@ func (s Service) AppendStudentChannelMessage(ctx context.Context, in AppendStude
 		return CreateResult{}, fmt.Errorf("%w: invalid channel message identity", domain.ErrValidation)
 	}
 	var result CreateResult
+	var teacherRequestV2 *TeacherRequestV2Observation
 	err := s.Tx.WithinTransaction(ctx, func(txCtx context.Context) error {
 		if err := s.Messages.LockIdempotencyKey(txCtx, in.StudentID, in.IdempotencyKey); err != nil {
 			return err
@@ -285,12 +317,16 @@ func (s Service) AppendStudentChannelMessage(ctx context.Context, in AppendStude
 		if err := content.Validate(space.Policy); err != nil {
 			return err
 		}
+		teacherTurnSequence, err := s.allocateTeacherTurnSequence(&dialogItem)
+		if err != nil {
+			return err
+		}
 		now := s.now()
 		item := domain.Message{
 			ID: s.newID(), DialogID: in.DialogID, AuthorType: domain.MessageAuthorUser, Channel: in.Channel,
 			SenderID: in.StudentID, Body: content.Body, Links: content.Links,
 			Status: domain.MessageStatusActive, Version: 1,
-			MessageSequence: dialogItem.MaxMessageSequence + 1, LastEventSequence: dialogItem.MaxEventSequence + 1,
+			MessageSequence: dialogItem.MaxMessageSequence + 1, LastEventSequence: dialogItem.MaxEventSequence + 1, TeacherTurnSequence: teacherTurnSequence,
 			IdempotencyKey: in.IdempotencyKey, CreatedAt: now, UpdatedAt: now,
 		}
 		if err := item.Validate(); err != nil {
@@ -315,12 +351,17 @@ func (s Service) AppendStudentChannelMessage(ctx context.Context, in AppendStude
 		if err := s.addEvent(txCtx, item, nil, domain.EventDialogMessageCreated, in.StudentID, now); err != nil {
 			return err
 		}
-		if err := s.addTeacherRequestedEvent(txCtx, dialogItem, item, now); err != nil {
+		observation, err := s.addTeacherRequestedEvent(txCtx, dialogItem, item, now)
+		if err != nil {
 			return err
 		}
+		teacherRequestV2 = observation
 		result = CreateResult{Created: true, View: View{Message: item}}
 		return nil
 	})
+	if err == nil {
+		s.observeTeacherRequestV2(teacherRequestV2)
+	}
 	return result, err
 }
 
@@ -986,8 +1027,24 @@ func (s Service) addEvent(ctx context.Context, item domain.Message, attachments 
 	})
 }
 
-func (s Service) addTeacherRequestedEvent(ctx context.Context, dialogItem domain.Dialog, item domain.Message, now time.Time) error {
+// addTeacherRequestedEvent emits exactly one request trigger for the committed
+// source message. Direct messages correlate to themselves.
+func (s Service) addTeacherRequestedEvent(ctx context.Context, dialogItem domain.Dialog, item domain.Message, now time.Time) (*TeacherRequestV2Observation, error) {
 	eventID := s.newID()
+	if s.TeacherOrderingV2Enabled {
+		event, err := domain.NewTeacherRequestedV2Outbox(dialogItem, item, eventID, item.ID, now)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.Outbox.Add(ctx, event); err != nil {
+			return nil, err
+		}
+		return &TeacherRequestV2Observation{
+			DialogID: dialogItem.ID, CanonicalStudentMessageID: item.ID,
+			TeacherTurnSequence: *item.TeacherTurnSequence, CorrelationID: item.ID,
+			CausationID: item.ID, SourceEventID: event.ID,
+		}, nil
+	}
 	payload, err := json.Marshal(map[string]any{
 		"schema_version": 1, "event_id": eventID, "occurred_at": now,
 		"dialog_id": dialogItem.ID, "event_sequence": item.LastEventSequence,
@@ -997,13 +1054,34 @@ func (s Service) addTeacherRequestedEvent(ctx context.Context, dialogItem domain
 		"learning_action_id": item.LearningActionID, "channel": item.Channel,
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return s.Outbox.Add(ctx, domain.OutboxEvent{
+	if err := s.Outbox.Add(ctx, domain.OutboxEvent{
 		ID: eventID, DialogID: item.DialogID, AggregateType: "teacher_request", AggregateID: item.ID,
 		Subject: domain.EventDialogTeacherRequested, EventSequence: item.LastEventSequence, SchemaVersion: 1,
 		Payload: payload, NextAttemptAt: now, CreatedAt: now,
-	})
+	}); err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
+func (s Service) allocateTeacherTurnSequence(dialogItem *domain.Dialog) (*int64, error) {
+	if !s.TeacherOrderingV2Enabled {
+		return nil, nil
+	}
+	if dialogItem == nil || dialogItem.Type != domain.DialogTypeTeacher || dialogItem.MaxTeacherTurnSequence < 0 {
+		return nil, fmt.Errorf("%w: invalid teacher turn allocation", domain.ErrValidation)
+	}
+	dialogItem.MaxTeacherTurnSequence++
+	sequence := dialogItem.MaxTeacherTurnSequence
+	return &sequence, nil
+}
+
+func (s Service) observeTeacherRequestV2(observation *TeacherRequestV2Observation) {
+	if observation != nil && s.OnTeacherRequestV2 != nil {
+		s.OnTeacherRequestV2(*observation)
+	}
 }
 
 func (s Service) addTeacherContextMutatedEvent(ctx context.Context, dialogItem domain.Dialog, item domain.Message, mutation domain.TeacherContextMutation, now time.Time) error {

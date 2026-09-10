@@ -30,7 +30,7 @@ func TestScanMessageCarriesCanonicalAssistantUI(t *testing.T) {
 	item, err := scanMessage(staticRow{
 		messageID, dialogID, domain.MessageAuthorPersonalTeacher, domain.MessageChannelWeb,
 		(*uuid.UUID)(nil), &teacherID, &actionID, []byte(nil), assistantUI, &replyID,
-		"plain fallback", []byte(`[]`), domain.MessageStatusActive, 1, int64(2), int64(2), key,
+		"plain fallback", []byte(`[]`), domain.MessageStatusActive, 1, int64(2), int64(2), (*int64)(nil), key,
 		(*time.Time)(nil), (*time.Time)(nil), now, now,
 	})
 	if err != nil {
@@ -40,8 +40,23 @@ func TestScanMessageCarriesCanonicalAssistantUI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if item.ID != messageID || item.PersonalTeacherID != teacherID || string(item.AssistantUI) != string(want) {
+	if item.ID != messageID || item.PersonalTeacherID != teacherID || item.TeacherTurnSequence != nil || string(item.AssistantUI) != string(want) {
 		t.Fatalf("assistant UI scan mismatch: %+v", item)
+	}
+}
+
+func TestScanMessageCarriesPrivateTeacherTurnSequence(t *testing.T) {
+	now := time.Now().UTC()
+	messageID, dialogID, senderID, key := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	teacherTurnSequence := int64(4)
+	item, err := scanMessage(staticRow{
+		messageID, dialogID, domain.MessageAuthorUser, domain.MessageChannelWeb,
+		&senderID, (*uuid.UUID)(nil), (*uuid.UUID)(nil), []byte(nil), []byte(nil), (*uuid.UUID)(nil),
+		"source", []byte(`[]`), domain.MessageStatusActive, 1, int64(9), int64(12), &teacherTurnSequence, key,
+		(*time.Time)(nil), (*time.Time)(nil), now, now,
+	})
+	if err != nil || item.TeacherTurnSequence == nil || *item.TeacherTurnSequence != teacherTurnSequence {
+		t.Fatalf("teacher turn sequence scan mismatch: item=%+v err=%v", item, err)
 	}
 }
 
@@ -52,7 +67,7 @@ func TestScanMessageReplaysLegacyAndVersionedLessonContexts(t *testing.T) {
 		return staticRow{
 			messageID, dialogID, domain.MessageAuthorUser, domain.MessageChannelWeb,
 			&senderID, (*uuid.UUID)(nil), (*uuid.UUID)(nil), lessonContext, []byte(nil), (*uuid.UUID)(nil),
-			"question", []byte(`[]`), domain.MessageStatusActive, 1, int64(1), int64(1), key,
+			"question", []byte(`[]`), domain.MessageStatusActive, 1, int64(1), int64(1), (*int64)(nil), key,
 			(*time.Time)(nil), (*time.Time)(nil), now, now,
 		}
 	}

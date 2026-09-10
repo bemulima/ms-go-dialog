@@ -17,13 +17,13 @@ func (r DialogRepository) Create(ctx context.Context, item domain.Dialog) error 
 	_, err := runner(ctx, r.Pool).Exec(ctx, `INSERT INTO dialog (
 id, space_id, type, status, personal_key, title, created_by, version, member_count,
 student_id, personal_teacher_id, teacher_context_type, context_id,
-message_count, max_message_sequence, max_event_sequence, last_message_id,
-last_message_at, created_at, updated_at
-) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+	message_count, max_message_sequence, max_event_sequence, max_teacher_turn_sequence, last_message_id,
+	last_message_at, created_at, updated_at
+) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
 		item.ID, item.SpaceID, item.Type, item.Status, nullableBytes(item.PersonalKey), nullableString(item.Title),
 		item.CreatedBy, item.Version, item.MemberCount, nullableUUID(item.StudentID), nullableUUID(item.PersonalTeacherID), nullableString(string(item.TeacherContextType)), item.ContextID,
 		item.MessageCount, item.MaxMessageSequence,
-		item.MaxEventSequence, item.LastMessageID, item.LastMessageAt, item.CreatedAt, item.UpdatedAt)
+		item.MaxEventSequence, item.MaxTeacherTurnSequence, item.LastMessageID, item.LastMessageAt, item.CreatedAt, item.UpdatedAt)
 	return mapError(err)
 }
 
@@ -101,10 +101,10 @@ WHERE m.user_id=$1 AND m.status=1 AND d.status<>3`
 func (r DialogRepository) UpdateState(ctx context.Context, item domain.Dialog, expectedVersion int) error {
 	command, err := runner(ctx, r.Pool).Exec(ctx, `UPDATE dialog SET
 status=$1, title=$2, version=$3, member_count=$4, message_count=$5,
-max_message_sequence=$6, max_event_sequence=$7, last_message_id=$8,
-last_message_at=$9, updated_at=$10 WHERE id=$11 AND version=$12`,
+	max_message_sequence=$6, max_event_sequence=$7, max_teacher_turn_sequence=$8, last_message_id=$9,
+	last_message_at=$10, updated_at=$11 WHERE id=$12 AND version=$13`,
 		item.Status, nullableString(item.Title), item.Version, item.MemberCount, item.MessageCount,
-		item.MaxMessageSequence, item.MaxEventSequence, item.LastMessageID, item.LastMessageAt,
+		item.MaxMessageSequence, item.MaxEventSequence, item.MaxTeacherTurnSequence, item.LastMessageID, item.LastMessageAt,
 		item.UpdatedAt, item.ID, expectedVersion)
 	if err != nil {
 		return mapError(err)
@@ -153,7 +153,7 @@ func scanDialogAndMember(row interface{ Scan(...any) error }) (domain.Dialog, do
 	err := row.Scan(
 		&item.ID, &item.SpaceID, &item.Type, &item.Status, &item.PersonalKey, &title,
 		&item.CreatedBy, &item.Version, &item.MemberCount, &studentID, &personalTeacherID, &teacherContextType, &item.ContextID, &item.MessageCount,
-		&item.MaxMessageSequence, &item.MaxEventSequence, &item.LastMessageID, &item.LastMessageAt,
+		&item.MaxMessageSequence, &item.MaxEventSequence, &item.MaxTeacherTurnSequence, &item.LastMessageID, &item.LastMessageAt,
 		&item.CreatedAt, &item.UpdatedAt,
 		&member.DialogID, &member.UserID, &member.Role, &member.Status,
 		&member.HistoryFromMessageSequence, &member.LastReadMessageSequence, &member.UnreadCount,

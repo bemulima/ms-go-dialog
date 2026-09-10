@@ -39,11 +39,11 @@ func (r MessageRepository) Create(ctx context.Context, item domain.Message) erro
 	}
 	_, err = runner(ctx, r.Pool).Exec(ctx, `INSERT INTO dialog_message (
 id, dialog_id, author_type, channel, sender_id, personal_teacher_id, learning_action_id, lesson_context, assistant_ui, reply_to_message_id, body, links, status, version,
-message_sequence, last_event_sequence, idempotency_key, edited_at, deleted_at,
-created_at, updated_at
-) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
+	message_sequence, last_event_sequence, teacher_turn_sequence, idempotency_key, edited_at, deleted_at,
+	created_at, updated_at
+) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
 		item.ID, item.DialogID, item.AuthorType, item.Channel, nullableUUID(item.SenderID), nullableUUID(item.PersonalTeacherID), item.LearningActionID, lessonContext,
-		assistantUIValue, item.ReplyToMessageID, item.Body, links, item.Status, item.Version, item.MessageSequence, item.LastEventSequence,
+		assistantUIValue, item.ReplyToMessageID, item.Body, links, item.Status, item.Version, item.MessageSequence, item.LastEventSequence, item.TeacherTurnSequence,
 		item.IdempotencyKey, item.EditedAt, item.DeletedAt, item.CreatedAt, item.UpdatedAt)
 	return mapError(err)
 }
