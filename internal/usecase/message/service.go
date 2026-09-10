@@ -19,22 +19,28 @@ const (
 )
 
 type Service struct {
-	Spaces          repository.SpaceRepository
-	Dialogs         repository.DialogRepository
-	Members         repository.MemberRepository
-	Messages        repository.MessageRepository
-	TeacherMessages repository.TeacherMessageRepository
-	Attachments     repository.AttachmentRepository
-	Outbox          repository.OutboxRepository
-	Blocks          repository.BlockRepository
-	Tx              repository.TransactionManager
-	Now             func() time.Time
-	NewID           func() uuid.UUID
+	Spaces                repository.SpaceRepository
+	Dialogs               repository.DialogRepository
+	Members               repository.MemberRepository
+	Messages              repository.MessageRepository
+	TeacherMessages       repository.TeacherMessageRepository
+	CanonicalStudentTurns repository.CanonicalStudentTurnRepository
+	Attachments           repository.AttachmentRepository
+	Outbox                repository.OutboxRepository
+	Blocks                repository.BlockRepository
+	Tx                    repository.TransactionManager
+	Now                   func() time.Time
+	NewID                 func() uuid.UUID
 	// TeacherOrderingV2Enabled is the sole rollout switch for both private
 	// teacher_turn_sequence allocation and exactly one V2 request emission.
 	// When false, the V1 request code path remains byte-compatible.
 	TeacherOrderingV2Enabled bool
-	OnTeacherRequestV2       func(TeacherRequestV2Observation)
+	// CanonicalStudentTurnEnabled gates only new trusted receipt
+	// materializations. Exact committed replays remain recoverable when it is
+	// disabled; it is valid only together with the V2 ordering producer.
+	CanonicalStudentTurnEnabled bool
+	OnTeacherRequestV2          func(TeacherRequestV2Observation)
+	OnCanonicalStudentTurn      func(CanonicalStudentTurnObservation)
 }
 
 // TeacherRequestV2Observation is emitted only after the transaction that
@@ -48,6 +54,22 @@ type TeacherRequestV2Observation struct {
 	CorrelationID             uuid.UUID
 	CausationID               uuid.UUID
 	SourceEventID             uuid.UUID
+}
+
+// CanonicalStudentTurnObservation is emitted after the one transaction that
+// committed the private ledger, normal message, sequence, and V2 trigger.
+// It is structured-log evidence only; IDs never become metric labels.
+type CanonicalStudentTurnObservation struct {
+	ActionReceiptID            uuid.UUID
+	CorrelationID              uuid.UUID
+	CausationID                uuid.UUID
+	SourcePromptMessageID      uuid.UUID
+	SourcePromptMessageVersion int
+	BlockID                    string
+	ActionID                   string
+	SourceUIDigest             string
+	CanonicalStudentMessageID  uuid.UUID
+	TeacherTurnSequence        int64
 }
 
 type CreateInput struct {
@@ -136,6 +158,13 @@ type AppendStudentChannelMessageInput struct {
 	IdempotencyKey    uuid.UUID
 	Channel           domain.MessageChannel
 	Body              string
+}
+
+// MaterializeCanonicalStudentTurnInput is internal-only trusted input. The
+// normal message response deliberately does not expose its private identity.
+type MaterializeCanonicalStudentTurnInput struct {
+	Identity      domain.CanonicalStudentTurnIdentity
+	CanonicalBody string
 }
 
 func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput) (CreateResult, error) {
@@ -256,7 +285,7 @@ func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput)
 			return err
 		}
 		if dialogItem.Type == domain.DialogTypeTeacher {
-			observation, err := s.addTeacherRequestedEvent(txCtx, dialogItem, item, now)
+			observation, err := s.addTeacherRequestedEvent(txCtx, dialogItem, item, item.ID, nil, now)
 			if err != nil {
 				return err
 			}
@@ -351,7 +380,7 @@ func (s Service) AppendStudentChannelMessage(ctx context.Context, in AppendStude
 		if err := s.addEvent(txCtx, item, nil, domain.EventDialogMessageCreated, in.StudentID, now); err != nil {
 			return err
 		}
-		observation, err := s.addTeacherRequestedEvent(txCtx, dialogItem, item, now)
+		observation, err := s.addTeacherRequestedEvent(txCtx, dialogItem, item, item.ID, nil, now)
 		if err != nil {
 			return err
 		}
@@ -363,6 +392,219 @@ func (s Service) AppendStudentChannelMessage(ctx context.Context, in AppendStude
 		s.observeTeacherRequestV2(teacherRequestV2)
 	}
 	return result, err
+}
+
+// MaterializeCanonicalStudentTurn is an internal-only, trusted command. It
+// turns one Teacher-validated action receipt into one ordinary immutable
+// Student message; it never accepts a browser action and never exposes the
+// private ledger through the returned View.
+func (s Service) MaterializeCanonicalStudentTurn(ctx context.Context, in MaterializeCanonicalStudentTurnInput) (CreateResult, error) {
+	identity, err := domain.NewCanonicalStudentTurnIdentity(in.Identity)
+	if err != nil {
+		return CreateResult{}, err
+	}
+	in.Identity = identity
+	if s.CanonicalStudentTurns == nil {
+		return CreateResult{}, domain.ErrFeatureDisabled
+	}
+
+	var result CreateResult
+	var teacherRequestV2 *TeacherRequestV2Observation
+	var canonicalObservation *CanonicalStudentTurnObservation
+	err = s.Tx.WithinTransaction(ctx, func(txCtx context.Context) error {
+		if err := s.CanonicalStudentTurns.LockIdentity(txCtx, identity.ActionReceiptID, identity.CanonicalMessageCommandID); err != nil {
+			return err
+		}
+		if err := s.CanonicalStudentTurns.LockSourceAction(txCtx, identity.DialogID, identity.Interaction.SourcePromptMessageID, identity.Interaction.BlockID, identity.Interaction.ActionID); err != nil {
+			return err
+		}
+		replayed, handled, err := s.resolveCanonicalStudentTurnReplay(txCtx, identity, in.CanonicalBody)
+		if err != nil || handled {
+			if handled {
+				result = replayed
+			}
+			return err
+		}
+
+		// The feature gate is deliberately after exact replay. A committed
+		// receipt stays recoverable during a rollback/kill switch, while a new
+		// receipt has no effect unless the same process emits the V2 trigger.
+		if !s.CanonicalStudentTurnEnabled || !s.TeacherOrderingV2Enabled {
+			return domain.ErrFeatureDisabled
+		}
+		if err := s.Messages.LockIdempotencyKey(txCtx, identity.StudentID, identity.CanonicalMessageCommandID); err != nil {
+			return err
+		}
+		if existing, err := s.Messages.GetByIdempotencyKey(txCtx, identity.StudentID, identity.CanonicalMessageCommandID); err == nil {
+			// A key owned by any non-ledger message can never be adopted by a
+			// receipt because doing so could make a second lifecycle.
+			_ = existing
+			return domain.ErrIdempotencyConflict
+		} else if !errors.Is(err, domain.ErrNotFound) {
+			return err
+		}
+
+		dialogItem, err := s.Dialogs.GetByIDForUpdate(txCtx, identity.DialogID)
+		if err != nil || dialogItem.Type != domain.DialogTypeTeacher || dialogItem.Status == domain.DialogStatusHidden {
+			return domain.ErrDialogNotFound
+		}
+		if dialogItem.Status != domain.DialogStatusActive {
+			return domain.ErrDialogClosed
+		}
+		if dialogItem.StudentID != identity.StudentID || dialogItem.PersonalTeacherID != identity.PersonalTeacherID ||
+			dialogItem.TeacherContextType != domain.TeacherContextGeneralTeacher || dialogItem.ContextID != nil {
+			return domain.ErrForbidden
+		}
+		space, err := s.Spaces.GetByID(txCtx, dialogItem.SpaceID)
+		if err != nil || space.Status != domain.SpaceStatusActive {
+			return domain.ErrDialogNotFound
+		}
+		source, err := s.Messages.GetByIDForUpdate(txCtx, identity.Interaction.SourcePromptMessageID)
+		if err != nil || source.DialogID != dialogItem.ID || source.AuthorType != domain.MessageAuthorPersonalTeacher ||
+			source.PersonalTeacherID != dialogItem.PersonalTeacherID || source.Status != domain.MessageStatusActive || len(source.AssistantUI) == 0 {
+			return domain.ErrMessageNotFound
+		}
+		if source.Version != identity.Interaction.SourcePromptMessageVersion {
+			return domain.ErrMessageConflict
+		}
+		digest, err := domain.CanonicalAssistantUIDigest(source.AssistantUI)
+		if err != nil {
+			return domain.ErrMessageNotFound
+		}
+		if digest != identity.Interaction.SourceUIDigest {
+			return domain.ErrMessageConflict
+		}
+		content := domain.AnalyzeMessageContent(in.CanonicalBody, 0, 0)
+		if err := content.Validate(space.Policy); err != nil {
+			return err
+		}
+		teacherTurnSequence, err := s.allocateTeacherTurnSequence(&dialogItem)
+		if err != nil || teacherTurnSequence == nil {
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("%w: canonical student turn requires V2 ordering", domain.ErrValidation)
+		}
+		now := s.now()
+		item := domain.Message{
+			ID: s.newID(), DialogID: dialogItem.ID, AuthorType: domain.MessageAuthorUser, Channel: domain.MessageChannelWeb,
+			SenderID: identity.StudentID, ReplyToMessageID: &source.ID, Body: content.Body, Links: content.Links,
+			Status: domain.MessageStatusActive, Version: 1, MessageSequence: dialogItem.MaxMessageSequence + 1,
+			LastEventSequence: dialogItem.MaxEventSequence + 1, TeacherTurnSequence: teacherTurnSequence,
+			IdempotencyKey: identity.CanonicalMessageCommandID, CreatedAt: now, UpdatedAt: now,
+		}
+		if err := item.Validate(); err != nil {
+			return err
+		}
+		if err := s.Messages.Create(txCtx, item); err != nil {
+			return err
+		}
+		ledger, err := domain.NewCanonicalStudentTurn(domain.CanonicalStudentTurn{
+			Identity: identity, CanonicalStudentMessageID: item.ID, CreatedAt: now,
+		})
+		if err != nil {
+			return err
+		}
+		if err := s.CanonicalStudentTurns.Create(txCtx, ledger); err != nil {
+			return err
+		}
+		dialogItem.MessageCount++
+		dialogItem.MaxMessageSequence = item.MessageSequence
+		dialogItem.MaxEventSequence = item.LastEventSequence
+		dialogItem.LastMessageID = &item.ID
+		dialogItem.LastMessageAt = &now
+		dialogItem.Version++
+		dialogItem.UpdatedAt = now
+		if err := s.Dialogs.UpdateState(txCtx, dialogItem, dialogItem.Version-1); err != nil {
+			return err
+		}
+		if err := s.Members.IncrementUnreadRecipients(txCtx, item.DialogID, identity.StudentID, item.LastEventSequence); err != nil {
+			return err
+		}
+		if err := s.addEvent(txCtx, item, nil, domain.EventDialogMessageCreated, identity.StudentID, now); err != nil {
+			return err
+		}
+		observation, err := s.addTeacherRequestedEvent(txCtx, dialogItem, item, ledger.Identity.CorrelationID, &ledger.Identity.ActionReceiptID, now)
+		if err != nil {
+			return err
+		}
+		teacherRequestV2 = observation
+		canonicalObservation = &CanonicalStudentTurnObservation{
+			ActionReceiptID: identity.ActionReceiptID, CorrelationID: identity.CorrelationID, CausationID: identity.CausationID,
+			SourcePromptMessageID: identity.Interaction.SourcePromptMessageID, SourcePromptMessageVersion: identity.Interaction.SourcePromptMessageVersion,
+			BlockID: identity.Interaction.BlockID, ActionID: identity.Interaction.ActionID, SourceUIDigest: identity.Interaction.SourceUIDigest,
+			CanonicalStudentMessageID: item.ID, TeacherTurnSequence: *teacherTurnSequence,
+		}
+		result = CreateResult{Created: true, View: View{Message: item}}
+		return nil
+	})
+	if err == nil {
+		s.observeTeacherRequestV2(teacherRequestV2)
+		s.observeCanonicalStudentTurn(canonicalObservation)
+	}
+	return result, err
+}
+
+func (s Service) resolveCanonicalStudentTurnReplay(ctx context.Context, identity domain.CanonicalStudentTurnIdentity, body string) (CreateResult, bool, error) {
+	var found *domain.CanonicalStudentTurn
+	lookups := []func() (domain.CanonicalStudentTurn, error){
+		func() (domain.CanonicalStudentTurn, error) {
+			return s.CanonicalStudentTurns.GetByActionReceiptID(ctx, identity.ActionReceiptID)
+		},
+		func() (domain.CanonicalStudentTurn, error) {
+			return s.CanonicalStudentTurns.GetByCanonicalMessageCommandID(ctx, identity.CanonicalMessageCommandID)
+		},
+		func() (domain.CanonicalStudentTurn, error) {
+			return s.CanonicalStudentTurns.GetBySourceAction(ctx, identity.DialogID, identity.Interaction.SourcePromptMessageID, identity.Interaction.BlockID, identity.Interaction.ActionID)
+		},
+	}
+	for _, lookup := range lookups {
+		candidate, err := lookup()
+		if err != nil {
+			if errors.Is(err, domain.ErrNotFound) {
+				continue
+			}
+			return CreateResult{}, false, err
+		}
+		if !domain.SameCanonicalStudentTurnIdentity(candidate.Identity, identity) {
+			return CreateResult{}, false, domain.ErrIdempotencyConflict
+		}
+		if found != nil && found.CanonicalStudentMessageID != candidate.CanonicalStudentMessageID {
+			return CreateResult{}, false, domain.ErrIdempotencyConflict
+		}
+		copy := candidate
+		found = &copy
+	}
+	if found == nil {
+		return CreateResult{}, false, nil
+	}
+	item, err := s.Messages.GetByID(ctx, found.CanonicalStudentMessageID)
+	if err != nil || item.DialogID != identity.DialogID || item.AuthorType != domain.MessageAuthorUser ||
+		item.SenderID != identity.StudentID || item.Channel != domain.MessageChannelWeb || item.Body != body ||
+		item.ReplyToMessageID == nil || *item.ReplyToMessageID != identity.Interaction.SourcePromptMessageID ||
+		item.LearningActionID != nil || item.LessonContext != nil ||
+		item.IdempotencyKey != identity.CanonicalMessageCommandID {
+		return CreateResult{}, false, domain.ErrIdempotencyConflict
+	}
+	return CreateResult{View: View{Message: item}}, true, nil
+}
+
+// rejectCanonicalStudentTurnMutation keeps an accepted action receipt's
+// canonical conversation turn immutable to public edit/delete paths. A nil
+// repository preserves legacy/unit construction; production wires the private
+// ledger whenever migration 011 is installed.
+func (s Service) rejectCanonicalStudentTurnMutation(ctx context.Context, messageID uuid.UUID) error {
+	if s.CanonicalStudentTurns == nil {
+		return nil
+	}
+	_, err := s.CanonicalStudentTurns.GetByCanonicalMessageID(ctx, messageID)
+	if err == nil {
+		return domain.ErrMessageConflict
+	}
+	if errors.Is(err, domain.ErrNotFound) {
+		return nil
+	}
+	return err
 }
 
 func (s Service) GetTeacherRequestContext(ctx context.Context, dialogID, personalTeacherID, sourceMessageID uuid.UUID, before int) (TeacherRequestContext, error) {
@@ -608,6 +850,9 @@ func (s Service) Update(ctx context.Context, actor domain.Actor, in UpdateInput)
 		if err != nil {
 			return domain.ErrMessageNotFound
 		}
+		if err := s.rejectCanonicalStudentTurnMutation(txCtx, item.ID); err != nil {
+			return err
+		}
 		dialogItem, space, _, err := s.loadWritableContext(txCtx, actor, item.DialogID, true)
 		if err != nil {
 			return err
@@ -663,6 +908,9 @@ func (s Service) Delete(ctx context.Context, actor domain.Actor, in DeleteInput)
 		item, err := s.Messages.GetByIDForUpdate(txCtx, in.MessageID)
 		if err != nil {
 			return domain.ErrMessageNotFound
+		}
+		if err := s.rejectCanonicalStudentTurnMutation(txCtx, item.ID); err != nil {
+			return err
 		}
 		dialogItem, space, _, err := s.loadWritableContext(txCtx, actor, item.DialogID, true)
 		if err != nil {
@@ -1028,11 +1276,18 @@ func (s Service) addEvent(ctx context.Context, item domain.Message, attachments 
 }
 
 // addTeacherRequestedEvent emits exactly one request trigger for the committed
-// source message. Direct messages correlate to themselves.
-func (s Service) addTeacherRequestedEvent(ctx context.Context, dialogItem domain.Dialog, item domain.Message, now time.Time) (*TeacherRequestV2Observation, error) {
+// source message. Direct messages correlate to themselves; trusted canonical
+// action materialization passes its receipt identity instead.
+func (s Service) addTeacherRequestedEvent(ctx context.Context, dialogItem domain.Dialog, item domain.Message, correlationID uuid.UUID, actionReceiptID *uuid.UUID, now time.Time) (*TeacherRequestV2Observation, error) {
 	eventID := s.newID()
 	if s.TeacherOrderingV2Enabled {
-		event, err := domain.NewTeacherRequestedV2Outbox(dialogItem, item, eventID, item.ID, now)
+		var event domain.OutboxEvent
+		var err error
+		if actionReceiptID != nil {
+			event, err = domain.NewTeacherRequestedV2OutboxFromActionReceipt(dialogItem, item, eventID, correlationID, *actionReceiptID, now)
+		} else {
+			event, err = domain.NewTeacherRequestedV2Outbox(dialogItem, item, eventID, correlationID, now)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -1041,7 +1296,7 @@ func (s Service) addTeacherRequestedEvent(ctx context.Context, dialogItem domain
 		}
 		return &TeacherRequestV2Observation{
 			DialogID: dialogItem.ID, CanonicalStudentMessageID: item.ID,
-			TeacherTurnSequence: *item.TeacherTurnSequence, CorrelationID: item.ID,
+			TeacherTurnSequence: *item.TeacherTurnSequence, CorrelationID: correlationID,
 			CausationID: item.ID, SourceEventID: event.ID,
 		}, nil
 	}
@@ -1081,6 +1336,12 @@ func (s Service) allocateTeacherTurnSequence(dialogItem *domain.Dialog) (*int64,
 func (s Service) observeTeacherRequestV2(observation *TeacherRequestV2Observation) {
 	if observation != nil && s.OnTeacherRequestV2 != nil {
 		s.OnTeacherRequestV2(*observation)
+	}
+}
+
+func (s Service) observeCanonicalStudentTurn(observation *CanonicalStudentTurnObservation) {
+	if observation != nil && s.OnCanonicalStudentTurn != nil {
+		s.OnCanonicalStudentTurn(*observation)
 	}
 }
 

@@ -69,6 +69,7 @@ func NewRouter(deps RouterDependencies) http.Handler {
 			internal.Put("/teacher-dialog/ensure", handler.Ensure)
 			internal.Get("/teacher-dialog/{dialogID}/request/{sourceMessageID}", handler.RequestContext)
 			internal.Post("/teacher-dialog/{dialogID}/assistant-ui-source", handler.AssistantUISource)
+			internal.Post("/teacher-dialog/{dialogID}/canonical-student-turn", handler.CanonicalStudentTurn)
 			internal.Post("/teacher-dialog/{dialogID}/message", handler.AppendResponse)
 			internal.Post("/teacher-dialog/{dialogID}/proactive-message", handler.AppendProactive)
 			internal.Post("/teacher-dialog/{dialogID}/student-channel-message", handler.AppendStudentChannelMessage)

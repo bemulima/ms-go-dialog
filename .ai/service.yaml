@@ -71,6 +71,12 @@ capabilities:
     - name: internal_assistant_ui_source_projection
       status: implemented
       source_path: docs/http-contract.md
+    - name: canonical_student_turn_contract
+      status: implemented_gated_disabled_by_default
+      source_path: docs/integration-contract.md
+    - name: teacher_turn_ordering_v2
+      status: implemented_gated_disabled_by_default
+      source_path: docs/realtime-delivery.md
 relations:
     - name: depends_on
       value: postgres

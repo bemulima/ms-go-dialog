@@ -47,3 +47,14 @@ func TestMetricsIncludesTeacherRequestedV2CounterWithoutLabels(t *testing.T) {
 		t.Fatalf("unexpected teacher requested v2 metrics: %s", response.Body.String())
 	}
 }
+
+func TestMetricsIncludesCanonicalStudentTurnCounterWithoutLabels(t *testing.T) {
+	metrics := NewMetrics()
+	metrics.Increment(CanonicalStudentTurnMaterializedTotal, 1)
+
+	response := httptest.NewRecorder()
+	metrics.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if !strings.Contains(response.Body.String(), CanonicalStudentTurnMaterializedTotal+" 1") || strings.Contains(response.Body.String(), CanonicalStudentTurnMaterializedTotal+"{") {
+		t.Fatalf("unexpected canonical materialization metrics: %s", response.Body.String())
+	}
+}

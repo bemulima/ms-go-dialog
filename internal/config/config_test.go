@@ -30,7 +30,16 @@ func TestConfig_ValidateModesAndTicketTTL(t *testing.T) {
 	if err := enabled.Validate(); err != nil {
 		t.Fatalf("enabled teacher ordering v2 config rejected: %v", err)
 	}
+	enabled.DialogCanonicalStudentTurnEnabled = true
+	if err := enabled.Validate(); err != nil {
+		t.Fatalf("canonical materialization with ordering config rejected: %v", err)
+	}
 	invalid := valid
+	invalid.DialogCanonicalStudentTurnEnabled = true
+	if err := invalid.Validate(); err == nil {
+		t.Fatal("canonical materialization without ordering v2 was accepted")
+	}
+	invalid = valid
 	invalid.RealtimeTicketTTLSeconds = 31
 	if err := invalid.Validate(); err == nil {
 		t.Fatal("ticket TTL above hard maximum accepted")
@@ -64,6 +73,7 @@ func TestConfig_ValidateModesAndTicketTTL(t *testing.T) {
 
 func TestLoad_TeacherOrderingV2FlagDefaultsFalseAndCanEnable(t *testing.T) {
 	t.Setenv("DIALOG_TEACHER_ORDERING_V2_ENABLED", "false")
+	t.Setenv("DIALOG_CANONICAL_STUDENT_TURN_ENABLED", "false")
 	cfg, err := Load()
 	if err != nil || cfg.DialogTeacherOrderingV2Enabled {
 		t.Fatalf("default-disabled teacher ordering config: cfg=%+v err=%v", cfg, err)
@@ -72,5 +82,18 @@ func TestLoad_TeacherOrderingV2FlagDefaultsFalseAndCanEnable(t *testing.T) {
 	cfg, err = Load()
 	if err != nil || !cfg.DialogTeacherOrderingV2Enabled {
 		t.Fatalf("enabled teacher ordering config: cfg=%+v err=%v", cfg, err)
+	}
+}
+
+func TestLoad_CanonicalStudentTurnRequiresAndDefaultsBehindOrderingV2(t *testing.T) {
+	t.Setenv("DIALOG_TEACHER_ORDERING_V2_ENABLED", "false")
+	t.Setenv("DIALOG_CANONICAL_STUDENT_TURN_ENABLED", "true")
+	if _, err := Load(); err == nil {
+		t.Fatal("canonical materialization enabled without ordering v2")
+	}
+	t.Setenv("DIALOG_TEACHER_ORDERING_V2_ENABLED", "true")
+	cfg, err := Load()
+	if err != nil || !cfg.DialogCanonicalStudentTurnEnabled || !cfg.DialogTeacherOrderingV2Enabled {
+		t.Fatalf("canonical materialization config mismatch: cfg=%+v err=%v", cfg, err)
 	}
 }

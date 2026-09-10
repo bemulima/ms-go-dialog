@@ -43,6 +43,8 @@ func classifyError(err error) (int, string, string) {
 		return http.StatusUnprocessableEntity, "participant_unavailable", "one or more participants are unavailable"
 	case errors.Is(err, domain.ErrDialogClosed):
 		return http.StatusConflict, "dialog_closed", "dialog is not writable"
+	case errors.Is(err, domain.ErrFeatureDisabled):
+		return http.StatusConflict, "feature_disabled", "requested operation is not enabled"
 	case errors.Is(err, domain.ErrMemberLimit):
 		return http.StatusConflict, "member_limit_exceeded", "dialog member limit is exceeded"
 	case errors.Is(err, domain.ErrLastOwner):

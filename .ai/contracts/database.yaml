@@ -23,6 +23,11 @@ invariants:
     - v1 lesson_id equals the lesson teacher dialog context_id; legacy revision/selection anchors remain readable and replayable
     - body updates retain the immutable lesson_context; message deletion clears it together with user content
     - assistant_ui is nullable JSONB limited to PersonalTeacher-authored non-deleted messages and the assistant-ui.v1 envelope
+    - max_teacher_turn_sequence and nullable dialog_message.teacher_turn_sequence form a private Dialog-owned dense V2 teacher-request order, never a derived message/event/timestamp/frontend order or public projection
+    - a new qualifying Student source receives teacher_turn_sequence only under DIALOG_TEACHER_ORDERING_V2_ENABLED after idempotency replay; PersonalTeacher replies/proactive messages and legacy rows remain null
+    - source message, Dialog high-water counter, normal lifecycle evidence, and exactly one teacher request outbox record commit atomically; V1 is retained when the flag is disabled and V1/V2 are never dual emitted
+    - migration 011 dialog_canonical_student_turn is private receipt evidence only: receipt/command/source IDs, source version/digest, opaque IDs, canonical message link, correlation/causation; no body, browser value, Student state, or assistant UI
+    - canonical receipt uniqueness is action_receipt_id, canonical_message_command_id, canonical_student_message_id, and (dialog_id, source_prompt_message_id, block_id, action_id); a canonical public message is immutable to update/delete
     - message.created and teacher.requested evidence for one source mutation may share one event sequence and differ by subject
     - a student message update/delete in an active teacher dialog atomically stores ordinary lifecycle evidence and body-free dialog.teacher.context-mutated evidence with one event sequence
     - proactive PersonalTeacher messages are restricted to general_teacher dialogs and have no synthetic user source, reply, learning action, or lesson context
@@ -37,4 +42,16 @@ migration_policy:
     message_channel_rollback: migration 006 fails closed while non-web messages exist
     assistant_ui_rollback: migration 007 fails closed while structured messages exist
     teacher_context_contracts_rollback: migration 009 fails closed while body-free mutation events exist
+    teacher_turn_ordering_v2_rollback: migration 010 fails closed while any allocated turn or V2 teacher request exists
+    canonical_student_turn_rollback: migration 011 fails closed while any private receipt evidence exists
+canonical_student_turn:
+    status: S2_internal_runtime_gated_disabled_by_default
+    identity_schema: canonical-student-turn-identity.v1
+    interaction_schema: canonical-student-turn-interaction.v1
+    runtime: DIALOG_CANONICAL_STUDENT_TURN_ENABLED defaults false and requires teacher ordering V2; new disabled receipts have no effect while exact committed replay remains recoverable
+    persistence: migration 011 private ledger; normal message/reply/dense order/lifecycle/V2 trigger commit atomically
+    trusted_only: action_receipt_id plus source_prompt_message_id/version, block_id, action_id, and source_ui_digest; browser action payload and Student state are excluded
+    causal_ledger: source_prompt_message_id -> action_receipt_id -> canonical_student_message_id -> source_event_id -> teacher_job_id -> teacher_response_message_id
+    identifier_type: UUID, including correlation_id and causation_id
+    terminal_failure_owner: ms-go-teacher-agent durable records and structured logs; no_effect_proof_id, recoverable_outcome_id, and bounded failure_code are not Dialog persistence in S0
 repository_ports: internal/domain/repository

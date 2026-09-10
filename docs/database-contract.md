@@ -27,12 +27,15 @@ Applied migrations are immutable. The initial group shape requires at least two 
 - An internally appended PersonalTeacher response or general-dialog proactive offer, dialog counters, student unread increment, and `dialog.message.created` evidence commit together.
 - Read cursor, unread decrement, event sequence, and outbox insert commit together for one member only.
 - Attachment ready/failed transitions and their message/dialog event evidence commit together after idempotent FileStorage work for active messages. Hidden messages finish the attachment transition without public event evidence; a later moderation restore carries the authoritative attachment snapshot.
+- Migration `010_teacher_turn_ordering_v2` adds only the private Dialog high-water `max_teacher_turn_sequence` and nullable `dialog_message.teacher_turn_sequence`; it does not backfill historical rows. Migration `011_canonical_student_turn` adds a private receipt ledger with receipt/command/source evidence, canonical message link, correlation/causation, and a unique source action. It never stores body, browser value, Student state, or assistant UI. Its down migration fails closed once receipt evidence exists. With both rollout gates enabled, the receipt row, normal reply message, dense sequence/high-water, lifecycle evidence, and one body-free V2 Teacher trigger commit atomically.
 
 Attachment activation and deletion batches are claimed atomically with `FOR UPDATE SKIP LOCKED` by moving the corresponding next-attempt timestamp to a finite lease deadline. This permits multiple worker replicas without concurrent normal processing; an abandoned claim becomes eligible again after the lease.
 
 ## Sequence distinction
 
 `dialog.max_message_sequence` increments only for message creation. `dialog.max_event_sequence` increments for every durable change. `dialog_message.message_sequence` never changes; `last_event_sequence` advances on edits, deletes, moderation, or attachment projection changes.
+
+`teacher_turn_sequence` is a dense per-dialog private Teacher-request order assigned by Dialog, not inferred from `message_sequence`, `event_sequence`, timestamps, NATS order, WebSocket order, or frontend order. It is nullable for legacy rows and all non-source messages. The partial unique index prevents duplicate non-null turns per dialog; checks require a non-negative high-water and a positive user-authored stored turn. It is not in public REST/WS or ordinary lifecycle projections.
 
 Migration `004_teacher_dialogs` is additive and preserves existing personal/group rows. Its down migration fails closed while teacher-dialog, teacher-message, LearningAction, or teacher-request data exists instead of silently deleting it.
 
@@ -63,3 +66,8 @@ v1 anchor exists, then restores the legacy-only constraint.
 Migration `009_teacher_context_contracts` additively allowlists the body-free
 `dialog.teacher.context-mutated` outbox subject. No table or message row shape
 changes. Its down migration fails closed while such events remain.
+
+Migration `010_teacher_turn_ordering_v2` is additive and intentionally leaves
+all existing messages unsequenced. Its down migration fails closed when any
+high-water is non-zero, any stored turn exists, or a V2 Teacher request outbox
+row exists; it never deletes or invents historical order.

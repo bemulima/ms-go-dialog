@@ -17,6 +17,7 @@ var (
 	ErrMessageNotFound        = errors.New("message not found")
 	ErrMessageConflict        = errors.New("message version conflict")
 	ErrIdempotencyConflict    = errors.New("idempotency conflict")
+	ErrFeatureDisabled        = errors.New("feature is disabled")
 	ErrInvalidContent         = errors.New("invalid message content")
 	ErrInvalidReadSequence    = errors.New("invalid read sequence")
 	ErrLinksDisabled          = errors.New("links are disabled")

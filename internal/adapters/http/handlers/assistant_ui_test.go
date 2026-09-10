@@ -17,12 +17,13 @@ import (
 
 func TestNewMessageResponseCarriesOpaqueAssistantUI(t *testing.T) {
 	now := time.Now().UTC()
+	teacherTurnSequence := int64(1)
 	assistantUI := json.RawMessage(`{"schema":"assistant-ui.v1","blocks":[{"type":"future","opaque":true}]}`)
 	response := newMessageResponse(messageuc.View{Message: domain.Message{
 		ID: uuid.New(), DialogID: uuid.New(), AuthorType: domain.MessageAuthorPersonalTeacher,
 		Channel: domain.MessageChannelWeb, PersonalTeacherID: uuid.New(), AssistantUI: assistantUI,
 		Body: "plain fallback", Status: domain.MessageStatusActive, Version: 1,
-		MessageSequence: 1, LastEventSequence: 1, IdempotencyKey: uuid.New(), CreatedAt: now, UpdatedAt: now,
+		MessageSequence: 1, LastEventSequence: 1, TeacherTurnSequence: &teacherTurnSequence, IdempotencyKey: uuid.New(), CreatedAt: now, UpdatedAt: now,
 	}})
 	encoded, err := json.Marshal(response)
 	if err != nil {
@@ -32,7 +33,7 @@ func TestNewMessageResponseCarriesOpaqueAssistantUI(t *testing.T) {
 	if err := json.Unmarshal(encoded, &payload); err != nil {
 		t.Fatal(err)
 	}
-	if string(payload["assistant_ui"]) != string(assistantUI) || string(payload["body"]) != `"plain fallback"` {
+	if string(payload["assistant_ui"]) != string(assistantUI) || string(payload["body"]) != `"plain fallback"` || payload["teacher_turn_sequence"] != nil {
 		t.Fatalf("message response lost structured UI or fallback: %s", encoded)
 	}
 }

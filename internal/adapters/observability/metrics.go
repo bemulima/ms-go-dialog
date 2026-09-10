@@ -14,16 +14,17 @@ import (
 )
 
 const (
-	AttachmentWorkerActivatedTotal = "dialog_attachment_worker_activated_total"
-	AttachmentWorkerDeletedTotal   = "dialog_attachment_worker_deleted_total"
-	AttachmentWorkerFailedTotal    = "dialog_attachment_worker_failed_total"
-	AttachmentWorkerErrorsTotal    = "dialog_attachment_worker_errors_total"
-	OutboxPublishedTotal           = "dialog_outbox_published_total"
-	OutboxFailedTotal              = "dialog_outbox_failed_total"
-	OutboxWorkerErrorsTotal        = "dialog_outbox_worker_errors_total"
-	TeacherRequestedV2Total        = "dialog_teacher_requested_v2_total"
-	TicketCleanupDeletedTotal      = "dialog_ticket_cleanup_deleted_total"
-	TicketCleanupErrorsTotal       = "dialog_ticket_cleanup_errors_total"
+	AttachmentWorkerActivatedTotal        = "dialog_attachment_worker_activated_total"
+	AttachmentWorkerDeletedTotal          = "dialog_attachment_worker_deleted_total"
+	AttachmentWorkerFailedTotal           = "dialog_attachment_worker_failed_total"
+	AttachmentWorkerErrorsTotal           = "dialog_attachment_worker_errors_total"
+	OutboxPublishedTotal                  = "dialog_outbox_published_total"
+	OutboxFailedTotal                     = "dialog_outbox_failed_total"
+	OutboxWorkerErrorsTotal               = "dialog_outbox_worker_errors_total"
+	TeacherRequestedV2Total               = "dialog_teacher_requested_v2_total"
+	CanonicalStudentTurnMaterializedTotal = "dialog_canonical_student_turn_materialized_total"
+	TicketCleanupDeletedTotal             = "dialog_ticket_cleanup_deleted_total"
+	TicketCleanupErrorsTotal              = "dialog_ticket_cleanup_errors_total"
 )
 
 var defaultCounterNames = []string{
@@ -35,6 +36,7 @@ var defaultCounterNames = []string{
 	OutboxFailedTotal,
 	OutboxWorkerErrorsTotal,
 	TeacherRequestedV2Total,
+	CanonicalStudentTurnMaterializedTotal,
 	TicketCleanupDeletedTotal,
 	TicketCleanupErrorsTotal,
 }

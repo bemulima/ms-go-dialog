@@ -51,6 +51,49 @@ teacher_requested:
         - lesson_context
         - mastery
         - dialog history
+    canonical_v2:
+        status: implemented_gated_disabled_by_default
+        schema_version: 2
+        source: new qualifying student-authored source message in a teacher dialog
+        rollout_flag: DIALOG_TEACHER_ORDERING_V2_ENABLED
+        emission: exactly one V2 event when the flag is enabled; V1 only when disabled; never dual emit
+        allocation: Dialog assigns a dense per-dialog teacher_turn_sequence under its existing locked dialog row after idempotency replay and before the message, counter, and outbox commit
+        legacy: existing rows remain unsequenced and are not backfilled
+        adds:
+            - canonical_student_message_id
+            - teacher_turn_sequence
+            - correlation_id
+            - causation_id
+            - optional action_receipt_id only for trusted canonical action materialization; equal to correlation_id
+            - optional source_message_version for queued V2 compatibility; every newly emitted V2 event carries the positive source-message version captured with its outbox row
+            - optional nullable reply_to_message_id for queued V2 compatibility; every newly emitted V2 event explicitly carries the source message reply UUID or null
+        causal_ledger: source_prompt_message_id -> action_receipt_id -> canonical_student_message_id -> source_event_id -> teacher_job_id -> teacher_response_message_id
+        identifier_type: UUID, including correlation_id and causation_id
+        direct_text_correlation: canonical_student_message_id
+        action_correlation: action_receipt_id across receipt, message, request, job, and response
+        causation: source_prompt_message_id for receipt validation; action_receipt_id for Dialog materialization; canonical_student_message_id for the request event; source_event_id for Teacher-job intake; teacher_job_id for response append
+        observability:
+            - canonical_student_message_id
+            - source_event_id
+            - teacher_job_id
+            - teacher_response_message_id
+            - no_effect_proof_id
+            - recoverable_outcome_id
+            - failure_code
+        observability_storage: owning durable records and structured logs; identifiers are never metric labels
+        excludes:
+            - trusted interaction metadata
+            - block_id
+            - action_id
+            - source_ui_digest
+            - student_command_id
+            - browser action payload
+            - assistant_ui
+            - message body
+            - lesson_context
+            - mastery
+            - dialog history
+        runtime: direct source producer is gated by DIALOG_TEACHER_ORDERING_V2_ENABLED; trusted canonical action materialization additionally requires DIALOG_CANONICAL_STUDENT_TURN_ENABLED and never emits V1
 teacher_context_mutated:
     schema_version: 1
     audience: ms-go-teacher-agent only; not projected to WebSocket

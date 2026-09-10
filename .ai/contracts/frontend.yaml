@@ -37,3 +37,22 @@ teacher_dialogs:
         semantics: opaque to Dialog; consumers validate supported block discriminators independently and always retain body fallback
         browser_write: forbidden on create and update
         stored_source_projection: internal-only; browser and admin clients cannot call it
+    canonical_action:
+        status: S2_server_only_materialization_disabled_by_default
+        browser_command_owner: ms-go-teacher-agent
+        browser_dialog_dual_write: forbidden
+        dialog_materialization: exact-token internal nested identity plus canonical_body; requires DIALOG_CANONICAL_STUDENT_TURN_ENABLED and teacher ordering V2
+        private_response_fields: never exposed in REST/WebSocket
+        forbidden_browser_fields:
+            - interaction
+            - action_receipt_id
+            - correlation_id
+            - causation_id
+            - teacher_turn_sequence
+            - source_prompt_message_id
+            - source_prompt_message_version
+            - source_ui_digest
+        teacher_action_only_fields:
+            - block_id
+            - action_id
+        projection: ordinary message.created REST/WebSocket evidence only

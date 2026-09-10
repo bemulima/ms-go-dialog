@@ -34,6 +34,8 @@ services:
       SERVICE_MODE: all
       READINESS_TIMEOUT_SECONDS: "2"
       ATTACHMENT_WORKER_LEASE_SECONDS: "120"
+      DIALOG_TEACHER_ORDERING_V2_ENABLED: "false"
+      DIALOG_CANONICAL_STUDENT_TURN_ENABLED: "false"
     depends_on:
       postgres:
         condition: service_healthy

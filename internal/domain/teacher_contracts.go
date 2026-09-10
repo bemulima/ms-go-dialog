@@ -120,8 +120,15 @@ func validActiveTeacherBinding(dialog Dialog) bool {
 }
 
 // TeacherRequestedV2Payload is the body-free durable request contract for a
-// Dialog-owned direct student turn. Its source message is both the canonical
-// student message and correlation ID; causation is the source message.
+// Dialog-owned teacher turn. An action materialized from a persisted trusted
+// receipt carries only that receipt UUID (never its block/action/digest/UI or
+// body); ordinary text keeps action_receipt_id absent.
+//
+// Direct student text uses its message ID as both canonical_student_message_id
+// and correlation_id. Trusted canonical action materialization retains the
+// message as canonical_student_message_id while using the Teacher-owned action
+// receipt as correlation_id. For every V2 request, causation_id is the
+// canonical student message: the immediate cause of the request event.
 type TeacherRequestedV2Payload struct {
 	SchemaVersion         int16     `json:"schema_version"`
 	EventID               uuid.UUID `json:"event_id"`
@@ -145,6 +152,7 @@ type TeacherRequestedV2Payload struct {
 	LearningActionID          *uuid.UUID         `json:"learning_action_id,omitempty"`
 	Channel                   MessageChannel     `json:"channel"`
 	CanonicalStudentMessageID uuid.UUID          `json:"canonical_student_message_id"`
+	ActionReceiptID           *uuid.UUID         `json:"action_receipt_id,omitempty"`
 	TeacherTurnSequence       int64              `json:"teacher_turn_sequence"`
 	CorrelationID             uuid.UUID          `json:"correlation_id"`
 	CausationID               uuid.UUID          `json:"causation_id"`
@@ -154,6 +162,21 @@ type TeacherRequestedV2Payload struct {
 // Dialog counter, and outbox row are committed by the caller in one database
 // transaction. The caller must already hold the Dialog row lock.
 func NewTeacherRequestedV2Outbox(dialog Dialog, message Message, eventID, correlationID uuid.UUID, occurredAt time.Time) (OutboxEvent, error) {
+	return newTeacherRequestedV2Outbox(dialog, message, eventID, correlationID, nil, occurredAt)
+}
+
+// NewTeacherRequestedV2OutboxFromActionReceipt is restricted to a committed
+// Dialog receipt ledger. It adds the receipt UUID so Teacher can distinguish a
+// trusted UI action from direct text without receiving private interaction
+// metadata. student_command_id intentionally does not exist in Dialog S2.
+func NewTeacherRequestedV2OutboxFromActionReceipt(dialog Dialog, message Message, eventID, correlationID, actionReceiptID uuid.UUID, occurredAt time.Time) (OutboxEvent, error) {
+	if actionReceiptID == uuid.Nil || correlationID != actionReceiptID {
+		return OutboxEvent{}, fmt.Errorf("%w: invalid teacher request action receipt", ErrValidation)
+	}
+	return newTeacherRequestedV2Outbox(dialog, message, eventID, correlationID, &actionReceiptID, occurredAt)
+}
+
+func newTeacherRequestedV2Outbox(dialog Dialog, message Message, eventID, correlationID uuid.UUID, actionReceiptID *uuid.UUID, occurredAt time.Time) (OutboxEvent, error) {
 	if eventID == uuid.Nil || correlationID == uuid.Nil || occurredAt.IsZero() || !validActiveTeacherBinding(dialog) ||
 		dialog.ID != message.DialogID || message.ID == uuid.Nil || message.AuthorType != MessageAuthorUser ||
 		message.SenderID != dialog.StudentID || !message.Channel.Valid() || message.MessageSequence < 1 || message.Version < 1 ||
@@ -173,7 +196,8 @@ func NewTeacherRequestedV2Outbox(dialog Dialog, message Message, eventID, correl
 		ContextType: dialog.TeacherContextType, ContextID: dialog.ContextID,
 		LearningActionID: message.LearningActionID, Channel: message.Channel,
 		CanonicalStudentMessageID: message.ID, TeacherTurnSequence: *message.TeacherTurnSequence,
-		CorrelationID: correlationID, CausationID: message.ID,
+		ActionReceiptID: actionReceiptID,
+		CorrelationID:   correlationID, CausationID: message.ID,
 	})
 	if err != nil {
 		return OutboxEvent{}, err

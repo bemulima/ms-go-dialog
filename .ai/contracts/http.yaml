@@ -53,6 +53,7 @@ route_groups:
         - PUT /teacher-dialog/ensure
         - GET /teacher-dialog/{dialogID}/request/{sourceMessageID}
         - POST /teacher-dialog/{dialogID}/assistant-ui-source
+        - POST /teacher-dialog/{dialogID}/canonical-student-turn
         - POST /teacher-dialog/{dialogID}/message
         - POST /teacher-dialog/{dialogID}/proactive-message
         - POST /teacher-dialog/{dialogID}/student-channel-message
@@ -89,3 +90,16 @@ teacher_dialog:
             response_allowlist: binding ids/context, message id/sequence/version, stored canonical assistant_ui
             absence_policy: wrong, missing, inactive, or cross-binding sources are indistinguishable 404
             exposure: internal exact-token only; no browser or admin route
+    canonical_student_turn:
+        status: S2_internal_runtime_gated_disabled_by_default
+        public_message_create: does not accept interaction, receipt, correlation, causation, ordering, source prompt, source_ui_digest, block_id, or action_id fields
+        materialization:
+            route: POST /internal/v1/teacher-dialog/{dialogID}/canonical-student-turn
+            authentication: exact X-Internal-Token
+            request: nested identity canonical-student-turn-identity.v1 plus canonical_body; strict unknown-field rejection
+            response: ordinary existing message response only; no private identity, receipt, digest, command, or sequence
+            status_codes: 201 new, 200 exact committed replay, 409 identity/body/metadata/source conflict or disabled new receipt
+            context: active bound general_teacher only
+            rollout: DIALOG_CANONICAL_STUDENT_TURN_ENABLED=false; requires DIALOG_TEACHER_ORDERING_V2_ENABLED
+            privacy: ledger never appears in public REST, WebSocket, or ordinary lifecycle event
+        browser_dual_write: forbidden

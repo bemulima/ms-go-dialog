@@ -60,6 +60,7 @@ func run() error {
 	dialogs := &postgres.DialogRepository{Pool: pool}
 	members := &postgres.MemberRepository{Pool: pool}
 	messages := &postgres.MessageRepository{Pool: pool}
+	canonicalStudentTurns := &postgres.CanonicalStudentTurnRepository{Pool: pool}
 	attachments := &postgres.AttachmentRepository{Pool: pool}
 	outbox := &postgres.OutboxRepository{Pool: pool}
 	tickets := &postgres.RealtimeTicketRepository{Pool: pool}
@@ -76,9 +77,9 @@ func run() error {
 	}
 	metrics := observability.NewMetrics()
 	messageService := &messageuc.Service{
-		Spaces: spaces, Dialogs: dialogs, Members: members, Messages: messages, TeacherMessages: messages,
+		Spaces: spaces, Dialogs: dialogs, Members: members, Messages: messages, TeacherMessages: messages, CanonicalStudentTurns: canonicalStudentTurns,
 		Attachments: attachments, Outbox: outbox, Tx: tx,
-		Blocks: blocks, TeacherOrderingV2Enabled: cfg.DialogTeacherOrderingV2Enabled,
+		Blocks: blocks, TeacherOrderingV2Enabled: cfg.DialogTeacherOrderingV2Enabled, CanonicalStudentTurnEnabled: cfg.DialogCanonicalStudentTurnEnabled,
 		OnTeacherRequestV2: func(observation messageuc.TeacherRequestV2Observation) {
 			metrics.Increment(observability.TeacherRequestedV2Total, 1)
 			logger.Info("teacher request v2 committed",
@@ -88,6 +89,21 @@ func run() error {
 				zap.String("correlation_id", observation.CorrelationID.String()),
 				zap.String("causation_id", observation.CausationID.String()),
 				zap.String("source_event_id", observation.SourceEventID.String()),
+			)
+		},
+		OnCanonicalStudentTurn: func(observation messageuc.CanonicalStudentTurnObservation) {
+			metrics.Increment(observability.CanonicalStudentTurnMaterializedTotal, 1)
+			logger.Info("canonical student turn committed",
+				zap.String("action_receipt_id", observation.ActionReceiptID.String()),
+				zap.String("correlation_id", observation.CorrelationID.String()),
+				zap.String("causation_id", observation.CausationID.String()),
+				zap.String("source_prompt_message_id", observation.SourcePromptMessageID.String()),
+				zap.Int("source_prompt_message_version", observation.SourcePromptMessageVersion),
+				zap.String("block_id", observation.BlockID),
+				zap.String("action_id", observation.ActionID),
+				zap.String("source_ui_digest", observation.SourceUIDigest),
+				zap.String("canonical_student_message_id", observation.CanonicalStudentMessageID.String()),
+				zap.Int64("teacher_turn_sequence", observation.TeacherTurnSequence),
 			)
 		},
 	}

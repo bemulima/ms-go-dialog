@@ -1,7 +1,10 @@
 package domain
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"testing"
 	"time"
 
@@ -121,6 +124,92 @@ func TestNewTeacherRequestedV2OutboxIsBodyFreeAndCausallyBound(t *testing.T) {
 	if _, err := NewTeacherRequestedV2Outbox(dialogItem, message, eventID, messageID, now); err == nil {
 		t.Fatal("V2 request accepted a nil reply message UUID")
 	}
+}
+
+func TestNewTeacherRequestedV2OutboxFromActionReceiptCarriesOnlyTrustedReceiptUUID(t *testing.T) {
+	now := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+	dialogID, studentID, teacherID, messageID, sourcePromptID, eventID, receiptID := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	sequence := int64(1)
+	dialogItem := Dialog{ID: dialogID, Type: DialogTypeTeacher, Status: DialogStatusActive, StudentID: studentID,
+		PersonalTeacherID: teacherID, TeacherContextType: TeacherContextGeneralTeacher, MaxTeacherTurnSequence: sequence, MaxEventSequence: 2}
+	message := Message{ID: messageID, DialogID: dialogID, AuthorType: MessageAuthorUser, Channel: MessageChannelWeb, SenderID: studentID,
+		ReplyToMessageID: &sourcePromptID, Status: MessageStatusActive, Version: 3, MessageSequence: 2, LastEventSequence: 2, TeacherTurnSequence: &sequence}
+	event, err := NewTeacherRequestedV2OutboxFromActionReceipt(dialogItem, message, eventID, receiptID, receiptID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if string(payload["action_receipt_id"]) != `"`+receiptID.String()+`"` || string(payload["correlation_id"]) != `"`+receiptID.String()+`"` ||
+		string(payload["causation_id"]) != `"`+messageID.String()+`"` ||
+		string(payload["source_message_version"]) != "3" || string(payload["reply_to_message_id"]) != `"`+sourcePromptID.String()+`"` {
+		t.Fatalf("action receipt causal payload mismatch: %s", event.Payload)
+	}
+	for _, forbidden := range []string{"body", "assistant_ui", "block_id", "action_id", "source_ui_digest", "student_command_id"} {
+		if _, exists := payload[forbidden]; exists {
+			t.Fatalf("action v2 payload leaked %q: %s", forbidden, event.Payload)
+		}
+	}
+	if _, err := NewTeacherRequestedV2OutboxFromActionReceipt(dialogItem, message, eventID, uuid.New(), receiptID, now); err == nil {
+		t.Fatal("action receipt payload accepted correlation other than its receipt")
+	}
+}
+
+func TestTeacherRequestedV2PayloadStrictDecodeAcceptsLegacyAbsenceAndRejectsUnknown(t *testing.T) {
+	now := time.Date(2026, 9, 10, 13, 0, 0, 0, time.UTC)
+	dialogID, studentID, teacherID, messageID, eventID := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	sequence := int64(1)
+	dialogItem := Dialog{ID: dialogID, Type: DialogTypeTeacher, Status: DialogStatusActive, StudentID: studentID,
+		PersonalTeacherID: teacherID, TeacherContextType: TeacherContextGeneralTeacher, MaxTeacherTurnSequence: sequence, MaxEventSequence: 1}
+	message := Message{ID: messageID, DialogID: dialogID, AuthorType: MessageAuthorUser, Channel: MessageChannelWeb, SenderID: studentID,
+		Status: MessageStatusActive, Version: 1, MessageSequence: 1, LastEventSequence: 1, TeacherTurnSequence: &sequence}
+	event, err := NewTeacherRequestedV2Outbox(dialogItem, message, eventID, messageID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var legacy map[string]json.RawMessage
+	if err := json.Unmarshal(event.Payload, &legacy); err != nil {
+		t.Fatal(err)
+	}
+	delete(legacy, "source_message_version")
+	delete(legacy, "reply_to_message_id")
+	legacyPayload, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := decodeTeacherRequestedV2PayloadStrict(legacyPayload)
+	if err != nil {
+		t.Fatalf("legacy V2 payload without additive fields must decode: %v", err)
+	}
+	if decoded.SourceMessageVersion != nil || decoded.ReplyToMessageID != nil {
+		t.Fatalf("legacy absent fields were not preserved as absent: %+v", decoded)
+	}
+	legacy["unknown"] = json.RawMessage(`true`)
+	unknownPayload, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := decodeTeacherRequestedV2PayloadStrict(unknownPayload); err == nil {
+		t.Fatal("strict V2 decoder accepted an unknown field")
+	}
+}
+
+func decodeTeacherRequestedV2PayloadStrict(payload []byte) (TeacherRequestedV2Payload, error) {
+	var decoded TeacherRequestedV2Payload
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&decoded); err != nil {
+		return TeacherRequestedV2Payload{}, err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return TeacherRequestedV2Payload{}, fmt.Errorf("unexpected additional JSON value")
+		}
+		return TeacherRequestedV2Payload{}, err
+	}
+	return decoded, nil
 }
 
 func TestNewTeacherContextMutationOutboxRejectsNonUserAndWrongLifecycle(t *testing.T) {

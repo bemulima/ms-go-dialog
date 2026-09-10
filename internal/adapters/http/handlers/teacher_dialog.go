@@ -106,6 +106,43 @@ func (h TeacherDialogHandler) AssistantUISource(w http.ResponseWriter, r *http.R
 	writeJSON(w, http.StatusOK, result)
 }
 
+// CanonicalStudentTurn accepts only a trusted service command protected by the
+// internal exact-token middleware. It returns the ordinary message shape and
+// intentionally never serializes the private receipt/interaction ledger.
+func (h TeacherDialogHandler) CanonicalStudentTurn(w http.ResponseWriter, r *http.Request) {
+	dialogID, err := uuid.Parse(chi.URLParam(r, "dialogID"))
+	if err != nil {
+		WriteError(w, r, domain.ErrValidation)
+		return
+	}
+	var request struct {
+		Identity      domain.CanonicalStudentTurnIdentity `json:"identity"`
+		CanonicalBody string                              `json:"canonical_body"`
+	}
+	// Keep the ordinary JSON ceiling: canonical_body is subject to the active
+	// space's normal content policy, not an accidental smaller route limit.
+	if err := decodeJSON(w, r, &request); err != nil {
+		WriteError(w, r, domain.ErrValidation)
+		return
+	}
+	if request.Identity.DialogID != dialogID {
+		WriteError(w, r, domain.ErrValidation)
+		return
+	}
+	result, err := h.Messages.MaterializeCanonicalStudentTurn(r.Context(), messageuc.MaterializeCanonicalStudentTurnInput{
+		Identity: request.Identity, CanonicalBody: request.CanonicalBody,
+	})
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	status := http.StatusOK
+	if result.Created {
+		status = http.StatusCreated
+	}
+	writeJSON(w, status, newMessageResponse(result.View))
+}
+
 func (h TeacherDialogHandler) AppendResponse(w http.ResponseWriter, r *http.Request) {
 	dialogID, err := uuid.Parse(chi.URLParam(r, "dialogID"))
 	if err != nil {

@@ -123,6 +123,14 @@ opaque. `body` remains present as the mandatory plain-text fallback. Browser
 `POST /message/create` and `PUT /message/update/{messageID}` reject
 `assistant_ui` as an unknown field.
 
+S0/S2 reserve no public canonical-action message input. Browser
+`POST /message/create` continues to reject `interaction`, `action_receipt_id`,
+`correlation_id`, `causation_id`, `teacher_turn_sequence`, source prompt
+identity/version, `source_ui_digest`, `block_id`, and `action_id` as unknown
+fields. Private ordering V2 and the receipt ledger have no public response
+field. Browsers call Teacher's action command only and never dual-write a
+Teacher action plus a Dialog message.
+
 ## Admin API
 
 ```http
@@ -153,6 +161,7 @@ POST /internal/v1/teacher-dialog/{dialogID}/message
 POST /internal/v1/teacher-dialog/{dialogID}/proactive-message
 POST /internal/v1/teacher-dialog/{dialogID}/student-channel-message
 POST /internal/v1/teacher-dialog/{dialogID}/assistant-ui-source
+POST /internal/v1/teacher-dialog/{dialogID}/canonical-student-turn
 ```
 
 Ensure accepts `space_key`, `student_id`, `personal_teacher_id`, `context_type`, and optional `context_id`; it is idempotent for that binding.
@@ -185,3 +194,33 @@ or cross-binding targets all return the same `404 message_not_found`. Malformed,
 unknown-field, and oversized requests return `400`. Dialog validates only the
 existing `assistant-ui.v1` root envelope; Teacher owns block semantics and ID
 resolution. This endpoint exists only under the exact-token internal router.
+
+Canonical materialization has one strict nested request contract (the standard
+1 MiB JSON request ceiling; unknown fields are rejected):
+
+```json
+{
+  "identity": {
+    "schema": "canonical-student-turn-identity.v1",
+    "dialog_id": "<route UUID>",
+    "student_id": "<uuid>",
+    "personal_teacher_id": "<uuid>",
+    "action_receipt_id": "<uuid>",
+    "correlation_id": "<same receipt UUID>",
+    "causation_id": "<same receipt UUID>",
+    "canonical_message_command_id": "<uuid>",
+    "interaction": {"schema":"canonical-student-turn-interaction.v1", "kind":"teacher_action_receipt", "action_receipt_id":"<same receipt UUID>", "source_prompt_message_id":"<uuid>", "source_prompt_message_version":1, "block_id":"opaque-id", "action_id":"opaque-id", "source_ui_digest":"<64 lowercase hex>"}
+  },
+  "canonical_body": "server-derived normal Student text"
+}
+```
+
+It is exact-token internal-only, defaults disabled through
+`DIALOG_CANONICAL_STUDENT_TURN_ENABLED`, and requires ordering V2. It verifies
+the active `general_teacher` binding, exact PersonalTeacher source/version and
+stored UI digest, and normal content policy. First commit returns `201` and an
+ordinary existing message response; exact replay returns `200` and the same
+response. The response contains no receipt, interaction, digest, command ID,
+or private sequence. Reusing receipt, command, source action, body, or metadata
+inconsistently returns `409`; exact committed replay remains available when the
+runtime flags are later disabled.

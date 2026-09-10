@@ -51,3 +51,32 @@ Course revision. Never add `selected_text` in overview mode; never trim or
 rebuild the selection in selection mode. Treat the returned anchor as immutable
 message evidence. Legacy revision/selection objects remain renderable during
 rollout but must not be upgraded client-side by inventing IDs.
+
+## Canonical Teacher action flow and S1 ordering
+
+S2 adds no browser Dialog write. A browser sends one action command to Teacher
+only; it never posts a companion
+message to Dialog and cannot submit `interaction`, `action_receipt_id`,
+`correlation_id`, `causation_id`, `teacher_turn_sequence`, source prompt
+identity/version, or `source_ui_digest` to Dialog. `block_id` and `action_id`
+belong only to the Teacher action command, never to a browser Dialog message.
+Teacher validates the stored assistant-UI source and materializes one ordinary
+Student message through an internal Dialog command. REST and WebSocket
+`message.created` remain reconciliation evidence for that message and the
+eventual response; neither is permission to execute the action or proof of
+causal ordering.
+
+S1 changes no browser route or message shape. Its default-disabled
+`DIALOG_TEACHER_ORDERING_V2_ENABLED` flag makes Dialog allocate a private dense
+Teacher turn only for a committed Student source and emit one V2 integration
+trigger. The value is absent from REST, WebSocket, and normal lifecycle
+messages; it cannot be supplied by a browser. Enabling the flag requires a
+uniform producer rollout after Teacher accepts V2 and completes its legacy
+cutover barrier.
+
+The separate default-disabled `DIALOG_CANONICAL_STUDENT_TURN_ENABLED` gate
+requires S1 V2. Its exact-token nested materialization command atomically
+stores private receipt evidence, the normal reply turn, and one V2 trigger.
+REST/WS message delivery remains reconciliation evidence; receipt, UI digest,
+opaque action IDs, command ID, and private dense turn sequence never reach a
+browser projection.

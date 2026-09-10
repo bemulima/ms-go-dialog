@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -233,8 +234,223 @@ func TestCreate_TeacherDialogPublishesDedicatedRequest(t *testing.T) {
 	if string(outbox.items[1].Payload) == "" || containsJSONField(outbox.items[1].Payload, "body") {
 		t.Fatalf("teacher trigger leaked message body: %s", outbox.items[1].Payload)
 	}
+	if outbox.items[1].SchemaVersion != 1 || result.View.Message.TeacherTurnSequence != nil || dialogs.item.MaxTeacherTurnSequence != 0 ||
+		containsJSONField(outbox.items[1].Payload, "teacher_turn_sequence") || containsJSONField(outbox.items[1].Payload, "canonical_student_message_id") {
+		t.Fatalf("default V1 request changed: message=%+v dialog=%+v event=%+v", result.View.Message, dialogs.item, outbox.items[1])
+	}
 	if containsJSONField(outbox.items[0].Payload, "assistant_ui") {
 		t.Fatalf("body-only v1 event unexpectedly contains assistant_ui: %s", outbox.items[0].Payload)
+	}
+}
+
+func TestCreate_TeacherOrderingV2EmitsBodyFreeRequestAfterAtomicAllocation(t *testing.T) {
+	now := time.Date(2026, 9, 9, 13, 0, 0, 0, time.UTC)
+	dialogID, spaceID, studentID, teacherID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	dialogItem := teacherDialog(dialogID, spaceID, studentID, teacherID, uuid.New(), now)
+	dialogItem.TeacherContextType, dialogItem.ContextID = domain.TeacherContextGeneralTeacher, nil
+	dialogs := &fakeDialogs{item: dialogItem}
+	messages, outbox := &fakeMessages{items: map[uuid.UUID]domain.Message{}}, &fakeOutbox{}
+	var observations []TeacherRequestV2Observation
+	service := Service{
+		Spaces: fakeSpaces{item: activeTestSpace(spaceID, studentID, now)}, Dialogs: dialogs,
+		Members:  &fakeMembers{items: map[uuid.UUID]domain.Member{studentID: activeMember(dialogID, studentID, 0, 0, now)}},
+		Messages: messages, Outbox: outbox, Tx: fakeTx{}, Now: func() time.Time { return now }, NewID: uuid.New,
+		TeacherOrderingV2Enabled: true,
+		OnTeacherRequestV2:       func(observation TeacherRequestV2Observation) { observations = append(observations, observation) },
+	}
+
+	result, err := service.Create(context.Background(), domain.Actor{UserID: studentID, Role: "STUDENT"}, CreateInput{
+		DialogID: dialogID, Body: "Explain this", IdempotencyKey: uuid.New(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Created || result.View.Message.TeacherTurnSequence == nil || *result.View.Message.TeacherTurnSequence != 1 || dialogs.item.MaxTeacherTurnSequence != 1 {
+		t.Fatalf("dense allocation mismatch: result=%+v dialog=%+v", result, dialogs.item)
+	}
+	if len(outbox.items) != 2 || outbox.items[1].SchemaVersion != domain.TeacherRequestedSchemaVersionV2 ||
+		containsJSONField(outbox.items[0].Payload, "teacher_turn_sequence") {
+		t.Fatalf("V2 event boundary mismatch: %+v", outbox.items)
+	}
+	var payload domain.TeacherRequestedV2Payload
+	if err := json.Unmarshal(outbox.items[1].Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.EventID != outbox.items[1].ID || payload.CanonicalStudentMessageID != result.View.Message.ID ||
+		payload.SourceMessageID != result.View.Message.ID || payload.TeacherTurnSequence != 1 ||
+		payload.CorrelationID != result.View.Message.ID || payload.CausationID != result.View.Message.ID ||
+		payload.SourceMessageVersion == nil || *payload.SourceMessageVersion != result.View.Message.Version ||
+		payload.ReplyToMessageID != nil ||
+		containsJSONField(outbox.items[1].Payload, "body") || containsJSONField(outbox.items[1].Payload, "assistant_ui") ||
+		containsJSONField(outbox.items[1].Payload, "lesson_context") {
+		t.Fatalf("invalid V2 payload: %s", outbox.items[1].Payload)
+	}
+	if len(observations) != 1 || observations[0].SourceEventID != outbox.items[1].ID ||
+		observations[0].CanonicalStudentMessageID != result.View.Message.ID || observations[0].TeacherTurnSequence != 1 {
+		t.Fatalf("post-commit observation mismatch: %+v", observations)
+	}
+}
+
+func TestCreate_TeacherOrderingV2CarriesNormalReplyToMessageID(t *testing.T) {
+	now := time.Date(2026, 9, 9, 13, 30, 0, 0, time.UTC)
+	dialogID, spaceID, studentID, teacherID, sourceID := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	dialogItem := teacherDialog(dialogID, spaceID, studentID, teacherID, uuid.New(), now)
+	dialogItem.TeacherContextType, dialogItem.ContextID = domain.TeacherContextGeneralTeacher, nil
+	dialogItem.MessageCount, dialogItem.MaxMessageSequence, dialogItem.MaxEventSequence = 1, 1, 1
+	dialogItem.LastMessageID, dialogItem.LastMessageAt = &sourceID, &now
+	dialogs := &fakeDialogs{item: dialogItem}
+	messages, outbox := &fakeMessages{items: map[uuid.UUID]domain.Message{
+		sourceID: {
+			ID: sourceID, DialogID: dialogID, AuthorType: domain.MessageAuthorPersonalTeacher, Channel: domain.MessageChannelWeb,
+			PersonalTeacherID: teacherID, Body: "Choose an option", Status: domain.MessageStatusActive, Version: 2,
+			MessageSequence: 1, LastEventSequence: 1, IdempotencyKey: uuid.New(), CreatedAt: now, UpdatedAt: now,
+		},
+	}}, &fakeOutbox{}
+	service := Service{
+		Spaces: fakeSpaces{item: activeTestSpace(spaceID, studentID, now)}, Dialogs: dialogs,
+		Members:  &fakeMembers{items: map[uuid.UUID]domain.Member{studentID: activeMember(dialogID, studentID, 0, 0, now)}},
+		Messages: messages, Outbox: outbox, Tx: fakeTx{}, Now: func() time.Time { return now }, NewID: uuid.New,
+		TeacherOrderingV2Enabled: true,
+	}
+
+	input := CreateInput{
+		DialogID: dialogID, ReplyToMessageID: &sourceID, Body: "I choose A", IdempotencyKey: uuid.New(),
+	}
+	result, err := service.Create(context.Background(), domain.Actor{UserID: studentID, Role: "STUDENT"}, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Created || result.View.Message.ReplyToMessageID == nil || *result.View.Message.ReplyToMessageID != sourceID || len(outbox.items) != 2 {
+		t.Fatalf("normal reply source was not committed with one V2 event: result=%+v events=%+v", result, outbox.items)
+	}
+	var payload domain.TeacherRequestedV2Payload
+	if err := json.Unmarshal(outbox.items[1].Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.SourceMessageVersion == nil || *payload.SourceMessageVersion != 1 ||
+		payload.ReplyToMessageID == nil || *payload.ReplyToMessageID != sourceID {
+		t.Fatalf("normal reply V2 source metadata mismatch: %s", outbox.items[1].Payload)
+	}
+	replay, err := service.Create(context.Background(), domain.Actor{UserID: studentID, Role: "STUDENT"}, input)
+	if err != nil || replay.Created || replay.View.Message.ID != result.View.Message.ID || len(outbox.items) != 2 {
+		t.Fatalf("normal reply replay emitted an additional V2 outbox event: replay=%+v events=%+v err=%v", replay, outbox.items, err)
+	}
+}
+
+func TestCreate_TeacherOrderingV2StaysDenseAcrossTeacherReplyGapAndReplay(t *testing.T) {
+	now := time.Date(2026, 9, 9, 14, 0, 0, 0, time.UTC)
+	dialogID, spaceID, studentID, teacherID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	dialogItem := teacherDialog(dialogID, spaceID, studentID, teacherID, uuid.New(), now)
+	dialogItem.TeacherContextType, dialogItem.ContextID = domain.TeacherContextGeneralTeacher, nil
+	dialogs := &fakeDialogs{item: dialogItem}
+	messages, outbox := &fakeMessages{items: map[uuid.UUID]domain.Message{}}, &fakeOutbox{}
+	service := Service{
+		Spaces: fakeSpaces{item: activeTestSpace(spaceID, studentID, now)}, Dialogs: dialogs,
+		Members:  &fakeMembers{items: map[uuid.UUID]domain.Member{studentID: activeMember(dialogID, studentID, 0, 0, now)}},
+		Messages: messages, TeacherMessages: messages, Outbox: outbox, Tx: fakeTx{}, Now: func() time.Time { return now }, NewID: uuid.New,
+		TeacherOrderingV2Enabled: true,
+	}
+	firstInput := CreateInput{DialogID: dialogID, Body: "first", IdempotencyKey: uuid.New()}
+	first, err := service.Create(context.Background(), domain.Actor{UserID: studentID, Role: "STUDENT"}, firstInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay, err := service.Create(context.Background(), domain.Actor{UserID: studentID, Role: "STUDENT"}, firstInput)
+	if err != nil || replay.Created || dialogs.item.MaxTeacherTurnSequence != 1 || len(outbox.items) != 2 {
+		t.Fatalf("replay allocated or emitted again: replay=%+v dialog=%+v events=%+v err=%v", replay, dialogs.item, outbox.items, err)
+	}
+	response, err := service.AppendTeacherResponse(context.Background(), AppendTeacherResponseInput{
+		DialogID: dialogID, PersonalTeacherID: teacherID, SourceMessageID: first.View.Message.ID,
+		IdempotencyKey: uuid.New(), Body: "reply",
+	})
+	if err != nil || response.View.Message.TeacherTurnSequence != nil {
+		t.Fatalf("teacher reply unexpectedly allocated a turn: response=%+v err=%v", response, err)
+	}
+	second, err := service.Create(context.Background(), domain.Actor{UserID: studentID, Role: "STUDENT"}, CreateInput{
+		DialogID: dialogID, Body: "second", IdempotencyKey: uuid.New(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.View.Message.MessageSequence != 1 || response.View.Message.MessageSequence != 2 || second.View.Message.MessageSequence != 3 ||
+		first.View.Message.TeacherTurnSequence == nil || *first.View.Message.TeacherTurnSequence != 1 ||
+		second.View.Message.TeacherTurnSequence == nil || *second.View.Message.TeacherTurnSequence != 2 || dialogs.item.MaxTeacherTurnSequence != 2 {
+		t.Fatalf("teacher ordering is not dense across reply gap: first=%+v response=%+v second=%+v dialog=%+v", first, response, second, dialogs.item)
+	}
+}
+
+func TestCreate_TeacherOrderingV2RollsBackAllocationAndDoesNotObserve(t *testing.T) {
+	now := time.Date(2026, 9, 9, 15, 0, 0, 0, time.UTC)
+	dialogID, spaceID, studentID, teacherID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	dialogItem := teacherDialog(dialogID, spaceID, studentID, teacherID, uuid.New(), now)
+	dialogItem.TeacherContextType, dialogItem.ContextID = domain.TeacherContextGeneralTeacher, nil
+	dialogs := &fakeDialogs{item: dialogItem}
+	messages := &fakeMessages{items: map[uuid.UUID]domain.Message{}}
+	outbox := &fakeOutbox{failSubject: domain.EventDialogTeacherRequested}
+	tx := &rollbackFakeTx{dialogs: dialogs, messages: messages, outbox: outbox}
+	observed := false
+	service := Service{
+		Spaces: fakeSpaces{item: activeTestSpace(spaceID, studentID, now)}, Dialogs: dialogs,
+		Members:  &fakeMembers{items: map[uuid.UUID]domain.Member{studentID: activeMember(dialogID, studentID, 0, 0, now)}},
+		Messages: messages, Outbox: outbox, Tx: tx, Now: func() time.Time { return now }, NewID: uuid.New,
+		TeacherOrderingV2Enabled: true, OnTeacherRequestV2: func(TeacherRequestV2Observation) { observed = true },
+	}
+	if _, err := service.Create(context.Background(), domain.Actor{UserID: studentID, Role: "STUDENT"}, CreateInput{DialogID: dialogID, Body: "rollback", IdempotencyKey: uuid.New()}); err == nil {
+		t.Fatal("teacher request outbox failure did not fail the transaction")
+	}
+	if dialogs.item.MaxTeacherTurnSequence != 0 || len(messages.items) != 0 || len(outbox.items) != 0 || !tx.rolledBack || observed {
+		t.Fatalf("V2 allocation escaped rollback: dialog=%+v messages=%+v events=%+v observed=%t", dialogs.item, messages.items, outbox.items, observed)
+	}
+}
+
+func TestCreate_TeacherOrderingV2ConcurrentCreatesAndDifferentDialogs(t *testing.T) {
+	now := time.Date(2026, 9, 9, 16, 0, 0, 0, time.UTC)
+	dialogID, spaceID, studentID, teacherID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	dialogItem := teacherDialog(dialogID, spaceID, studentID, teacherID, uuid.New(), now)
+	dialogItem.TeacherContextType, dialogItem.ContextID = domain.TeacherContextGeneralTeacher, nil
+	dialogs := &fakeDialogs{item: dialogItem}
+	messages := &fakeMessages{items: map[uuid.UUID]domain.Message{}}
+	service := Service{
+		Spaces: fakeSpaces{item: activeTestSpace(spaceID, studentID, now)}, Dialogs: dialogs,
+		Members:  &fakeMembers{items: map[uuid.UUID]domain.Member{studentID: activeMember(dialogID, studentID, 0, 0, now)}},
+		Messages: messages, Outbox: &fakeOutbox{}, Tx: &serializingFakeTx{}, Now: func() time.Time { return now }, NewID: uuid.New,
+		TeacherOrderingV2Enabled: true,
+	}
+	errorsByCall := make(chan error, 2)
+	for _, body := range []string{"one", "two"} {
+		body := body
+		go func() {
+			_, err := service.Create(context.Background(), domain.Actor{UserID: studentID, Role: "STUDENT"}, CreateInput{DialogID: dialogID, Body: body, IdempotencyKey: uuid.New()})
+			errorsByCall <- err
+		}()
+	}
+	for range 2 {
+		if err := <-errorsByCall; err != nil {
+			t.Fatal(err)
+		}
+	}
+	turns := map[int64]bool{}
+	for _, message := range messages.items {
+		if message.TeacherTurnSequence != nil {
+			turns[*message.TeacherTurnSequence] = true
+		}
+	}
+	if dialogs.item.MaxTeacherTurnSequence != 2 || !turns[1] || !turns[2] || len(turns) != 2 {
+		t.Fatalf("concurrent turn allocation is not dense: dialog=%+v turns=%v", dialogs.item, turns)
+	}
+
+	otherDialogID := uuid.New()
+	otherDialog := teacherDialog(otherDialogID, spaceID, studentID, teacherID, uuid.New(), now)
+	otherDialog.TeacherContextType, otherDialog.ContextID = domain.TeacherContextGeneralTeacher, nil
+	otherService := Service{
+		Spaces: fakeSpaces{item: activeTestSpace(spaceID, studentID, now)}, Dialogs: &fakeDialogs{item: otherDialog},
+		Members:  &fakeMembers{items: map[uuid.UUID]domain.Member{studentID: activeMember(otherDialogID, studentID, 0, 0, now)}},
+		Messages: &fakeMessages{items: map[uuid.UUID]domain.Message{}}, Outbox: &fakeOutbox{}, Tx: fakeTx{}, Now: func() time.Time { return now }, NewID: uuid.New,
+		TeacherOrderingV2Enabled: true,
+	}
+	other, err := otherService.Create(context.Background(), domain.Actor{UserID: studentID, Role: "STUDENT"}, CreateInput{DialogID: otherDialogID, Body: "independent", IdempotencyKey: uuid.New()})
+	if err != nil || other.View.Message.TeacherTurnSequence == nil || *other.View.Message.TeacherTurnSequence != 1 {
+		t.Fatalf("different dialog did not receive independent sequence: result=%+v err=%v", other, err)
 	}
 }
 
@@ -678,6 +894,35 @@ func TestAppendStudentChannelMessageUsesGeneralDialogAndNormalTeacherRequest(t *
 	}
 }
 
+func TestAppendStudentChannelMessageTeacherOrderingV2AllocatesAndEmitsOnce(t *testing.T) {
+	now := time.Date(2026, 9, 9, 17, 0, 0, 0, time.UTC)
+	dialogID, spaceID, studentID, teacherID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	dialogItem := teacherDialog(dialogID, spaceID, studentID, teacherID, uuid.New(), now)
+	dialogItem.TeacherContextType, dialogItem.ContextID = domain.TeacherContextGeneralTeacher, nil
+	dialogs := &fakeDialogs{item: dialogItem}
+	outbox := &fakeOutbox{}
+	service := Service{
+		Spaces: fakeSpaces{item: activeTestSpace(spaceID, studentID, now)}, Dialogs: dialogs,
+		Members:  &fakeMembers{items: map[uuid.UUID]domain.Member{studentID: activeMember(dialogID, studentID, 0, 0, now)}},
+		Messages: &fakeMessages{items: map[uuid.UUID]domain.Message{}}, Outbox: outbox, Tx: fakeTx{}, Now: func() time.Time { return now }, NewID: uuid.New,
+		TeacherOrderingV2Enabled: true,
+	}
+	input := AppendStudentChannelMessageInput{
+		DialogID: dialogID, StudentID: studentID, PersonalTeacherID: teacherID,
+		IdempotencyKey: uuid.New(), Channel: domain.MessageChannelTelegram, Body: "Telegram source",
+	}
+	created, err := service.AppendStudentChannelMessage(context.Background(), input)
+	if err != nil || !created.Created || created.View.Message.TeacherTurnSequence == nil ||
+		*created.View.Message.TeacherTurnSequence != 1 || dialogs.item.MaxTeacherTurnSequence != 1 ||
+		len(outbox.items) != 2 || outbox.items[1].SchemaVersion != domain.TeacherRequestedSchemaVersionV2 {
+		t.Fatalf("V2 channel append mismatch: created=%+v dialog=%+v events=%+v err=%v", created, dialogs.item, outbox.items, err)
+	}
+	replay, err := service.AppendStudentChannelMessage(context.Background(), input)
+	if err != nil || replay.Created || dialogs.item.MaxTeacherTurnSequence != 1 || len(outbox.items) != 2 {
+		t.Fatalf("V2 channel replay allocated or emitted again: replay=%+v events=%+v err=%v", replay, outbox.items, err)
+	}
+}
+
 func TestAppendTeacherProactiveUsesGeneralDialogAndIsIdempotent(t *testing.T) {
 	now := time.Date(2026, 8, 31, 18, 0, 0, 0, time.UTC)
 	dialogID, spaceID, studentID, teacherID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
@@ -737,6 +982,14 @@ func TestAppendTeacherProactiveRejectsContextDialog(t *testing.T) {
 type fakeTx struct{}
 
 func (fakeTx) WithinTransaction(ctx context.Context, fn func(context.Context) error) error {
+	return fn(ctx)
+}
+
+type serializingFakeTx struct{ mutex sync.Mutex }
+
+func (f *serializingFakeTx) WithinTransaction(ctx context.Context, fn func(context.Context) error) error {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
 	return fn(ctx)
 }
 

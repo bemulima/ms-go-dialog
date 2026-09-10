@@ -15,6 +15,21 @@ For production, `api`, `realtime`, and `worker` can be deployed and scaled indep
 
 The development Compose stack exposes the `all` mode on `http://localhost:8095` by default. `DIALOG_PORT` changes only that host binding; Gateway and other containers reach the stable internal address `ms-dialog-service:8080` on `ms-net`.
 
+`DIALOG_TEACHER_ORDERING_V2_ENABLED` defaults to `false` and is the only
+Dialog-side switch for dense teacher-turn allocation and V2 Teacher-request
+emission. Do not enable it on only part of the API fleet. Enable it only after
+the migration is applied, Teacher consumes V2, and the cross-service legacy
+cutover barrier is complete. Disabling it after any V2 turns exist requires the
+same barrier; the migration down path deliberately refuses to erase that data.
+
+`DIALOG_CANONICAL_STUDENT_TURN_ENABLED` also defaults to `false` and is valid
+only when the V2 ordering flag is true. It admits new trusted action receipts
+to Dialog's exact-token internal endpoint; it does not add a browser route or
+second trigger. Disable it first for an action rollout rollback: new receipts
+fail without effect while exact committed receipt replay stays available. Do
+not apply migration `011` down after any receipt evidence exists; it fails
+closed deliberately.
+
 After Dialog and Gateway are running, the opt-in integration probe creates an isolated space and two temporary authenticated users, then verifies a three-member group, per-member unread cursors, read-all, image/file activation, signed URLs, WebSocket typing, single-use tickets, and reconnect:
 
 ```sh
@@ -41,7 +56,20 @@ HTTP metrics use only method, Chi route template, and status labels. WebSocket c
 - `dialog_outbox_published_total`, `dialog_outbox_failed_total`, `dialog_outbox_worker_errors_total`;
 - `dialog_ticket_cleanup_deleted_total`, `dialog_ticket_cleanup_errors_total`.
 
-No metric label contains user IDs, dialog IDs, message IDs, attachment IDs, URLs, or request IDs. Recommended alerts are sustained readiness failure, growth in outbox failures/errors, attachment errors, and WebSocket connection count approaching configured instance capacity.
+`dialog_teacher_requested_v2_total` is an exposed zero-label counter incremented
+only after the V2 source message, sequence, and outbox event commit.
+`dialog_canonical_student_turn_materialized_total` is an exposed
+zero-label counter incremented after a canonical Student turn, its private
+ledger, lifecycle event, and V2 Teacher request commit. The canonical Teacher
+response counter remains reserved for a later slice. V2 structured logs use
+`dialog_id`, `canonical_student_message_id`, `teacher_turn_sequence`,
+`correlation_id`, `causation_id`, and `source_event_id`; IDs link records but
+are never metric labels.
+No metric label contains user IDs, dialog IDs, message IDs, attachment IDs,
+URLs, request IDs, receipt IDs, source-event IDs, job IDs, response IDs, or
+terminal-failure proof/recovery IDs. Recommended alerts are sustained readiness
+failure, growth in outbox failures/errors, attachment errors, and WebSocket
+connection count approaching configured instance capacity.
 
 ## Delivery and recovery
 

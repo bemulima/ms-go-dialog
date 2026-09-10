@@ -160,6 +160,29 @@ func TestMigrations_AreReversibleAndKeepReadStatePerMember(t *testing.T) {
 			t.Fatalf("teacher turn ordering rollback is not fail closed for %q", required)
 		}
 	}
+	canonicalStudentTurn, err := os.ReadFile(filepath.Join(root, "011_canonical_student_turn.up.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{
+		"CREATE TABLE dialog_canonical_student_turn", "action_receipt_id UUID PRIMARY KEY", "canonical_message_command_id UUID NOT NULL UNIQUE",
+		"uq_dialog_canonical_student_turn_source_action", "canonical_student_message_id UUID NOT NULL UNIQUE",
+		"source_ui_digest CHAR(64)", "correlation_id = action_receipt_id", "causation_id = action_receipt_id",
+	} {
+		if !strings.Contains(string(canonicalStudentTurn), required) {
+			t.Fatalf("canonical student turn migration is missing %q", required)
+		}
+	}
+	if strings.Contains(string(canonicalStudentTurn), "canonical_body") || strings.Contains(string(canonicalStudentTurn), "assistant_ui JSONB") {
+		t.Fatal("canonical student turn ledger must not persist body or assistant UI")
+	}
+	canonicalStudentTurnDown, err := os.ReadFile(filepath.Join(root, "011_canonical_student_turn.down.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(canonicalStudentTurnDown), "cannot roll back canonical student turn ledger while receipt evidence exists") {
+		t.Fatal("canonical student turn rollback must fail closed while receipt evidence exists")
+	}
 
 	runner, err := os.ReadFile(filepath.Join("..", "..", "scripts", "migrate.sh"))
 	if err != nil {
