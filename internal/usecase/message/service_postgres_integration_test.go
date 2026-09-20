@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bemulima/ms-go-dialog/internal/adapters/postgres"
 	"github.com/bemulima/ms-go-dialog/internal/domain"
 	"github.com/bemulima/ms-go-dialog/internal/domain/repository"
+	"github.com/bemulima/ms-go-dialog/internal/infrastructure/persistence/postgres"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )

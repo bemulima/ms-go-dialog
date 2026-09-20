@@ -16,11 +16,13 @@ The issue and its linked pull request are the durable task record. Do not create
 - `cmd/ms-dialog-service`: composition root for REST, realtime, and worker modes.
 - `internal/domain`: dialog, membership, message, attachment, ticket, outbox, and stable error contracts.
 - `internal/usecase`: transport-independent business processes and transaction boundaries.
-- `internal/adapters/http`: chi routes, validation, gateway identity, and API/admin surfaces.
-- `internal/adapters/websocket`: ticket-authenticated realtime projection; durable commands stay in use cases.
-- `internal/adapters/postgres`: pgx repositories; keep SQL and reversible migrations aligned.
-- `internal/adapters/nats`: outbox-backed lifecycle delivery and ephemeral typing fan-out.
-- `internal/adapters/filestorage`: temporary upload, activation, deletion, and signed URL integration.
+- `internal/transport/http`: inbound chi transport split into `api/v1`, `admin/v1`, `private`, and `common`; it maps requests and trusted identity only.
+- `internal/transport/websocket`: ticket-authenticated realtime projection; durable commands stay in use cases.
+- `internal/transport/message`: inbound NATS realtime subscription and WebSocket fan-out boundary.
+- `internal/infrastructure/persistence/postgres`: pgx repositories; keep SQL and reversible migrations aligned.
+- `internal/infrastructure/messaging/nats`: outbox-backed lifecycle delivery and ephemeral typing fan-out.
+- `internal/infrastructure/filestorage`, `filescan`, and `http/user`: outbound FileStorage, ClamAV, and participant-resolution integrations.
+- `internal/infrastructure/health` and `observability`: outbound operational dependencies and bounded-cardinality metrics.
 - `db/migrations`: ordered reversible schema contracts owned only by this service.
 - `docs` and `.ai/contracts`: human and machine-readable contract sources; update both when behavior changes.
 
@@ -34,7 +36,8 @@ The issue and its linked pull request are the durable task record. Do not create
 
 ## Coding and security invariants
 
-- Keep handlers thin; business logic belongs in `internal/usecase`, persistence in `internal/adapters/postgres`.
+- Keep handlers thin; business logic belongs in `internal/usecase`, persistence in `internal/infrastructure/persistence/postgres`.
+- `internal/domain` and `internal/usecase` must not import transport, infrastructure, or framework implementations. Dependency construction and process lifecycle belong only in `cmd/ms-dialog-service`.
 - Use context-aware functions and `Err*` names for sentinel errors; run `gofmt`/`goimports` on changed Go files.
 - Trust `X-User-ID` and `X-User-Role` only behind the configured gateway.
 - Never accept raw HTML; treat message bodies, links, filenames, and attachment metadata as untrusted input.

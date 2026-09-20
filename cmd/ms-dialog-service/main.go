@@ -11,17 +11,18 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bemulima/ms-go-dialog/internal/adapters/filescan"
-	"github.com/bemulima/ms-go-dialog/internal/adapters/filestorage"
-	"github.com/bemulima/ms-go-dialog/internal/adapters/health"
-	httpadapter "github.com/bemulima/ms-go-dialog/internal/adapters/http"
-	httpmiddleware "github.com/bemulima/ms-go-dialog/internal/adapters/http/middleware"
-	natsadapter "github.com/bemulima/ms-go-dialog/internal/adapters/nats"
-	"github.com/bemulima/ms-go-dialog/internal/adapters/observability"
-	"github.com/bemulima/ms-go-dialog/internal/adapters/postgres"
-	useradapter "github.com/bemulima/ms-go-dialog/internal/adapters/user"
-	websocketadapter "github.com/bemulima/ms-go-dialog/internal/adapters/websocket"
 	"github.com/bemulima/ms-go-dialog/internal/config"
+	"github.com/bemulima/ms-go-dialog/internal/infrastructure/filescan"
+	"github.com/bemulima/ms-go-dialog/internal/infrastructure/filestorage"
+	"github.com/bemulima/ms-go-dialog/internal/infrastructure/health"
+	useradapter "github.com/bemulima/ms-go-dialog/internal/infrastructure/http/user"
+	natsadapter "github.com/bemulima/ms-go-dialog/internal/infrastructure/messaging/nats"
+	"github.com/bemulima/ms-go-dialog/internal/infrastructure/observability"
+	"github.com/bemulima/ms-go-dialog/internal/infrastructure/persistence/postgres"
+	httpadapter "github.com/bemulima/ms-go-dialog/internal/transport/http"
+	httpmiddleware "github.com/bemulima/ms-go-dialog/internal/transport/http/common/middleware"
+	messageadapter "github.com/bemulima/ms-go-dialog/internal/transport/message"
+	websocketadapter "github.com/bemulima/ms-go-dialog/internal/transport/websocket"
 	adminuc "github.com/bemulima/ms-go-dialog/internal/usecase/admin"
 	attachmentuc "github.com/bemulima/ms-go-dialog/internal/usecase/attachment"
 	dialoguc "github.com/bemulima/ms-go-dialog/internal/usecase/dialog"
@@ -134,12 +135,12 @@ func run() error {
 		}
 	}
 	var hub *websocketadapter.Hub
-	var subscription *natsadapter.Subscription
+	var subscription *messageadapter.Subscription
 	var websocketHandler http.Handler
 	if modeHasRealtime(cfg.ServiceMode) {
 		hub = websocketadapter.NewHub(cfg.WSMaxConnectionsPerUser, cfg.WSQueueSize)
 		websocketHandler = websocketadapter.Handler{Tickets: realtimeService, Hub: hub, Typing: natsClient, Metrics: metrics, MaxFrameBytes: cfg.WSMaxFrameBytes}
-		subscription, err = natsClient.SubscribeRealtime(hub)
+		subscription, err = messageadapter.SubscribeRealtime(natsClient.Conn, hub)
 		if err != nil {
 			return fmt.Errorf("subscribe realtime: %w", err)
 		}

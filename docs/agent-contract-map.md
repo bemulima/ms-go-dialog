@@ -11,7 +11,7 @@ This map is the final navigation source for the current backend release. Until i
 | Durable delivery | PostgreSQL outbox + NATS JetStream | at-least-once, event-ID deduplication |
 | Browser realtime | Dialog WebSocket | ticket-authenticated projection |
 | Malware decision | ClamAV | fail-closed synchronous scan for generic files |
-| Liveness, readiness, metrics | `ms-go-dialog` private HTTP port | operations contract and observability adapters |
+| Liveness, readiness, metrics | `ms-go-dialog` private HTTP port | operations contract and observability infrastructure |
 | Logical PersonalTeacher identity and pedagogy | `ms-go-teacher-agent` | opaque binding/reference locally; no synthetic user |
 | Teacher conversation history and delivery | `ms-go-dialog` | teacher dialog, explicit message author, outbox and WebSocket |
 | LearningAction ownership/state | `ms-go-student` | opaque source-message reference; verified by Teacher |
@@ -29,7 +29,7 @@ Change routing:
 - attachment: attachment use case, FileStorage adapter, lifecycle contract.
 - participant validation: dialog use-case port, user HTTP adapter, `ms-go-user` internal batch contract, stable `422`/`503` errors.
 - frontend/read UX: frontend/backend map, message window query, per-member read transaction, `read.updated` event.
-- operations: health/observability adapters, runtime composition, operations contract, HTTP machine contract.
+- operations: health/observability infrastructure, runtime composition, operations contract, HTTP machine contract.
 - teacher dialog: Dialog domain/migration, internal ensure/read/append contour, body-free durable trigger, Teacher-owned consumer contract.
 - teacher transport channel: message provenance, trusted internal student-channel append, and the same body-free teacher trigger; Teacher owns provider linking/delivery.
 - structured Teacher UI: bounded opaque Dialog message storage/internal append/REST/outbox; Teacher owns pedagogical validation and no action protocol is defined here.

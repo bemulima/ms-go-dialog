@@ -5,6 +5,11 @@ commands:
       source_path: scripts/check-agent-policy.sh
       requires_approval: false
       risk: verification
+    - name: architecture
+      run: python3 scripts/check_architecture.py
+      source_path: scripts/check_architecture.py
+      requires_approval: false
+      risk: verification
     - name: format
       run: gofmt -w cmd internal test
       source_path: Makefile

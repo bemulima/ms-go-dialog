@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bemulima/ms-go-dialog/internal/adapters/observability"
+	"github.com/bemulima/ms-go-dialog/internal/infrastructure/observability"
 	attachmentuc "github.com/bemulima/ms-go-dialog/internal/usecase/attachment"
 	realtimeuc "github.com/bemulima/ms-go-dialog/internal/usecase/realtime"
 	"go.uber.org/zap"

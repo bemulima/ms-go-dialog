@@ -12,7 +12,7 @@ import (
 
 func TestHTTPContractMatchesRegisteredRoutes(t *testing.T) {
 	root := filepath.Join("..", "..")
-	router := readText(t, filepath.Join(root, "internal", "adapters", "http", "router.go"))
+	router := readText(t, filepath.Join(root, "internal", "transport", "http", "router.go"))
 	contract := readText(t, filepath.Join(root, ".ai", "contracts", "http.yaml"))
 
 	routePattern := regexp.MustCompile(`\b(router|api|admin|internal)\.(Get|Post|Put|Delete|Patch|Handle)\("([^"]+)"`)
@@ -51,7 +51,7 @@ func TestHTTPContractMatchesRegisteredRoutes(t *testing.T) {
 
 func TestWebSocketContractMatchesProtocolEvents(t *testing.T) {
 	root := filepath.Join("..", "..")
-	protocol := readText(t, filepath.Join(root, "internal", "adapters", "websocket", "protocol.go"))
+	protocol := readText(t, filepath.Join(root, "internal", "transport", "websocket", "protocol.go"))
 	contract := readText(t, filepath.Join(root, ".ai", "contracts", "websocket.yaml"))
 
 	mapStart := strings.Index(protocol, "var websocketTypes")

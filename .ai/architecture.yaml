@@ -14,58 +14,64 @@ layers:
         - entities and value objects
         - invariants and stable errors
         - repository and event ports
-      dependency_rule: imports no adapters
+      dependency_rule: imports no transport or infrastructure
     - name: usecase
       source_path: internal/usecase
       responsibilities:
         - membership authorization
         - transaction-scoped business processes
         - message/event sequence and outbox orchestration
-      dependency_rule: depends on domain ports, not concrete adapters
-    - name: http_adapter
-      source_path: internal/adapters/http
+      dependency_rule: depends on domain ports, not concrete transport or infrastructure
+    - name: http_transport
+      source_path: internal/transport/http
       responsibilities:
+        - API, admin, and private route contours
         - route groups and middleware
         - strict request/response mapping
         - trusted gateway actor extraction
       dependency_rule: handlers remain thin and call use cases
-    - name: websocket_adapter
-      source_path: internal/adapters/websocket
+    - name: websocket_transport
+      source_path: internal/transport/websocket
       responsibilities:
         - ticket consumption
         - connection and subscription lifecycle
         - event and typing projection
       dependency_rule: does not duplicate durable message business rules
-    - name: postgres_adapter
-      source_path: internal/adapters/postgres
+    - name: message_transport
+      source_path: internal/transport/message
+      responsibilities:
+        - inbound lifecycle and typing fan-out subscription
+      dependency_rule: projects committed messages only
+    - name: postgres_infrastructure
+      source_path: internal/infrastructure/persistence/postgres
       responsibilities:
         - pgx repositories
         - transaction manager
         - outbox claiming
-    - name: nats_adapter
-      source_path: internal/adapters/nats
+    - name: nats_infrastructure
+      source_path: internal/infrastructure/messaging/nats
       responsibilities:
-        - JetStream publication and subscription
+        - JetStream publication
         - Core NATS typing fan-out
-    - name: filestorage_adapter
-      source_path: internal/adapters/filestorage
+    - name: filestorage_infrastructure
+      source_path: internal/infrastructure/filestorage
       responsibilities:
         - temporary upload
         - idempotent activation/deletion
         - signed URL requests
-    - name: filescan_adapter
-      source_path: internal/adapters/filescan
+    - name: filescan_infrastructure
+      source_path: internal/infrastructure/filescan
       responsibilities:
         - ClamAV INSTREAM protocol
         - fail-closed generic file scanning
-    - name: user_adapter
-      source_path: internal/adapters/user
+    - name: user_http_infrastructure
+      source_path: internal/infrastructure/http/user
       responsibilities:
         - bounded active-participant batch resolution
         - strict response partition validation
         - fail-closed dependency error mapping
-    - name: health_and_observability_adapters
-      source_path: internal/adapters
+    - name: health_and_observability_infrastructure
+      source_path: internal/infrastructure
       responsibilities:
         - mode-aware dependency readiness
         - bounded-cardinality Prometheus exposition
