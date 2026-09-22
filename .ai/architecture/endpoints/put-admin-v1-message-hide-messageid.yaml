@@ -1,0 +1,32 @@
+schema: architecture/v1
+kind: operation
+id: put-admin-v1-message-hide-messageid
+manifest_revision: 1
+service_id: ms-go-dialog
+type: http
+identity: {transport: http, http: {method: PUT, path: "/admin/v1/message/hide/{messageID}"}}
+access:
+  audience: {value: "administrator or moderator caller", confidence: 1, evidence: [{source_path: .ai/contracts/http.yaml}]}
+  authentication: {value: "ADMIN or MODERATOR moderation access is required", confidence: 1, evidence: [{source_path: .ai/contracts/http.yaml}]}
+  authorization: {value: "route-specific authorization is enforced by the registered handler.", confidence: 1, evidence: [{source_path: .ai/contracts/http.yaml}]}
+  idempotency: {value: "unknown; caller idempotency behavior is route-specific.", confidence: 1, evidence: [{source_path: .ai/contracts/http.yaml}]}
+trigger: {description: {value: "An HTTP PUT request to /admin/v1/message/hide/{messageID}.", confidence: 1, evidence: [{source_path: .ai/contracts/http.yaml}]}}
+input: {path_params: [], query: [], headers: []}
+business_task: {value: "Dispatch the configured PUT /admin/v1/message/hide/{messageID} route to its registered service handler.", confidence: 1, evidence: [{source_path: .ai/contracts/http.yaml}]}
+business_process:
+  - id: dispatch
+    description: {value: "The transport routes the request to its registered handler; detailed request and business semantics remain in the owned HTTP contract.", confidence: 1, evidence: [{source_path: .ai/contracts/http.yaml}]}
+    interactions: []
+business_rules:
+  - value: "This operation is an explicitly registered inbound route; transport and access rules are taken from the repository-owned contract."
+    confidence: 1
+    evidence: [{source_path: .ai/contracts/http.yaml}]
+implementation: {router: [{source_path: internal/transport/http/router.go}], handler: [{source_path: internal/transport/http/router.go}], use_cases: [], domain_services: [], repositories: []}
+data_access: []
+external_interactions: []
+side_effects: []
+output: {responses: [], emitted_events: []}
+errors: []
+evidence: [{source_path: .ai/contracts/http.yaml}]
+confidence: 1
+

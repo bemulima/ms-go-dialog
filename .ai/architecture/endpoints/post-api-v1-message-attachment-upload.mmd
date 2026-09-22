@@ -1,0 +1,32 @@
+%% GENERATED — READ-ONLY PRESENTATION
+%% Do not edit; source of truth is the architecture manifest.
+flowchart TD
+  operation["post-api-v1-message-attachment-upload — http"]
+  identity["identity: http / POST / /api/v1/message-attachment/upload"]
+  operation --> identity
+  access["access: gateway-routed caller / gateway identity and active membership where dialog-scoped are required / route-specific authorization is enforced by the registered handler. / unknown; caller idempotency behavior is route-specific."]
+  operation --> access
+  trigger["trigger: An HTTP POST request to /api/v1/message-attachment/upload."]
+  operation --> trigger
+  input["input: unknown"]
+  operation --> input
+  business_task["business task: Dispatch the configured POST /api/v1/message-attachment/upload route to its registered service handler."]
+  operation --> business_task
+  business_process["business process: dispatch / The transport routes the request to its registered handler; detailed request and business semantics remain in the owned HTTP contract."]
+  operation --> business_process
+  business_rules["business rule: This operation is an explicitly registered inbound route; transport and access rules are taken from the repository-owned contract."]
+  operation --> business_rules
+  implementation["implementation: router=internal/transport/http/router.go; handler=internal/transport/http/router.go; use_cases=unknown; domain_services=unknown; repositories=unknown"]
+  operation --> implementation
+  data_access["data access: unknown"]
+  operation --> data_access
+  external_interactions["external interactions: unknown"]
+  operation --> external_interactions
+  side_effects["side effects: unknown"]
+  operation --> side_effects
+  output["output: unknown"]
+  operation --> output
+  errors["errors: unknown"]
+  operation --> errors
+  evidence["evidence: .ai/contracts/http.yaml; confidence: 1"]
+  operation --> evidence

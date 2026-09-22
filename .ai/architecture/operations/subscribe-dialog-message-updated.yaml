@@ -1,0 +1,29 @@
+schema: architecture/v1
+kind: operation
+id: subscribe-dialog-message-updated
+manifest_revision: 1
+service_id: ms-go-dialog
+type: nats_event_subscriber
+identity: {transport: nats, nats: {subject: "dialog.message.updated", role: event_subscriber}}
+access:
+  audience: {value: "NATS delivery to the service realtime projection.", confidence: 1, evidence: [{source_path: internal/transport/message/subscriber.go}]}
+  authentication: {value: "NATS connection authentication is configured outside this subscriber implementation.", confidence: 1, evidence: [{source_path: internal/transport/message/subscriber.go}]}
+  authorization: {value: "unknown; no message-level authorization policy is implemented in this subscriber.", confidence: 1, evidence: [{source_path: internal/transport/message/subscriber.go}]}
+  idempotency: {value: "Delivery is a projection; lifecycle event deduplication is defined by event_id and sequence reconciliation.", confidence: 1, evidence: [{source_path: .ai/contracts/events.yaml}]}
+trigger: {description: {value: "A NATS message published on dialog.message.updated.", confidence: 1, evidence: [{source_path: internal/transport/message/subscriber.go}]}}
+input: {path_params: [], query: [], headers: []}
+business_task: {value: "Broadcast the lifecycle event to the local WebSocket hub.", confidence: 1, evidence: [{source_path: internal/transport/message/subscriber.go}]}
+business_process:
+  - id: broadcast
+    description: {value: "Copy the received payload before delivering it to the realtime sink.", confidence: 1, evidence: [{source_path: internal/transport/message/subscriber.go}]}
+    interactions: []
+business_rules: []
+implementation: {router: [{source_path: internal/transport/message/subscriber.go}], handler: [{source_path: internal/transport/message/subscriber.go}], use_cases: [], domain_services: [], repositories: []}
+data_access: []
+external_interactions: []
+side_effects: [{type: websocket_projection, description: {value: "Delivers a NATS event to connected local realtime clients.", confidence: 1, evidence: [{source_path: internal/transport/message/subscriber.go}]}}]
+output: {responses: [], emitted_events: []}
+errors: []
+evidence: [{source_path: internal/transport/message/subscriber.go}]
+confidence: 1
+

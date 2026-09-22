@@ -1,0 +1,280 @@
+%% GENERATED — READ-ONLY PRESENTATION
+%% Do not edit; source of truth is the architecture manifest.
+flowchart LR
+  svc["ms-go-dialog / ms-go-dialog"]
+  svcInfo["purpose: Own authenticated personal, group, and contextual messaging dialogs, memberships, messages, attachments, tickets, realtime sequence, and outbox delivery.<br/>confidence: 1"]
+  svc --> svcInfo
+  service_responsibilities["responsibilities: Expose the repository-owned HTTP and realtime interfaces while keeping delivery projections separate from durable state."]
+  svc --> service_responsibilities
+  service_capabilities["capabilities: Serve all HTTP routes listed in the owned HTTP contract.; Run the configured realtime subscriber and background work only in the corresponding service modes."]
+  svc --> service_capabilities
+  resource_0["owned resource: postgres / service-owned durable domain state and outbox — The repository-owned database contract defines the durable storage boundary."]
+  svc --> resource_0
+  inbound_0["inbound http: http — The HTTP contract enumerates the concrete inbound routes."]
+  inbound_0 -->|inbound| svc
+  inbound_1["inbound nats: realtime_projection — Concrete NATS subscriptions feed the local realtime projection."]
+  inbound_1 -->|inbound| svc
+  outbound_0["outbound http: postgres — The service depends on postgres at the boundary described by its repository-owned configuration and contracts."]
+  svc -->|outbound| outbound_0
+  outbound_1["outbound nats: nats — The service depends on nats at the boundary described by its repository-owned configuration and contracts."]
+  svc -->|outbound| outbound_1
+  outbound_2["outbound http: filestorage — The service depends on filestorage at the boundary described by its repository-owned configuration and contracts."]
+  svc -->|outbound| outbound_2
+  outbound_3["outbound http: user — The service depends on user at the boundary described by its repository-owned configuration and contracts."]
+  svc -->|outbound| outbound_3
+  outbound_4["outbound http: clamav — The service depends on clamav at the boundary described by its repository-owned configuration and contracts."]
+  svc -->|outbound| outbound_4
+  endpoint_group_0["endpoint group http-routes: HTTP routes — Concrete HTTP operations are enumerated from the owned HTTP contract."]
+  svc --> endpoint_group_0
+  endpoint_group_0_op_0["operation: get-healthz"]
+  endpoint_group_0 --> endpoint_group_0_op_0
+  endpoint_group_0_op_1["operation: get-readyz"]
+  endpoint_group_0 --> endpoint_group_0_op_1
+  endpoint_group_0_op_2["operation: get-metrics"]
+  endpoint_group_0 --> endpoint_group_0_op_2
+  endpoint_group_0_op_3["operation: put-api-v1-dialog-personal-ensure"]
+  endpoint_group_0 --> endpoint_group_0_op_3
+  endpoint_group_0_op_4["operation: post-api-v1-dialog-group-create"]
+  endpoint_group_0 --> endpoint_group_0_op_4
+  endpoint_group_0_op_5["operation: get-api-v1-dialog-list"]
+  endpoint_group_0 --> endpoint_group_0_op_5
+  endpoint_group_0_op_6["operation: get-api-v1-dialog-get-dialogid"]
+  endpoint_group_0 --> endpoint_group_0_op_6
+  endpoint_group_0_op_7["operation: put-api-v1-dialog-update-dialogid"]
+  endpoint_group_0 --> endpoint_group_0_op_7
+  endpoint_group_0_op_8["operation: put-api-v1-dialog-read-dialogid"]
+  endpoint_group_0 --> endpoint_group_0_op_8
+  endpoint_group_0_op_9["operation: put-api-v1-dialog-read-all-dialogid"]
+  endpoint_group_0 --> endpoint_group_0_op_9
+  endpoint_group_0_op_10["operation: post-api-v1-dialog-leave-dialogid"]
+  endpoint_group_0 --> endpoint_group_0_op_10
+  endpoint_group_0_op_11["operation: post-api-v1-dialog-member-add-dialogid"]
+  endpoint_group_0 --> endpoint_group_0_op_11
+  endpoint_group_0_op_12["operation: delete-api-v1-dialog-member-remove-dialogid-userid"]
+  endpoint_group_0 --> endpoint_group_0_op_12
+  endpoint_group_0_op_13["operation: put-api-v1-dialog-member-role-dialogid-userid"]
+  endpoint_group_0 --> endpoint_group_0_op_13
+  endpoint_group_0_op_14["operation: put-api-v1-user-block-userid"]
+  endpoint_group_0 --> endpoint_group_0_op_14
+  endpoint_group_0_op_15["operation: delete-api-v1-user-block-userid"]
+  endpoint_group_0 --> endpoint_group_0_op_15
+  endpoint_group_0_op_16["operation: get-api-v1-message-window"]
+  endpoint_group_0 --> endpoint_group_0_op_16
+  endpoint_group_0_op_17["operation: get-api-v1-message-list"]
+  endpoint_group_0 --> endpoint_group_0_op_17
+  endpoint_group_0_op_18["operation: get-api-v1-message-get-messageid"]
+  endpoint_group_0 --> endpoint_group_0_op_18
+  endpoint_group_0_op_19["operation: get-api-v1-message-changes"]
+  endpoint_group_0 --> endpoint_group_0_op_19
+  endpoint_group_0_op_20["operation: post-api-v1-message-create"]
+  endpoint_group_0 --> endpoint_group_0_op_20
+  endpoint_group_0_op_21["operation: put-api-v1-message-update-messageid"]
+  endpoint_group_0 --> endpoint_group_0_op_21
+  endpoint_group_0_op_22["operation: delete-api-v1-message-delete-messageid"]
+  endpoint_group_0 --> endpoint_group_0_op_22
+  endpoint_group_0_op_23["operation: post-api-v1-message-attachment-upload"]
+  endpoint_group_0 --> endpoint_group_0_op_23
+  endpoint_group_0_op_24["operation: get-api-v1-message-attachment-signed-url-attachmentid"]
+  endpoint_group_0 --> endpoint_group_0_op_24
+  endpoint_group_0_op_25["operation: delete-api-v1-message-attachment-delete-attachmentid"]
+  endpoint_group_0 --> endpoint_group_0_op_25
+  endpoint_group_0_op_26["operation: post-api-v1-realtime-ticket"]
+  endpoint_group_0 --> endpoint_group_0_op_26
+  endpoint_group_0_op_27["operation: get-api-v1-ws"]
+  endpoint_group_0 --> endpoint_group_0_op_27
+  endpoint_group_0_op_28["operation: post-admin-v1-space-create"]
+  endpoint_group_0 --> endpoint_group_0_op_28
+  endpoint_group_0_op_29["operation: get-admin-v1-space-list"]
+  endpoint_group_0 --> endpoint_group_0_op_29
+  endpoint_group_0_op_30["operation: put-admin-v1-space-update-spaceid"]
+  endpoint_group_0 --> endpoint_group_0_op_30
+  endpoint_group_0_op_31["operation: get-admin-v1-dialog-list"]
+  endpoint_group_0 --> endpoint_group_0_op_31
+  endpoint_group_0_op_32["operation: put-admin-v1-dialog-close-dialogid"]
+  endpoint_group_0 --> endpoint_group_0_op_32
+  endpoint_group_0_op_33["operation: put-admin-v1-dialog-reopen-dialogid"]
+  endpoint_group_0 --> endpoint_group_0_op_33
+  endpoint_group_0_op_34["operation: put-admin-v1-message-hide-messageid"]
+  endpoint_group_0 --> endpoint_group_0_op_34
+  endpoint_group_0_op_35["operation: put-admin-v1-message-restore-messageid"]
+  endpoint_group_0 --> endpoint_group_0_op_35
+  endpoint_group_0_op_36["operation: put-internal-v1-teacher-dialog-ensure"]
+  endpoint_group_0 --> endpoint_group_0_op_36
+  endpoint_group_0_op_37["operation: get-internal-v1-teacher-dialog-dialogid-request-sourcemessageid"]
+  endpoint_group_0 --> endpoint_group_0_op_37
+  endpoint_group_0_op_38["operation: post-internal-v1-teacher-dialog-dialogid-assistant-ui-source"]
+  endpoint_group_0 --> endpoint_group_0_op_38
+  endpoint_group_0_op_39["operation: post-internal-v1-teacher-dialog-dialogid-canonical-student-turn"]
+  endpoint_group_0 --> endpoint_group_0_op_39
+  endpoint_group_0_op_40["operation: post-internal-v1-teacher-dialog-dialogid-message"]
+  endpoint_group_0 --> endpoint_group_0_op_40
+  endpoint_group_0_op_41["operation: post-internal-v1-teacher-dialog-dialogid-proactive-message"]
+  endpoint_group_0 --> endpoint_group_0_op_41
+  endpoint_group_0_op_42["operation: post-internal-v1-teacher-dialog-dialogid-student-channel-message"]
+  endpoint_group_0 --> endpoint_group_0_op_42
+  endpoint_group_1["endpoint group nats-subscribers: NATS subscribers — Concrete realtime subscriptions are enumerated from the subscriber implementation."]
+  svc --> endpoint_group_1
+  endpoint_group_1_op_0["operation: subscribe-dialog-created"]
+  endpoint_group_1 --> endpoint_group_1_op_0
+  endpoint_group_1_op_1["operation: subscribe-dialog-updated"]
+  endpoint_group_1 --> endpoint_group_1_op_1
+  endpoint_group_1_op_2["operation: subscribe-dialog-closed"]
+  endpoint_group_1 --> endpoint_group_1_op_2
+  endpoint_group_1_op_3["operation: subscribe-dialog-member-added"]
+  endpoint_group_1 --> endpoint_group_1_op_3
+  endpoint_group_1_op_4["operation: subscribe-dialog-member-removed"]
+  endpoint_group_1 --> endpoint_group_1_op_4
+  endpoint_group_1_op_5["operation: subscribe-dialog-member-role-updated"]
+  endpoint_group_1 --> endpoint_group_1_op_5
+  endpoint_group_1_op_6["operation: subscribe-dialog-message-created"]
+  endpoint_group_1 --> endpoint_group_1_op_6
+  endpoint_group_1_op_7["operation: subscribe-dialog-message-updated"]
+  endpoint_group_1 --> endpoint_group_1_op_7
+  endpoint_group_1_op_8["operation: subscribe-dialog-message-deleted"]
+  endpoint_group_1 --> endpoint_group_1_op_8
+  endpoint_group_1_op_9["operation: subscribe-dialog-message-hidden"]
+  endpoint_group_1 --> endpoint_group_1_op_9
+  endpoint_group_1_op_10["operation: subscribe-dialog-message-restored"]
+  endpoint_group_1 --> endpoint_group_1_op_10
+  endpoint_group_1_op_11["operation: subscribe-dialog-attachment-ready"]
+  endpoint_group_1 --> endpoint_group_1_op_11
+  endpoint_group_1_op_12["operation: subscribe-dialog-attachment-failed"]
+  endpoint_group_1 --> endpoint_group_1_op_12
+  endpoint_group_1_op_13["operation: subscribe-dialog-read-updated"]
+  endpoint_group_1 --> endpoint_group_1_op_13
+  endpoint_group_1_op_14["operation: subscribe-dialog-realtime-typing-wildcard"]
+  endpoint_group_1 --> endpoint_group_1_op_14
+  endpoint_group_2["endpoint group background-work: Background work — Ticker-driven background operations are enumerated from the process composition."]
+  svc --> endpoint_group_2
+  endpoint_group_2_op_0["operation: worker-attachment-lifecycle"]
+  endpoint_group_2 --> endpoint_group_2_op_0
+  endpoint_group_2_op_1["operation: worker-outbox-dispatch"]
+  endpoint_group_2 --> endpoint_group_2_op_1
+  endpoint_group_2_op_2["operation: worker-realtime-ticket-cleanup"]
+  endpoint_group_2 --> endpoint_group_2_op_2
+  contract_produced_0["produced contract: nats / dialog_lifecycle_events / produced / Published event subjects and delivery rules are defined by the owned event or ingestion contract."]
+  svc --> contract_produced_0
+  contract_published_event_0["published event contract: nats / dialog_lifecycle_events / produced / The service publishes only the event contract documented by its owned event or ingestion contract."]
+  svc --> contract_published_event_0
+  operation_0["operation: delete-api-v1-dialog-member-remove-dialogid-userid (http)"]
+  svc --> operation_0
+  operation_1["operation: delete-api-v1-message-attachment-delete-attachmentid (http)"]
+  svc --> operation_1
+  operation_2["operation: delete-api-v1-message-delete-messageid (http)"]
+  svc --> operation_2
+  operation_3["operation: delete-api-v1-user-block-userid (http)"]
+  svc --> operation_3
+  operation_4["operation: get-admin-v1-dialog-list (http)"]
+  svc --> operation_4
+  operation_5["operation: get-admin-v1-space-list (http)"]
+  svc --> operation_5
+  operation_6["operation: get-api-v1-dialog-get-dialogid (http)"]
+  svc --> operation_6
+  operation_7["operation: get-api-v1-dialog-list (http)"]
+  svc --> operation_7
+  operation_8["operation: get-api-v1-message-attachment-signed-url-attachmentid (http)"]
+  svc --> operation_8
+  operation_9["operation: get-api-v1-message-changes (http)"]
+  svc --> operation_9
+  operation_10["operation: get-api-v1-message-get-messageid (http)"]
+  svc --> operation_10
+  operation_11["operation: get-api-v1-message-list (http)"]
+  svc --> operation_11
+  operation_12["operation: get-api-v1-message-window (http)"]
+  svc --> operation_12
+  operation_13["operation: get-api-v1-ws (http)"]
+  svc --> operation_13
+  operation_14["operation: get-healthz (http)"]
+  svc --> operation_14
+  operation_15["operation: get-internal-v1-teacher-dialog-dialogid-request-sourcemessageid (http)"]
+  svc --> operation_15
+  operation_16["operation: get-metrics (http)"]
+  svc --> operation_16
+  operation_17["operation: get-readyz (http)"]
+  svc --> operation_17
+  operation_18["operation: post-admin-v1-space-create (http)"]
+  svc --> operation_18
+  operation_19["operation: post-api-v1-dialog-group-create (http)"]
+  svc --> operation_19
+  operation_20["operation: post-api-v1-dialog-leave-dialogid (http)"]
+  svc --> operation_20
+  operation_21["operation: post-api-v1-dialog-member-add-dialogid (http)"]
+  svc --> operation_21
+  operation_22["operation: post-api-v1-message-attachment-upload (http)"]
+  svc --> operation_22
+  operation_23["operation: post-api-v1-message-create (http)"]
+  svc --> operation_23
+  operation_24["operation: post-api-v1-realtime-ticket (http)"]
+  svc --> operation_24
+  operation_25["operation: post-internal-v1-teacher-dialog-dialogid-assistant-ui-source (http)"]
+  svc --> operation_25
+  operation_26["operation: post-internal-v1-teacher-dialog-dialogid-canonical-student-turn (http)"]
+  svc --> operation_26
+  operation_27["operation: post-internal-v1-teacher-dialog-dialogid-message (http)"]
+  svc --> operation_27
+  operation_28["operation: post-internal-v1-teacher-dialog-dialogid-proactive-message (http)"]
+  svc --> operation_28
+  operation_29["operation: post-internal-v1-teacher-dialog-dialogid-student-channel-message (http)"]
+  svc --> operation_29
+  operation_30["operation: put-admin-v1-dialog-close-dialogid (http)"]
+  svc --> operation_30
+  operation_31["operation: put-admin-v1-dialog-reopen-dialogid (http)"]
+  svc --> operation_31
+  operation_32["operation: put-admin-v1-message-hide-messageid (http)"]
+  svc --> operation_32
+  operation_33["operation: put-admin-v1-message-restore-messageid (http)"]
+  svc --> operation_33
+  operation_34["operation: put-admin-v1-space-update-spaceid (http)"]
+  svc --> operation_34
+  operation_35["operation: put-api-v1-dialog-member-role-dialogid-userid (http)"]
+  svc --> operation_35
+  operation_36["operation: put-api-v1-dialog-personal-ensure (http)"]
+  svc --> operation_36
+  operation_37["operation: put-api-v1-dialog-read-all-dialogid (http)"]
+  svc --> operation_37
+  operation_38["operation: put-api-v1-dialog-read-dialogid (http)"]
+  svc --> operation_38
+  operation_39["operation: put-api-v1-dialog-update-dialogid (http)"]
+  svc --> operation_39
+  operation_40["operation: put-api-v1-message-update-messageid (http)"]
+  svc --> operation_40
+  operation_41["operation: put-api-v1-user-block-userid (http)"]
+  svc --> operation_41
+  operation_42["operation: put-internal-v1-teacher-dialog-ensure (http)"]
+  svc --> operation_42
+  operation_43["operation: subscribe-dialog-attachment-failed (nats_event_subscriber)"]
+  svc --> operation_43
+  operation_44["operation: subscribe-dialog-attachment-ready (nats_event_subscriber)"]
+  svc --> operation_44
+  operation_45["operation: subscribe-dialog-closed (nats_event_subscriber)"]
+  svc --> operation_45
+  operation_46["operation: subscribe-dialog-created (nats_event_subscriber)"]
+  svc --> operation_46
+  operation_47["operation: subscribe-dialog-member-added (nats_event_subscriber)"]
+  svc --> operation_47
+  operation_48["operation: subscribe-dialog-member-removed (nats_event_subscriber)"]
+  svc --> operation_48
+  operation_49["operation: subscribe-dialog-member-role-updated (nats_event_subscriber)"]
+  svc --> operation_49
+  operation_50["operation: subscribe-dialog-message-created (nats_event_subscriber)"]
+  svc --> operation_50
+  operation_51["operation: subscribe-dialog-message-deleted (nats_event_subscriber)"]
+  svc --> operation_51
+  operation_52["operation: subscribe-dialog-message-hidden (nats_event_subscriber)"]
+  svc --> operation_52
+  operation_53["operation: subscribe-dialog-message-restored (nats_event_subscriber)"]
+  svc --> operation_53
+  operation_54["operation: subscribe-dialog-message-updated (nats_event_subscriber)"]
+  svc --> operation_54
+  operation_55["operation: subscribe-dialog-read-updated (nats_event_subscriber)"]
+  svc --> operation_55
+  operation_56["operation: subscribe-dialog-realtime-typing-wildcard (nats_event_subscriber)"]
+  svc --> operation_56
+  operation_57["operation: subscribe-dialog-updated (nats_event_subscriber)"]
+  svc --> operation_57
+  operation_58["operation: worker-attachment-lifecycle (scheduled)"]
+  svc --> operation_58
+  operation_59["operation: worker-outbox-dispatch (scheduled)"]
+  svc --> operation_59
+  operation_60["operation: worker-realtime-ticket-cleanup (scheduled)"]
+  svc --> operation_60

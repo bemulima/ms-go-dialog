@@ -1,0 +1,32 @@
+%% GENERATED — READ-ONLY PRESENTATION
+%% Do not edit; source of truth is the architecture manifest.
+flowchart TD
+  operation["subscribe-dialog-created — nats_event_subscriber"]
+  identity["identity: nats / dialog.created / event_subscriber"]
+  operation --> identity
+  access["access: NATS delivery to the service realtime projection. / NATS connection authentication is configured outside this subscriber implementation. / unknown; no message-level authorization policy is implemented in this subscriber. / Delivery is a projection; lifecycle event deduplication is defined by event_id and sequence reconciliation."]
+  operation --> access
+  trigger["trigger: A NATS message published on dialog.created."]
+  operation --> trigger
+  input["input: unknown"]
+  operation --> input
+  business_task["business task: Broadcast the lifecycle event to the local WebSocket hub."]
+  operation --> business_task
+  business_process["business process: broadcast / Copy the received payload before delivering it to the realtime sink."]
+  operation --> business_process
+  business_rules["business rule: unknown"]
+  operation --> business_rules
+  implementation["implementation: router=internal/transport/message/subscriber.go; handler=internal/transport/message/subscriber.go; use_cases=unknown; domain_services=unknown; repositories=unknown"]
+  operation --> implementation
+  data_access["data access: unknown"]
+  operation --> data_access
+  external_interactions["external interactions: unknown"]
+  operation --> external_interactions
+  side_effects["side effects: websocket_projection / Delivers a NATS event to connected local realtime clients."]
+  operation --> side_effects
+  output["output: unknown"]
+  operation --> output
+  errors["errors: unknown"]
+  operation --> errors
+  evidence["evidence: internal/transport/message/subscriber.go; confidence: 1"]
+  operation --> evidence

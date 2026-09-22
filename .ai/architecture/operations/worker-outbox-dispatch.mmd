@@ -1,0 +1,32 @@
+%% GENERATED — READ-ONLY PRESENTATION
+%% Do not edit; source of truth is the architecture manifest.
+flowchart TD
+  operation["worker-outbox-dispatch — scheduled"]
+  identity["identity: scheduled / outbox-dispatch / configured interval"]
+  operation --> identity
+  access["access: service process background execution. / not applicable to in-process scheduled execution. / not applicable to in-process scheduled execution. / The worker processing semantics are defined by its owned use case and persistence contract."]
+  operation --> access
+  trigger["trigger: A ticker using the service-configured interval."]
+  operation --> trigger
+  input["input: unknown"]
+  operation --> input
+  business_task["business task: Execute the outbox-dispatch background cycle."]
+  operation --> business_task
+  business_process["business process: process-cycle / Invoke runOutboxWorker when the ticker fires until process context cancellation."]
+  operation --> business_process
+  business_rules["business rule: unknown"]
+  operation --> business_rules
+  implementation["implementation: router=unknown; handler=cmd/ms-dialog-service/main.go / runOutboxWorker; use_cases=unknown; domain_services=unknown; repositories=unknown"]
+  operation --> implementation
+  data_access["data access: unknown"]
+  operation --> data_access
+  external_interactions["external interactions: unknown"]
+  operation --> external_interactions
+  side_effects["side effects: unknown"]
+  operation --> side_effects
+  output["output: unknown"]
+  operation --> output
+  errors["errors: unknown"]
+  operation --> errors
+  evidence["evidence: cmd/ms-dialog-service/main.go; confidence: 1"]
+  operation --> evidence
