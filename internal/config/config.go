@@ -2,12 +2,14 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"strings"
 
 	"github.com/kelseyhightower/envconfig"
 )
 
 type Config struct {
+	HTTPHost                          string `envconfig:"HTTP_HOST" default:""`
 	HTTPPort                          string `envconfig:"HTTP_PORT" default:"8080"`
 	HTTPReadHeaderTimeoutSeconds      int    `envconfig:"HTTP_READ_HEADER_TIMEOUT_SECONDS" default:"5"`
 	HTTPReadTimeoutSeconds            int    `envconfig:"HTTP_READ_TIMEOUT_SECONDS" default:"30"`
@@ -21,6 +23,7 @@ type Config struct {
 	DatabaseURL                       string `envconfig:"DATABASE_URL" default:"postgres://postgres:postgres@localhost:5444/ms_dialog?sslmode=disable"`
 	NATSURL                           string `envconfig:"NATS_URL" default:"nats://localhost:4222"`
 	FileStorageServiceBaseURL         string `envconfig:"FILESTORAGE_SERVICE_BASE_URL" default:"http://localhost:8088"`
+	FileStorageInternalToken          string `envconfig:"FILESTORAGE_INTERNAL_TOKEN" default:""`
 	ClamAVAddress                     string `envconfig:"CLAMAV_ADDRESS" default:"localhost:3310"`
 	ClamAVTimeoutSeconds              int    `envconfig:"CLAMAV_TIMEOUT_SECONDS" default:"30"`
 	UserServiceBaseURL                string `envconfig:"USER_SERVICE_BASE_URL" default:"http://localhost:8082"`
@@ -46,6 +49,12 @@ type Config struct {
 	WSMaxConnectionsPerUser           int    `envconfig:"WS_MAX_CONNECTIONS_PER_USER" default:"5"`
 	WSQueueSize                       int    `envconfig:"WS_QUEUE_SIZE" default:"64"`
 	WSMaxFrameBytes                   int64  `envconfig:"WS_MAX_FRAME_BYTES" default:"16384"`
+}
+
+// HTTPListenAddress keeps the container default while allowing native
+// development processes to bind only to loopback.
+func (c Config) HTTPListenAddress() string {
+	return net.JoinHostPort(c.HTTPHost, c.HTTPPort)
 }
 
 func Load() (Config, error) {

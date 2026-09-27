@@ -18,7 +18,7 @@ Dialog validates the response as an exact partition. Any unavailable participant
 
 ## FileStorage and scanner
 
-Dialog authorizes and binds attachment metadata. `ms-go-filestorage` owns bytes and temporary/active object lifecycle. Images are inspected locally; generic files fail closed unless ClamAV is reachable. Signed download URLs are requested only after current dialog membership and ready status are verified.
+Dialog authorizes and binds attachment metadata. `ms-go-filestorage` owns bytes and temporary/active object lifecycle. Dialog calls FileStorage through the authenticated internal boundary using `FILESTORAGE_INTERNAL_TOKEN`; FileStorage derives Dialog identity from that credential and verifies persisted service binding. Images are inspected locally; generic files fail closed unless ClamAV is reachable. Signed download URLs are requested only after current dialog membership and ready status are verified.
 
 ## NATS
 

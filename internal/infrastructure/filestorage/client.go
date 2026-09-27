@@ -18,8 +18,9 @@ import (
 const maxResponseBytes = 64 << 10
 
 type Client struct {
-	BaseURL    string
-	HTTPClient *http.Client
+	BaseURL       string
+	InternalToken string
+	HTTPClient    *http.Client
 }
 
 func (c Client) UploadTemporary(ctx context.Context, input attachmentuc.TemporaryFileInput) (attachmentuc.StoredFile, error) {
@@ -36,6 +37,7 @@ func (c Client) UploadTemporary(ctx context.Context, input attachmentuc.Temporar
 		return attachmentuc.StoredFile{}, err
 	}
 	request.Header.Set("Content-Type", multipartWriter.FormDataContentType())
+	c.authorize(request)
 	go writeTemporaryMultipart(writer, multipartWriter, input)
 	response, err := c.httpClient().Do(request)
 	if err != nil {
@@ -104,6 +106,7 @@ func (c Client) SignedGETURL(ctx context.Context, id uuid.UUID, minutes int) (st
 		return "", err
 	}
 	request.Header.Set("Content-Type", "application/json")
+	c.authorize(request)
 	response, err := c.httpClient().Do(request)
 	if err != nil {
 		return "", err
@@ -132,6 +135,7 @@ func (c Client) noBody(ctx context.Context, method, path string, success int, no
 	if err != nil {
 		return err
 	}
+	c.authorize(request)
 	response, err := c.httpClient().Do(request)
 	if err != nil {
 		return err
@@ -147,10 +151,13 @@ func (c Client) apiBaseURL() (string, error) {
 	if base == "" {
 		return "", fmt.Errorf("filestorage base URL is empty")
 	}
-	if !strings.HasSuffix(base, "/api/v1") {
-		base += "/api/v1"
+	if !strings.HasSuffix(base, "/internal/v1") {
+		base += "/internal/v1"
 	}
 	return base, nil
+}
+func (c Client) authorize(request *http.Request) {
+	request.Header.Set("X-Internal-Token", c.InternalToken)
 }
 func (c Client) httpClient() *http.Client {
 	if c.HTTPClient != nil {

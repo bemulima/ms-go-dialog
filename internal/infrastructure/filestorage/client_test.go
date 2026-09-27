@@ -2,6 +2,7 @@ package filestorage
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,7 +15,7 @@ import (
 func TestClientUploadTemporaryStreamsExpectedContract(t *testing.T) {
 	ownerID, storedID := uuid.New(), uuid.New()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/files/upload" {
+		if r.Method != http.MethodPost || r.URL.Path != "/internal/v1/files/upload" {
 			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
 			http.Error(w, "unexpected request", http.StatusBadRequest)
 			return
@@ -55,7 +56,7 @@ func TestClientUploadTemporaryStreamsExpectedContract(t *testing.T) {
 	}))
 	defer server.Close()
 
-	result, err := (Client{BaseURL: server.URL, HTTPClient: server.Client()}).UploadTemporary(context.Background(), attachmentuc.TemporaryFileInput{
+	result, err := (Client{BaseURL: server.URL, InternalToken: "test-token", HTTPClient: server.Client()}).UploadTemporary(context.Background(), attachmentuc.TemporaryFileInput{
 		OwnerID: ownerID, Filename: "photo.png", Data: []byte("image bytes"), TTLMinutes: 60,
 	})
 	if err != nil || result.ID != storedID {
@@ -76,5 +77,76 @@ func TestClientDeleteTreatsMissingFileAsIdempotent(t *testing.T) {
 
 	if err := (Client{BaseURL: server.URL, HTTPClient: server.Client()}).Delete(context.Background(), uuid.New()); err != nil {
 		t.Fatalf("idempotent delete failed: %v", err)
+	}
+}
+
+func TestClientActivateUsesExactInternalRouteAndCredential(t *testing.T) {
+	fileID := uuid.New()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/internal/v1/files/"+fileID.String()+"/activate" {
+			t.Errorf("unexpected activation request: %s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusBadRequest)
+			return
+		}
+		if got := r.Header.Get("X-Internal-Token"); got != "dialog-filestorage-test-token" {
+			t.Errorf("internal token=%q", got)
+			http.Error(w, "missing internal token", http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	if err := (Client{BaseURL: server.URL, InternalToken: "dialog-filestorage-test-token", HTTPClient: server.Client()}).Activate(context.Background(), fileID); err != nil {
+		t.Fatalf("activate file: %v", err)
+	}
+}
+
+func TestClientSignedGETURLUsesExactInternalContract(t *testing.T) {
+	fileID := uuid.New()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/internal/v1/files/"+fileID.String()+"/signed-url" {
+			t.Errorf("unexpected signed URL request: %s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusBadRequest)
+			return
+		}
+		if got := r.Header.Get("X-Internal-Token"); got != "dialog-filestorage-test-token" {
+			t.Errorf("internal token=%q", got)
+			http.Error(w, "missing internal token", http.StatusUnauthorized)
+			return
+		}
+		if got := r.Header.Get("Content-Type"); got != "application/json" {
+			t.Errorf("content type=%q", got)
+			http.Error(w, "unexpected content type", http.StatusBadRequest)
+			return
+		}
+		var request struct {
+			Purpose        string `json:"purpose"`
+			Method         string `json:"method"`
+			ExpiresMinutes int    `json:"expires_minutes"`
+		}
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&request); err != nil {
+			t.Errorf("decode signed URL request: %v", err)
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
+		}
+		if request.Purpose != "dialog_attachment" || request.Method != http.MethodGet || request.ExpiresMinutes != 4 {
+			t.Errorf("signed URL request=%+v", request)
+			http.Error(w, "unexpected signed URL request", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"url":"https://filestorage.test/signed-object"}`))
+	}))
+	defer server.Close()
+
+	url, err := (Client{BaseURL: server.URL, InternalToken: "dialog-filestorage-test-token", HTTPClient: server.Client()}).SignedGETURL(context.Background(), fileID, 4)
+	if err != nil {
+		t.Fatalf("request signed GET URL: %v", err)
+	}
+	if url != "https://filestorage.test/signed-object" {
+		t.Fatalf("signed URL=%q", url)
 	}
 }

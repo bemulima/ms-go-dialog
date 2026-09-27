@@ -109,6 +109,7 @@ instructions:
     - docs/frontend-backend-contract-map.md
     - docs/integration-contract.md
     - docs/operations.md
+    - docs/native-development.md
 commands:
     - format
     - dependencies
@@ -118,6 +119,9 @@ commands:
     - validate_contracts
     - runtime_e2e
     - migrate_local
+    - native_migration_status
+    - native_migrate
+    - native_run
     - run_local
     - start_local_stack
     - stop_local_stack

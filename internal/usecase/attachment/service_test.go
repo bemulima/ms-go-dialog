@@ -2,6 +2,7 @@ package attachment
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
 	"time"
@@ -182,5 +183,113 @@ func TestProcess_HiddenMessageCompletesAttachmentWithoutPublicEvent(t *testing.T
 	}
 	if len(outbox.items) != 0 || slices.Contains(trace, "message_advance") || slices.Contains(trace, "dialog_update") {
 		t.Fatalf("hidden message emitted lifecycle evidence: trace=%v events=%d", trace, len(outbox.items))
+	}
+}
+
+type uploadContractSpaceRepository struct {
+	repository.SpaceRepository
+	space domain.Space
+}
+
+func (r uploadContractSpaceRepository) GetByID(_ context.Context, id uuid.UUID) (domain.Space, error) {
+	if id != r.space.ID {
+		return domain.Space{}, domain.ErrNotFound
+	}
+	return r.space, nil
+}
+
+type uploadContractDialogRepository struct {
+	repository.DialogRepository
+	dialog domain.Dialog
+}
+
+func (r uploadContractDialogRepository) GetByID(_ context.Context, id uuid.UUID) (domain.Dialog, error) {
+	if id != r.dialog.ID {
+		return domain.Dialog{}, domain.ErrNotFound
+	}
+	return r.dialog, nil
+}
+
+type uploadContractMemberRepository struct {
+	repository.MemberRepository
+	member domain.Member
+}
+
+func (r uploadContractMemberRepository) Get(_ context.Context, dialogID, userID uuid.UUID) (domain.Member, error) {
+	if dialogID != r.member.DialogID || userID != r.member.UserID {
+		return domain.Member{}, domain.ErrNotFound
+	}
+	return r.member, nil
+}
+
+type uploadContractAttachmentRepository struct {
+	repository.AttachmentRepository
+	pendingCalls int
+	createCalls  int
+}
+
+func (r *uploadContractAttachmentRepository) CountPendingByUploader(context.Context, uuid.UUID, uuid.UUID, time.Time) (int, error) {
+	r.pendingCalls++
+	return 0, nil
+}
+
+func (r *uploadContractAttachmentRepository) Create(context.Context, domain.Attachment) error {
+	r.createCalls++
+	return nil
+}
+
+type uploadContractFileStorage struct{ uploadCalls int }
+
+func (f *uploadContractFileStorage) UploadTemporary(context.Context, TemporaryFileInput) (StoredFile, error) {
+	f.uploadCalls++
+	return StoredFile{ID: uuid.New()}, nil
+}
+func (*uploadContractFileStorage) Activate(context.Context, uuid.UUID) error { return nil }
+func (*uploadContractFileStorage) SignedGETURL(context.Context, uuid.UUID, int) (string, error) {
+	return "https://filestorage.test/signed-object", nil
+}
+func (*uploadContractFileStorage) Delete(context.Context, uuid.UUID) error { return nil }
+
+type uploadContractScanner struct {
+	err   error
+	calls int
+}
+
+func (s *uploadContractScanner) Scan(context.Context, []byte) error {
+	s.calls++
+	return s.err
+}
+
+func TestUpload_FailsClosedBeforeFileStorageWhenClamAVRejects(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		err  error
+	}{
+		{name: "scanner unavailable", err: domain.ErrFileScanUnavailable},
+		{name: "infected content", err: domain.ErrFileInfected},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			now := time.Now().UTC()
+			spaceID, dialogID, userID := uuid.New(), uuid.New(), uuid.New()
+			files := &uploadContractFileStorage{}
+			scanner := &uploadContractScanner{err: test.err}
+			attachments := &uploadContractAttachmentRepository{}
+			service := Service{
+				Spaces:      uploadContractSpaceRepository{space: domain.Space{ID: spaceID, Status: domain.SpaceStatusActive, Policy: domain.DefaultPolicy()}},
+				Dialogs:     uploadContractDialogRepository{dialog: domain.Dialog{ID: dialogID, SpaceID: spaceID, Status: domain.DialogStatusActive}},
+				Members:     uploadContractMemberRepository{member: domain.Member{DialogID: dialogID, UserID: userID, Status: domain.MemberStatusActive}},
+				Attachments: attachments, Files: files, Scanner: scanner, Now: func() time.Time { return now },
+			}
+
+			_, err := service.Upload(context.Background(), domain.Actor{UserID: userID, Role: "USER"}, UploadInput{
+				DialogID: dialogID, Filename: "notes.txt", Data: []byte("ordinary text file"),
+			})
+			if !errors.Is(err, test.err) {
+				t.Fatalf("upload error=%v, want %v", err, test.err)
+			}
+			if scanner.calls != 1 || files.uploadCalls != 0 || attachments.pendingCalls != 0 || attachments.createCalls != 0 {
+				t.Fatalf("fail-closed side effects: scans=%d file_uploads=%d pending_checks=%d metadata_creates=%d", scanner.calls, files.uploadCalls, attachments.pendingCalls, attachments.createCalls)
+			}
+		})
 	}
 }

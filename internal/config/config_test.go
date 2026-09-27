@@ -2,6 +2,15 @@ package config
 
 import "testing"
 
+func TestHTTPListenAddressPreservesContainerDefaultAndSupportsLoopback(t *testing.T) {
+	if got := (Config{HTTPPort: "8080"}).HTTPListenAddress(); got != ":8080" {
+		t.Fatalf("container listen address=%q want=%q", got, ":8080")
+	}
+	if got := (Config{HTTPHost: "127.0.0.1", HTTPPort: "18091"}).HTTPListenAddress(); got != "127.0.0.1:18091" {
+		t.Fatalf("native listen address=%q want=%q", got, "127.0.0.1:18091")
+	}
+}
+
 func TestConfig_ValidateModesAndTicketTTL(t *testing.T) {
 	valid := Config{
 		HTTPPort: "8080", DatabaseURL: "postgres://example", ServiceMode: "all",

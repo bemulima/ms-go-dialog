@@ -109,7 +109,7 @@ func run() error {
 		},
 	}
 	attachmentService := &attachmentuc.Service{Spaces: spaces, Dialogs: dialogs, Members: members, Messages: messages, Attachments: attachments, Outbox: outbox, Tx: tx,
-		Files: &filestorage.Client{BaseURL: cfg.FileStorageServiceBaseURL}, Scanner: &filescan.ClamAV{Address: cfg.ClamAVAddress, Timeout: time.Duration(cfg.ClamAVTimeoutSeconds) * time.Second}, TTLMinutes: cfg.AttachmentTTLMinutes, SignedURLMinutes: cfg.AttachmentSignedURLMinutes, ActivationMaxAttempts: cfg.AttachmentActivationAttempts, WorkerLease: time.Duration(cfg.AttachmentWorkerLeaseSeconds) * time.Second}
+		Files: &filestorage.Client{BaseURL: cfg.FileStorageServiceBaseURL, InternalToken: cfg.FileStorageInternalToken}, Scanner: &filescan.ClamAV{Address: cfg.ClamAVAddress, Timeout: time.Duration(cfg.ClamAVTimeoutSeconds) * time.Second}, TTLMinutes: cfg.AttachmentTTLMinutes, SignedURLMinutes: cfg.AttachmentSignedURLMinutes, ActivationMaxAttempts: cfg.AttachmentActivationAttempts, WorkerLease: time.Duration(cfg.AttachmentWorkerLeaseSeconds) * time.Second}
 	adminService := &adminuc.Service{Spaces: spaces, Dialogs: dialogs, Members: members, Messages: messages, Attachments: attachments, Outbox: outbox, Tx: tx}
 	realtimeService := &realtimeuc.TicketService{Spaces: spaces, Members: members, Tickets: tickets, TTL: time.Duration(cfg.RealtimeTicketTTLSeconds) * time.Second}
 	dispatcher := &realtimeuc.Dispatcher{Outbox: outbox, Lease: time.Duration(cfg.OutboxLeaseSeconds) * time.Second}
@@ -167,7 +167,7 @@ func run() error {
 	}
 	router := httpadapter.NewRouter(dependencies)
 	server := &http.Server{
-		Addr:              ":" + cfg.HTTPPort,
+		Addr:              cfg.HTTPListenAddress(),
 		Handler:           router,
 		ReadHeaderTimeout: time.Duration(cfg.HTTPReadHeaderTimeoutSeconds) * time.Second,
 		ReadTimeout:       time.Duration(cfg.HTTPReadTimeoutSeconds) * time.Second,

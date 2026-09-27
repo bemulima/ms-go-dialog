@@ -1,13 +1,26 @@
 #!/bin/sh
 set -eu
 
-db_service=${POSTGRES_SERVICE:-postgres}
-db_user=${POSTGRES_USER:-postgres}
-db_name=${POSTGRES_DB:-ms_dialog}
-
-run_psql() {
-    docker compose exec -T "$db_service" psql -v ON_ERROR_STOP=1 -U "$db_user" -d "$db_name" "$@"
-}
+transport=${DIALOG_MIGRATION_TRANSPORT:-docker}
+case "$transport" in
+    native)
+        run_psql() {
+            psql -X -v ON_ERROR_STOP=1 "$@"
+        }
+        ;;
+    docker)
+        db_service=${POSTGRES_SERVICE:-postgres}
+        db_user=${POSTGRES_USER:-postgres}
+        db_name=${POSTGRES_DB:-ms_dialog}
+        run_psql() {
+            docker compose exec -T "$db_service" psql -v ON_ERROR_STOP=1 -U "$db_user" -d "$db_name" "$@"
+        }
+        ;;
+    *)
+        printf 'unsupported Dialog migration transport: %s\n' "$transport" >&2
+        exit 2
+        ;;
+esac
 
 run_psql <<'SQL'
 CREATE TABLE IF NOT EXISTS dialog_schema_migration (

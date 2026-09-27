@@ -22,5 +22,6 @@ This repository is the canonical owner of the Dialog service's business rules, c
 ## Operations
 
 - [Operations](operations.md) — runtime modes, readiness, metrics, and operational constraints.
+- [Native development](native-development.md) — loopback runtime, shared infrastructure configuration, and migration commands.
 
 Machine-readable counterparts live under `.ai/contracts/`. Change human and machine-readable forms together when the owned behavior changes.

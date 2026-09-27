@@ -26,6 +26,7 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-ms_dialog}?sslmode=disable
       NATS_URL: nats://nats:4222
       FILESTORAGE_SERVICE_BASE_URL: http://ms-filestorage:8080
+      FILESTORAGE_INTERNAL_TOKEN: ${FILESTORAGE_INTERNAL_TOKEN:?set FILESTORAGE_INTERNAL_TOKEN}
       CLAMAV_ADDRESS: clamav:3310
       USER_SERVICE_BASE_URL: http://ms-user-service:8080
       USER_SERVICE_INTERNAL_TOKEN: ${USER_SERVICE_INTERNAL_TOKEN:-change-me}

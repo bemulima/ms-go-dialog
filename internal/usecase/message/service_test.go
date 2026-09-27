@@ -202,6 +202,51 @@ func TestWindow_TrimsProbesAndReportsAvailableDirections(t *testing.T) {
 	}
 }
 
+func TestNonmemberCannotReadOrWriteGroupMessages(t *testing.T) {
+	now := time.Now().UTC()
+	dialogID, spaceID, memberID, outsiderID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	dialogItem := domain.Dialog{
+		ID: dialogID, SpaceID: spaceID, Type: domain.DialogTypeGroup, Status: domain.DialogStatusActive,
+		Title: "Group", CreatedBy: memberID, Version: 1, MemberCount: 2,
+		MessageCount: 1, MaxMessageSequence: 1, MaxEventSequence: 1,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	space := domain.Space{ID: spaceID, Key: "platform", Name: "Platform", Status: domain.SpaceStatusActive,
+		Policy: domain.DefaultPolicy(), CreatedBy: memberID, CreatedAt: now, UpdatedAt: now}
+	newService := func() (*Service, *fakeDialogs, *fakeMessages, *fakeOutbox) {
+		dialogs := &fakeDialogs{item: dialogItem}
+		messages := &fakeMessages{items: make(map[uuid.UUID]domain.Message)}
+		outbox := &fakeOutbox{}
+		service := &Service{
+			Spaces: fakeSpaces{item: space}, Dialogs: dialogs,
+			Members:  &fakeMembers{items: map[uuid.UUID]domain.Member{memberID: activeMember(dialogID, memberID, 1, 0, now)}},
+			Messages: messages, Outbox: outbox, Tx: fakeTx{},
+		}
+		return service, dialogs, messages, outbox
+	}
+
+	t.Run("read", func(t *testing.T) {
+		service, _, _, _ := newService()
+		_, err := service.Window(context.Background(), domain.Actor{UserID: outsiderID, Role: "USER"}, dialogID, 10, 10)
+		if !errors.Is(err, domain.ErrForbidden) {
+			t.Fatalf("nonmember read error=%v, want forbidden", err)
+		}
+	})
+
+	t.Run("write", func(t *testing.T) {
+		service, dialogs, messages, outbox := newService()
+		_, err := service.Create(context.Background(), domain.Actor{UserID: outsiderID, Role: "USER"}, CreateInput{
+			DialogID: dialogID, IdempotencyKey: uuid.New(), Body: "must not be stored",
+		})
+		if !errors.Is(err, domain.ErrForbidden) {
+			t.Fatalf("nonmember write error=%v, want forbidden", err)
+		}
+		if len(messages.items) != 0 || len(outbox.items) != 0 || dialogs.item.MaxMessageSequence != 1 || dialogs.item.MessageCount != 1 {
+			t.Fatalf("nonmember write had side effects: messages=%d events=%d dialog=%+v", len(messages.items), len(outbox.items), dialogs.item)
+		}
+	})
+}
+
 func TestCreate_TeacherDialogPublishesDedicatedRequest(t *testing.T) {
 	now := time.Date(2026, 8, 30, 13, 0, 0, 0, time.UTC)
 	dialogID, spaceID, studentID, teacherID := uuid.New(), uuid.New(), uuid.New(), uuid.New()

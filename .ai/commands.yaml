@@ -26,10 +26,25 @@ commands:
       requires_approval: false
       risk: dependency_state
     - name: test
-      run: XDG_CACHE_HOME=$PWD/.cache GOCACHE=$PWD/.cache/go-build GOMODCACHE=$PWD/.cache/gomod go test ./...
+      run: make test
       source_path: Makefile
       requires_approval: false
       risk: verification
+    - name: native_run
+      run: python3 scripts/native_config.py -- go run ./cmd/ms-dialog-service
+      source_path: Taskfile.yml
+      requires_approval: true
+      risk: lifecycle
+    - name: native_migration_status
+      run: python3 scripts/native_config.py -- sh scripts/native_migrate_status.sh
+      source_path: Taskfile.yml
+      requires_approval: true
+      risk: database_inspection
+    - name: native_migrate
+      run: python3 scripts/native_config.py -- env DIALOG_MIGRATION_TRANSPORT=native sh scripts/migrate.sh
+      source_path: Taskfile.yml
+      requires_approval: true
+      risk: database_change
     - name: lint
       run: $PWD/.cache/bin/golangci-lint run ./...
       source_path: Makefile

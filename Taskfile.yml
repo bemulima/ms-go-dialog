@@ -11,14 +11,23 @@ tasks:
     cmds: [XDG_CACHE_HOME=$PWD/.cache GOMODCACHE=$PWD/.cache/gomod go mod tidy]
   run:
     cmds: [go run ./cmd/ms-dialog-service]
+  run:native:
+    desc: Run Dialog on loopback with shared infrastructure dependencies
+    cmds: [python3 scripts/native_config.py -- go run ./cmd/ms-dialog-service]
   test:
-    cmds: [XDG_CACHE_HOME=$PWD/.cache GOCACHE=$PWD/.cache/go-build GOMODCACHE=$PWD/.cache/gomod go test ./...]
+    cmds: [make test]
   lint:
     cmds: [$PWD/.cache/bin/golangci-lint run ./...]
   validate-contracts:
     cmds: [make validate-contracts]
   migrate:
     cmds: [make migrate]
+  migrate:native-status:
+    desc: Read Dialog migration ledger status from shared PostgreSQL without changing it
+    cmds: [python3 scripts/native_config.py -- sh scripts/native_migrate_status.sh]
+  migrate:native:
+    desc: Apply Dialog migrations to shared PostgreSQL using the existing ordered migration runner
+    cmds: [python3 scripts/native_config.py -- env DIALOG_MIGRATION_TRANSPORT=native sh scripts/migrate.sh]
   up:
     cmds: [docker compose up -d --build]
   down:

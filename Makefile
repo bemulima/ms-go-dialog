@@ -14,6 +14,7 @@ tidy:
 
 test:
 	XDG_CACHE_HOME=$(CURDIR)/.cache GOCACHE=$(CURDIR)/.cache/go-build GOMODCACHE=$(CURDIR)/.cache/gomod go test ./...
+	PYTHONDONTWRITEBYTECODE=1 python3 test/unit/native_config_test.py
 
 lint:
 	$(CURDIR)/.cache/bin/golangci-lint run ./...
