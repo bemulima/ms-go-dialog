@@ -22,11 +22,30 @@ jobs:
         with:
           node-version: "20.19.5"
 
-      - name: Set up Go from go.mod
+      - name: Set up Go 1.24.4
         uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: "1.24.4"
           cache: true
+
+      - name: Install pinned golangci-lint
+        shell: bash
+        run: |
+          set -euo pipefail
+          lint_bin="$GITHUB_WORKSPACE/.cache/bin"
+          mkdir -p "$lint_bin"
+          GOTOOLCHAIN=go1.24.4 GOBIN="$lint_bin" go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+          echo "$lint_bin" >> "$GITHUB_PATH"
+          export PATH="$lint_bin:$PATH"
+          resolved_linter="$(command -v golangci-lint)"
+          if [[ "$resolved_linter" != "$lint_bin/golangci-lint" ]]; then
+            echo "Unexpected golangci-lint executable: $resolved_linter" >&2
+            exit 1
+          fi
+          linter_version="$("$resolved_linter" version)"
+          printf '%s\n' "$linter_version"
+          grep -Fq 'version v1.64.8' <<< "$linter_version"
+          grep -Fq 'built with go1.24.4' <<< "$linter_version"
 
       - name: Check policy bundle checksum before execution
         run: |
