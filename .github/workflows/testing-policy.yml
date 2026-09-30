@@ -196,6 +196,7 @@ jobs:
         if: always()
         env:
           POLICY_RUN_OUTCOME: ${{ steps.policy_run.outcome }}
+          POLICY_TIER_COMMAND: ${{ github.event_name == 'schedule' && 'verify:nightly' || github.event_name == 'pull_request' && 'verify:pr' || github.event_name == 'push' && 'verify:main' || inputs.command || 'verify:pr' }}
           RESULT_VALIDATION_OUTCOME: ${{ steps.result_validation.outcome }}
           RESULT_UPLOAD_OUTCOME: ${{ steps.result_upload.outcome }}
         shell: bash
@@ -222,6 +223,6 @@ jobs:
             node .ai/testing/policy/policy-runner.cjs enforce-result --repo . --result "$result"
           done
           if [[ "$POLICY_RUN_OUTCOME" != success ]]; then
-            echo "Policy fast tier did not pass (outcome: $POLICY_RUN_OUTCOME)" >&2
+            echo "Policy tier $POLICY_TIER_COMMAND did not pass (outcome: $POLICY_RUN_OUTCOME)" >&2
             exit 1
           fi
