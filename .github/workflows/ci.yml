@@ -62,7 +62,7 @@ jobs:
       - name: PostgreSQL adapter checks
         env:
           DIALOG_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/ms_dialog?sslmode=disable
-        run: go test -race ./internal/adapters/postgres
+        run: go test -race ./internal/infrastructure/persistence/postgres
 
       - name: Start and probe Dialog API
         env:
