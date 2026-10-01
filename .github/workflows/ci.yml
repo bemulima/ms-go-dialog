@@ -46,6 +46,8 @@ jobs:
           make validate-contracts
 
       - name: Compose runtime contract
+        env:
+          FILESTORAGE_INTERNAL_TOKEN: filestorage-test-token
         run: ./test/runtime/compose_contract_test.sh
 
       - name: Apply migrations
