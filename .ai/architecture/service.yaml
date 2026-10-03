@@ -1,148 +1,408 @@
-schema: architecture/v1
-kind: service
-id: ms-go-dialog
-manifest_revision: 1
-identity: {name: ms-go-dialog, kind: go_backend_service}
-purpose: {value: "Own authenticated personal, group, and contextual messaging dialogs, memberships, messages, attachments, tickets, realtime sequence, and outbox delivery.", confidence: 1, evidence: [{source_path: .ai/service.yaml}]}
-responsibilities:
-  - value: "Expose the repository-owned HTTP and realtime interfaces while keeping delivery projections separate from durable state."
-    confidence: 1
-    evidence: [{source_path: .ai/contracts/http.yaml}]
-capabilities:
-  - value: "Serve all HTTP routes listed in the owned HTTP contract."
-    confidence: 1
-    evidence: [{source_path: .ai/contracts/http.yaml}]
-  - value: "Run the configured realtime subscriber and background work only in the corresponding service modes."
-    confidence: 1
-    evidence: [{source_path: cmd/ms-dialog-service/main.go}]
-owned_resources:
-  - type: postgres
-    name: service-owned durable domain state and outbox
-    description: {value: "The repository-owned database contract defines the durable storage boundary.", confidence: 1, evidence: [{source_path: .ai/contracts/database.yaml}]}
-inbound_interfaces:
-  - transport: http
-    name: http
-    description: {value: "The HTTP contract enumerates the concrete inbound routes.", confidence: 1, evidence: [{source_path: .ai/contracts/http.yaml}]}
-  - transport: nats
-    name: realtime_projection
-    description: {value: "Concrete NATS subscriptions feed the local realtime projection.", confidence: 1, evidence: [{source_path: internal/transport/message/subscriber.go}]}
-outbound_dependencies:
-  - id: postgres-dependency
-    transport: http
-    target: postgres
-    direction: outbound
-    description: {value: "The service depends on postgres at the boundary described by its repository-owned configuration and contracts.", confidence: 1, evidence: [{source_path: .ai/service.yaml}]}
-  - id: nats-dependency
-    transport: nats
-    target: nats
-    direction: outbound
-    description: {value: "The service depends on nats at the boundary described by its repository-owned configuration and contracts.", confidence: 1, evidence: [{source_path: .ai/service.yaml}]}
-  - id: filestorage-dependency
-    transport: http
-    target: filestorage
-    direction: outbound
-    description: {value: "The service depends on filestorage at the boundary described by its repository-owned configuration and contracts.", confidence: 1, evidence: [{source_path: .ai/service.yaml}]}
-  - id: user-dependency
-    transport: http
-    target: user
-    direction: outbound
-    description: {value: "The service depends on user at the boundary described by its repository-owned configuration and contracts.", confidence: 1, evidence: [{source_path: .ai/service.yaml}]}
-  - id: clamav-dependency
-    transport: http
-    target: clamav
-    direction: outbound
-    description: {value: "The service depends on clamav at the boundary described by its repository-owned configuration and contracts.", confidence: 1, evidence: [{source_path: .ai/service.yaml}]}
-endpoint_groups:
-  - id: http-routes
-    name: HTTP routes
-    description: {value: "Concrete HTTP operations are enumerated from the owned HTTP contract.", confidence: 1, evidence: [{source_path: .ai/contracts/http.yaml}]}
-    operations: [get-healthz, get-readyz, get-metrics, put-api-v1-dialog-personal-ensure, post-api-v1-dialog-group-create, get-api-v1-dialog-list, get-api-v1-dialog-get-dialogid, put-api-v1-dialog-update-dialogid, put-api-v1-dialog-read-dialogid, put-api-v1-dialog-read-all-dialogid, post-api-v1-dialog-leave-dialogid, post-api-v1-dialog-member-add-dialogid, delete-api-v1-dialog-member-remove-dialogid-userid, put-api-v1-dialog-member-role-dialogid-userid, put-api-v1-user-block-userid, delete-api-v1-user-block-userid, get-api-v1-message-window, get-api-v1-message-list, get-api-v1-message-get-messageid, get-api-v1-message-changes, post-api-v1-message-create, put-api-v1-message-update-messageid, delete-api-v1-message-delete-messageid, post-api-v1-message-attachment-upload, get-api-v1-message-attachment-signed-url-attachmentid, delete-api-v1-message-attachment-delete-attachmentid, post-api-v1-realtime-ticket, get-api-v1-ws, post-admin-v1-space-create, get-admin-v1-space-list, put-admin-v1-space-update-spaceid, get-admin-v1-dialog-list, put-admin-v1-dialog-close-dialogid, put-admin-v1-dialog-reopen-dialogid, put-admin-v1-message-hide-messageid, put-admin-v1-message-restore-messageid, put-internal-v1-teacher-dialog-ensure, get-internal-v1-teacher-dialog-dialogid-request-sourcemessageid, post-internal-v1-teacher-dialog-dialogid-assistant-ui-source, post-internal-v1-teacher-dialog-dialogid-canonical-student-turn, post-internal-v1-teacher-dialog-dialogid-message, post-internal-v1-teacher-dialog-dialogid-proactive-message, post-internal-v1-teacher-dialog-dialogid-student-channel-message]
-  - id: nats-subscribers
-    name: NATS subscribers
-    description: {value: "Concrete realtime subscriptions are enumerated from the subscriber implementation.", confidence: 1, evidence: [{source_path: internal/transport/message/subscriber.go}]}
-    operations: [subscribe-dialog-created, subscribe-dialog-updated, subscribe-dialog-closed, subscribe-dialog-member-added, subscribe-dialog-member-removed, subscribe-dialog-member-role-updated, subscribe-dialog-message-created, subscribe-dialog-message-updated, subscribe-dialog-message-deleted, subscribe-dialog-message-hidden, subscribe-dialog-message-restored, subscribe-dialog-attachment-ready, subscribe-dialog-attachment-failed, subscribe-dialog-read-updated, subscribe-dialog-realtime-typing-wildcard]
-  - id: background-work
-    name: Background work
-    description: {value: "Ticker-driven background operations are enumerated from the process composition.", confidence: 1, evidence: [{source_path: cmd/ms-dialog-service/main.go}]}
-    operations: [worker-attachment-lifecycle, worker-outbox-dispatch, worker-realtime-ticket-cleanup]
-produced_contracts:
-  - transport: nats
-    code: dialog_lifecycle_events
-    direction: produced
-    description: {value: "Published event subjects and delivery rules are defined by the owned event or ingestion contract.", confidence: 1, evidence: [{source_path: .ai/contracts/events.yaml}]}
-consumed_contracts: []
-published_events:
-  - transport: nats
-    code: dialog_lifecycle_events
-    direction: produced
-    description: {value: "The service publishes only the event contract documented by its owned event or ingestion contract.", confidence: 1, evidence: [{source_path: .ai/contracts/events.yaml}]}
-subscribed_events: []
-business_rules:
-  - value: "Concrete routes, NATS subjects, and worker triggers are recorded only where checked-in contracts or source prove them."
-    confidence: 1
-    evidence: [{source_path: .ai/contracts/http.yaml}]
-operation_manifests:
-  - endpoints/get-healthz.yaml
-  - endpoints/get-readyz.yaml
-  - endpoints/get-metrics.yaml
-  - endpoints/put-api-v1-dialog-personal-ensure.yaml
-  - endpoints/post-api-v1-dialog-group-create.yaml
-  - endpoints/get-api-v1-dialog-list.yaml
-  - endpoints/get-api-v1-dialog-get-dialogid.yaml
-  - endpoints/put-api-v1-dialog-update-dialogid.yaml
-  - endpoints/put-api-v1-dialog-read-dialogid.yaml
-  - endpoints/put-api-v1-dialog-read-all-dialogid.yaml
-  - endpoints/post-api-v1-dialog-leave-dialogid.yaml
-  - endpoints/post-api-v1-dialog-member-add-dialogid.yaml
-  - endpoints/delete-api-v1-dialog-member-remove-dialogid-userid.yaml
-  - endpoints/put-api-v1-dialog-member-role-dialogid-userid.yaml
-  - endpoints/put-api-v1-user-block-userid.yaml
-  - endpoints/delete-api-v1-user-block-userid.yaml
-  - endpoints/get-api-v1-message-window.yaml
-  - endpoints/get-api-v1-message-list.yaml
-  - endpoints/get-api-v1-message-get-messageid.yaml
-  - endpoints/get-api-v1-message-changes.yaml
-  - endpoints/post-api-v1-message-create.yaml
-  - endpoints/put-api-v1-message-update-messageid.yaml
-  - endpoints/delete-api-v1-message-delete-messageid.yaml
-  - endpoints/post-api-v1-message-attachment-upload.yaml
-  - endpoints/get-api-v1-message-attachment-signed-url-attachmentid.yaml
-  - endpoints/delete-api-v1-message-attachment-delete-attachmentid.yaml
-  - endpoints/post-api-v1-realtime-ticket.yaml
-  - endpoints/get-api-v1-ws.yaml
-  - endpoints/post-admin-v1-space-create.yaml
-  - endpoints/get-admin-v1-space-list.yaml
-  - endpoints/put-admin-v1-space-update-spaceid.yaml
-  - endpoints/get-admin-v1-dialog-list.yaml
-  - endpoints/put-admin-v1-dialog-close-dialogid.yaml
-  - endpoints/put-admin-v1-dialog-reopen-dialogid.yaml
-  - endpoints/put-admin-v1-message-hide-messageid.yaml
-  - endpoints/put-admin-v1-message-restore-messageid.yaml
-  - endpoints/put-internal-v1-teacher-dialog-ensure.yaml
-  - endpoints/get-internal-v1-teacher-dialog-dialogid-request-sourcemessageid.yaml
-  - endpoints/post-internal-v1-teacher-dialog-dialogid-assistant-ui-source.yaml
-  - endpoints/post-internal-v1-teacher-dialog-dialogid-canonical-student-turn.yaml
-  - endpoints/post-internal-v1-teacher-dialog-dialogid-message.yaml
-  - endpoints/post-internal-v1-teacher-dialog-dialogid-proactive-message.yaml
-  - endpoints/post-internal-v1-teacher-dialog-dialogid-student-channel-message.yaml
-  - operations/subscribe-dialog-created.yaml
-  - operations/subscribe-dialog-updated.yaml
-  - operations/subscribe-dialog-closed.yaml
-  - operations/subscribe-dialog-member-added.yaml
-  - operations/subscribe-dialog-member-removed.yaml
-  - operations/subscribe-dialog-member-role-updated.yaml
-  - operations/subscribe-dialog-message-created.yaml
-  - operations/subscribe-dialog-message-updated.yaml
-  - operations/subscribe-dialog-message-deleted.yaml
-  - operations/subscribe-dialog-message-hidden.yaml
-  - operations/subscribe-dialog-message-restored.yaml
-  - operations/subscribe-dialog-attachment-ready.yaml
-  - operations/subscribe-dialog-attachment-failed.yaml
-  - operations/subscribe-dialog-read-updated.yaml
-  - operations/subscribe-dialog-realtime-typing-wildcard.yaml
-  - operations/worker-attachment-lifecycle.yaml
-  - operations/worker-outbox-dispatch.yaml
-  - operations/worker-realtime-ticket-cleanup.yaml
-evidence: [{source_path: .ai/service.yaml}, {source_path: .ai/contracts/http.yaml}]
-confidence: 1
-
+{
+  "schema": "architecture/v1",
+  "kind": "service",
+  "id": "ms-go-dialog",
+  "manifest_revision": 2,
+  "identity": {
+    "name": "ms-go-dialog",
+    "kind": "go_backend_service"
+  },
+  "purpose": {
+    "value": "Own authenticated personal, group, and contextual messaging dialogs, memberships, messages, attachments, tickets, realtime sequence, and outbox delivery.",
+    "confidence": 1,
+    "evidence": [
+      {
+        "source_path": ".ai/service.yaml"
+      }
+    ]
+  },
+  "responsibilities": [
+    {
+      "value": "Expose the repository-owned HTTP and realtime interfaces while keeping delivery projections separate from durable state.",
+      "confidence": 1,
+      "evidence": [
+        {
+          "source_path": ".ai/contracts/http.yaml"
+        }
+      ]
+    }
+  ],
+  "capabilities": [
+    {
+      "value": "Serve all HTTP routes listed in the owned HTTP contract.",
+      "confidence": 1,
+      "evidence": [
+        {
+          "source_path": ".ai/contracts/http.yaml"
+        }
+      ]
+    },
+    {
+      "value": "Run the configured realtime subscriber and background work only in the corresponding service modes.",
+      "confidence": 1,
+      "evidence": [
+        {
+          "source_path": "cmd/ms-dialog-service/main.go"
+        }
+      ]
+    }
+  ],
+  "owned_resources": [
+    {
+      "type": "postgres",
+      "name": "service-owned durable domain state and outbox",
+      "description": {
+        "value": "The repository-owned database contract defines the durable storage boundary.",
+        "confidence": 1,
+        "evidence": [
+          {
+            "source_path": ".ai/contracts/database.yaml"
+          }
+        ]
+      }
+    }
+  ],
+  "inbound_interfaces": [
+    {
+      "transport": "http",
+      "name": "http",
+      "description": {
+        "value": "The HTTP contract enumerates the concrete inbound routes.",
+        "confidence": 1,
+        "evidence": [
+          {
+            "source_path": ".ai/contracts/http.yaml"
+          }
+        ]
+      }
+    },
+    {
+      "transport": "nats",
+      "name": "realtime_projection",
+      "description": {
+        "value": "Concrete NATS subscriptions feed the local realtime projection.",
+        "confidence": 1,
+        "evidence": [
+          {
+            "source_path": "internal/transport/message/subscriber.go"
+          }
+        ]
+      }
+    }
+  ],
+  "outbound_dependencies": [
+    {
+      "id": "postgres-dependency",
+      "transport": "postgresql",
+      "target": "postgres",
+      "direction": "outbound",
+      "description": {
+        "value": "The service depends on postgres at the boundary described by its repository-owned configuration and contracts.",
+        "confidence": 1,
+        "evidence": [
+          {
+            "source_path": "cmd/ms-dialog-service/main.go",
+            "checksum": "cebbb9259ddc8ba67c9d5e7ea76d0fe0a25c3b59199c353647c8155b9c101f1c"
+          }
+        ]
+      }
+    },
+    {
+      "id": "nats-dependency",
+      "transport": "nats",
+      "target": "nats",
+      "direction": "outbound",
+      "description": {
+        "value": "The service depends on nats at the boundary described by its repository-owned configuration and contracts.",
+        "confidence": 1,
+        "evidence": [
+          {
+            "source_path": "cmd/ms-dialog-service/main.go",
+            "checksum": "cebbb9259ddc8ba67c9d5e7ea76d0fe0a25c3b59199c353647c8155b9c101f1c"
+          }
+        ]
+      }
+    },
+    {
+      "id": "filestorage-dependency",
+      "transport": "http",
+      "target": "ms-go-filestorage",
+      "direction": "outbound",
+      "description": {
+        "value": "The service depends on filestorage at the boundary described by its repository-owned configuration and contracts.",
+        "confidence": 1,
+        "evidence": [
+          {
+            "source_path": "internal/infrastructure/filestorage/client.go",
+            "checksum": "5c962d49fcec514b07c6fbe863d0824cfe751a1bc75e45a4470b11f76bc239ac"
+          },
+          {
+            "source_path": "cmd/ms-dialog-service/main.go",
+            "checksum": "cebbb9259ddc8ba67c9d5e7ea76d0fe0a25c3b59199c353647c8155b9c101f1c"
+          }
+        ]
+      }
+    },
+    {
+      "id": "user-dependency",
+      "transport": "http",
+      "target": "ms-go-user",
+      "direction": "outbound",
+      "description": {
+        "value": "The service depends on user at the boundary described by its repository-owned configuration and contracts.",
+        "confidence": 1,
+        "evidence": [
+          {
+            "source_path": "internal/infrastructure/http/user/client.go",
+            "checksum": "83813cd19c4496871beec97c44730c75550d9d8c3d56eed34e32eee489a3ec50"
+          },
+          {
+            "source_path": "cmd/ms-dialog-service/main.go",
+            "checksum": "cebbb9259ddc8ba67c9d5e7ea76d0fe0a25c3b59199c353647c8155b9c101f1c"
+          }
+        ]
+      }
+    },
+    {
+      "id": "clamav-dependency",
+      "transport": "tcp",
+      "target": "clamav",
+      "direction": "outbound",
+      "description": {
+        "value": "The service depends on clamav at the boundary described by its repository-owned configuration and contracts.",
+        "confidence": 1,
+        "evidence": [
+          {
+            "source_path": "cmd/ms-dialog-service/main.go",
+            "checksum": "cebbb9259ddc8ba67c9d5e7ea76d0fe0a25c3b59199c353647c8155b9c101f1c"
+          }
+        ]
+      }
+    }
+  ],
+  "endpoint_groups": [
+    {
+      "id": "http-routes",
+      "name": "HTTP routes",
+      "description": {
+        "value": "Concrete HTTP operations are enumerated from the owned HTTP contract.",
+        "confidence": 1,
+        "evidence": [
+          {
+            "source_path": ".ai/contracts/http.yaml"
+          }
+        ]
+      },
+      "operations": [
+        "get-healthz",
+        "get-readyz",
+        "get-metrics",
+        "put-api-v1-dialog-personal-ensure",
+        "post-api-v1-dialog-group-create",
+        "get-api-v1-dialog-list",
+        "get-api-v1-dialog-get-dialogid",
+        "put-api-v1-dialog-update-dialogid",
+        "put-api-v1-dialog-read-dialogid",
+        "put-api-v1-dialog-read-all-dialogid",
+        "post-api-v1-dialog-leave-dialogid",
+        "post-api-v1-dialog-member-add-dialogid",
+        "delete-api-v1-dialog-member-remove-dialogid-userid",
+        "put-api-v1-dialog-member-role-dialogid-userid",
+        "put-api-v1-user-block-userid",
+        "delete-api-v1-user-block-userid",
+        "get-api-v1-message-window",
+        "get-api-v1-message-list",
+        "get-api-v1-message-get-messageid",
+        "get-api-v1-message-changes",
+        "post-api-v1-message-create",
+        "put-api-v1-message-update-messageid",
+        "delete-api-v1-message-delete-messageid",
+        "post-api-v1-message-attachment-upload",
+        "get-api-v1-message-attachment-signed-url-attachmentid",
+        "delete-api-v1-message-attachment-delete-attachmentid",
+        "post-api-v1-realtime-ticket",
+        "get-api-v1-ws",
+        "post-admin-v1-space-create",
+        "get-admin-v1-space-list",
+        "put-admin-v1-space-update-spaceid",
+        "get-admin-v1-dialog-list",
+        "put-admin-v1-dialog-close-dialogid",
+        "put-admin-v1-dialog-reopen-dialogid",
+        "put-admin-v1-message-hide-messageid",
+        "put-admin-v1-message-restore-messageid",
+        "put-internal-v1-teacher-dialog-ensure",
+        "get-internal-v1-teacher-dialog-dialogid-request-sourcemessageid",
+        "post-internal-v1-teacher-dialog-dialogid-assistant-ui-source",
+        "post-internal-v1-teacher-dialog-dialogid-canonical-student-turn",
+        "post-internal-v1-teacher-dialog-dialogid-message",
+        "post-internal-v1-teacher-dialog-dialogid-proactive-message",
+        "post-internal-v1-teacher-dialog-dialogid-student-channel-message"
+      ]
+    },
+    {
+      "id": "nats-subscribers",
+      "name": "NATS subscribers",
+      "description": {
+        "value": "Concrete realtime subscriptions are enumerated from the subscriber implementation.",
+        "confidence": 1,
+        "evidence": [
+          {
+            "source_path": "internal/transport/message/subscriber.go"
+          }
+        ]
+      },
+      "operations": [
+        "subscribe-dialog-created",
+        "subscribe-dialog-updated",
+        "subscribe-dialog-closed",
+        "subscribe-dialog-member-added",
+        "subscribe-dialog-member-removed",
+        "subscribe-dialog-member-role-updated",
+        "subscribe-dialog-message-created",
+        "subscribe-dialog-message-updated",
+        "subscribe-dialog-message-deleted",
+        "subscribe-dialog-message-hidden",
+        "subscribe-dialog-message-restored",
+        "subscribe-dialog-attachment-ready",
+        "subscribe-dialog-attachment-failed",
+        "subscribe-dialog-read-updated",
+        "subscribe-dialog-realtime-typing-wildcard"
+      ]
+    },
+    {
+      "id": "background-work",
+      "name": "Background work",
+      "description": {
+        "value": "Ticker-driven background operations are enumerated from the process composition.",
+        "confidence": 1,
+        "evidence": [
+          {
+            "source_path": "cmd/ms-dialog-service/main.go"
+          }
+        ]
+      },
+      "operations": [
+        "worker-attachment-lifecycle",
+        "worker-outbox-dispatch",
+        "worker-realtime-ticket-cleanup"
+      ]
+    }
+  ],
+  "produced_contracts": [
+    {
+      "transport": "nats",
+      "code": "dialog_lifecycle_events",
+      "direction": "produced",
+      "description": {
+        "value": "Published event subjects and delivery rules are defined by the owned event or ingestion contract.",
+        "confidence": 1,
+        "evidence": [
+          {
+            "source_path": ".ai/contracts/events.yaml"
+          }
+        ]
+      }
+    }
+  ],
+  "consumed_contracts": [],
+  "published_events": [
+    {
+      "transport": "nats",
+      "code": "dialog_lifecycle_events",
+      "direction": "produced",
+      "description": {
+        "value": "The service publishes only the event contract documented by its owned event or ingestion contract.",
+        "confidence": 1,
+        "evidence": [
+          {
+            "source_path": ".ai/contracts/events.yaml"
+          }
+        ]
+      }
+    }
+  ],
+  "subscribed_events": [],
+  "business_rules": [
+    {
+      "value": "Concrete routes, NATS subjects, and worker triggers are recorded only where checked-in contracts or source prove them.",
+      "confidence": 1,
+      "evidence": [
+        {
+          "source_path": ".ai/contracts/http.yaml"
+        }
+      ]
+    }
+  ],
+  "operation_manifests": [
+    "endpoints/get-healthz.yaml",
+    "endpoints/get-readyz.yaml",
+    "endpoints/get-metrics.yaml",
+    "endpoints/put-api-v1-dialog-personal-ensure.yaml",
+    "endpoints/post-api-v1-dialog-group-create.yaml",
+    "endpoints/get-api-v1-dialog-list.yaml",
+    "endpoints/get-api-v1-dialog-get-dialogid.yaml",
+    "endpoints/put-api-v1-dialog-update-dialogid.yaml",
+    "endpoints/put-api-v1-dialog-read-dialogid.yaml",
+    "endpoints/put-api-v1-dialog-read-all-dialogid.yaml",
+    "endpoints/post-api-v1-dialog-leave-dialogid.yaml",
+    "endpoints/post-api-v1-dialog-member-add-dialogid.yaml",
+    "endpoints/delete-api-v1-dialog-member-remove-dialogid-userid.yaml",
+    "endpoints/put-api-v1-dialog-member-role-dialogid-userid.yaml",
+    "endpoints/put-api-v1-user-block-userid.yaml",
+    "endpoints/delete-api-v1-user-block-userid.yaml",
+    "endpoints/get-api-v1-message-window.yaml",
+    "endpoints/get-api-v1-message-list.yaml",
+    "endpoints/get-api-v1-message-get-messageid.yaml",
+    "endpoints/get-api-v1-message-changes.yaml",
+    "endpoints/post-api-v1-message-create.yaml",
+    "endpoints/put-api-v1-message-update-messageid.yaml",
+    "endpoints/delete-api-v1-message-delete-messageid.yaml",
+    "endpoints/post-api-v1-message-attachment-upload.yaml",
+    "endpoints/get-api-v1-message-attachment-signed-url-attachmentid.yaml",
+    "endpoints/delete-api-v1-message-attachment-delete-attachmentid.yaml",
+    "endpoints/post-api-v1-realtime-ticket.yaml",
+    "endpoints/get-api-v1-ws.yaml",
+    "endpoints/post-admin-v1-space-create.yaml",
+    "endpoints/get-admin-v1-space-list.yaml",
+    "endpoints/put-admin-v1-space-update-spaceid.yaml",
+    "endpoints/get-admin-v1-dialog-list.yaml",
+    "endpoints/put-admin-v1-dialog-close-dialogid.yaml",
+    "endpoints/put-admin-v1-dialog-reopen-dialogid.yaml",
+    "endpoints/put-admin-v1-message-hide-messageid.yaml",
+    "endpoints/put-admin-v1-message-restore-messageid.yaml",
+    "endpoints/put-internal-v1-teacher-dialog-ensure.yaml",
+    "endpoints/get-internal-v1-teacher-dialog-dialogid-request-sourcemessageid.yaml",
+    "endpoints/post-internal-v1-teacher-dialog-dialogid-assistant-ui-source.yaml",
+    "endpoints/post-internal-v1-teacher-dialog-dialogid-canonical-student-turn.yaml",
+    "endpoints/post-internal-v1-teacher-dialog-dialogid-message.yaml",
+    "endpoints/post-internal-v1-teacher-dialog-dialogid-proactive-message.yaml",
+    "endpoints/post-internal-v1-teacher-dialog-dialogid-student-channel-message.yaml",
+    "operations/subscribe-dialog-created.yaml",
+    "operations/subscribe-dialog-updated.yaml",
+    "operations/subscribe-dialog-closed.yaml",
+    "operations/subscribe-dialog-member-added.yaml",
+    "operations/subscribe-dialog-member-removed.yaml",
+    "operations/subscribe-dialog-member-role-updated.yaml",
+    "operations/subscribe-dialog-message-created.yaml",
+    "operations/subscribe-dialog-message-updated.yaml",
+    "operations/subscribe-dialog-message-deleted.yaml",
+    "operations/subscribe-dialog-message-hidden.yaml",
+    "operations/subscribe-dialog-message-restored.yaml",
+    "operations/subscribe-dialog-attachment-ready.yaml",
+    "operations/subscribe-dialog-attachment-failed.yaml",
+    "operations/subscribe-dialog-read-updated.yaml",
+    "operations/subscribe-dialog-realtime-typing-wildcard.yaml",
+    "operations/worker-attachment-lifecycle.yaml",
+    "operations/worker-outbox-dispatch.yaml",
+    "operations/worker-realtime-ticket-cleanup.yaml"
+  ],
+  "evidence": [
+    {
+      "source_path": ".ai/service.yaml"
+    },
+    {
+      "source_path": ".ai/contracts/http.yaml"
+    }
+  ],
+  "confidence": 1
+}

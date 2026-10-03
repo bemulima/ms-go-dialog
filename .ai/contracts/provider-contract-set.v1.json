@@ -1,0 +1,267 @@
+{
+  "schema_version": "provider-contract-set.v1",
+  "provider": {
+    "repository": "bemulima/ms-go-dialog",
+    "service": "ms-go-dialog",
+    "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9"
+  },
+  "contracts": [
+    {
+      "id": "ms-go-dialog.http.v1",
+      "kind": "HTTP",
+      "path": ".ai/contracts/http.yaml",
+      "version": "v1",
+      "version_semantics": "exact",
+      "blob_sha": "ab6dbed5ded6b6ab5189a44a50c6d8c4eeb05670",
+      "content_sha256": "5feeb1c9275040d9be3e3eab2230098e32ab77edce8e81fe7d7dd81793329cf5",
+      "operations": [
+        "ANY /api/v1/ws",
+        "DELETE /api/v1/dialog-member/remove/{dialogID}/{userID}",
+        "DELETE /api/v1/message-attachment/delete/{attachmentID}",
+        "DELETE /api/v1/message/delete/{messageID}",
+        "DELETE /api/v1/user-block/{userID}",
+        "GET /admin/v1/dialog/list",
+        "GET /admin/v1/space/list",
+        "GET /api/v1/dialog/get/{dialogID}",
+        "GET /api/v1/dialog/list",
+        "GET /api/v1/message-attachment/signed-url/{attachmentID}",
+        "GET /api/v1/message/changes",
+        "GET /api/v1/message/get/{messageID}",
+        "GET /api/v1/message/list",
+        "GET /api/v1/message/window",
+        "GET /internal/v1/teacher-dialog/{dialogID}/request/{sourceMessageID}",
+        "POST /admin/v1/space/create",
+        "POST /api/v1/dialog-member/add/{dialogID}",
+        "POST /api/v1/dialog/group/create",
+        "POST /api/v1/dialog/leave/{dialogID}",
+        "POST /api/v1/message-attachment/upload",
+        "POST /api/v1/message/create",
+        "POST /api/v1/realtime/ticket",
+        "POST /internal/v1/teacher-dialog/{dialogID}/assistant-ui-source",
+        "POST /internal/v1/teacher-dialog/{dialogID}/canonical-student-turn",
+        "POST /internal/v1/teacher-dialog/{dialogID}/message",
+        "POST /internal/v1/teacher-dialog/{dialogID}/proactive-message",
+        "POST /internal/v1/teacher-dialog/{dialogID}/student-channel-message",
+        "PUT /admin/v1/dialog/close/{dialogID}",
+        "PUT /admin/v1/dialog/reopen/{dialogID}",
+        "PUT /admin/v1/message/hide/{messageID}",
+        "PUT /admin/v1/message/restore/{messageID}",
+        "PUT /admin/v1/space/update/{spaceID}",
+        "PUT /api/v1/dialog-member/role/{dialogID}/{userID}",
+        "PUT /api/v1/dialog/personal/ensure",
+        "PUT /api/v1/dialog/read-all/{dialogID}",
+        "PUT /api/v1/dialog/read/{dialogID}",
+        "PUT /api/v1/dialog/update/{dialogID}",
+        "PUT /api/v1/message/update/{messageID}",
+        "PUT /api/v1/user-block/{userID}",
+        "PUT /internal/v1/teacher-dialog/ensure"
+      ],
+      "references": [],
+      "source_pins": [
+        {
+          "repository": "bemulima/ms-go-dialog",
+          "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+          "path": ".ai/contracts/http.yaml",
+          "blob_sha": "ab6dbed5ded6b6ab5189a44a50c6d8c4eeb05670",
+          "content_sha256": "5feeb1c9275040d9be3e3eab2230098e32ab77edce8e81fe7d7dd81793329cf5"
+        },
+        {
+          "repository": "bemulima/ms-go-dialog",
+          "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+          "path": "internal/transport/http/router.go",
+          "blob_sha": "e22c85915b7817a42320c7f55561cf85b248d6c0",
+          "content_sha256": "e87276097711e72f1c3f31d0d061eab8e470e4b276c63a185919a6d4393f5ea5"
+        }
+      ]
+    },
+    {
+      "id": "ms-go-dialog.http.unversioned",
+      "kind": "HTTP",
+      "path": ".ai/contracts/http.yaml",
+      "version": "unversioned",
+      "version_semantics": "unversioned",
+      "blob_sha": "ab6dbed5ded6b6ab5189a44a50c6d8c4eeb05670",
+      "content_sha256": "5feeb1c9275040d9be3e3eab2230098e32ab77edce8e81fe7d7dd81793329cf5",
+      "operations": [
+        "GET /healthz",
+        "GET /metrics",
+        "GET /readyz"
+      ],
+      "references": [],
+      "source_pins": [
+        {
+          "repository": "bemulima/ms-go-dialog",
+          "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+          "path": ".ai/contracts/http.yaml",
+          "blob_sha": "ab6dbed5ded6b6ab5189a44a50c6d8c4eeb05670",
+          "content_sha256": "5feeb1c9275040d9be3e3eab2230098e32ab77edce8e81fe7d7dd81793329cf5"
+        },
+        {
+          "repository": "bemulima/ms-go-dialog",
+          "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+          "path": "internal/transport/http/router.go",
+          "blob_sha": "e22c85915b7817a42320c7f55561cf85b248d6c0",
+          "content_sha256": "e87276097711e72f1c3f31d0d061eab8e470e4b276c63a185919a6d4393f5ea5"
+        }
+      ]
+    },
+    {
+      "id": "ms-go-dialog.event.v1",
+      "kind": "EVENT",
+      "path": ".ai/contracts/events.yaml",
+      "version": "v1",
+      "version_semantics": "exact",
+      "blob_sha": "2d2491a234bb7598f2a1a66f6faa84c2fa34d381",
+      "content_sha256": "48f556d33915691e36b67396ea2b5492cd2b1c67c8c49507f12c7f5a351a0934",
+      "operations": [
+        "dialog.attachment.failed",
+        "dialog.attachment.ready",
+        "dialog.closed",
+        "dialog.created",
+        "dialog.member.added",
+        "dialog.member.removed",
+        "dialog.member.role_updated",
+        "dialog.message.created",
+        "dialog.message.deleted",
+        "dialog.message.hidden",
+        "dialog.message.restored",
+        "dialog.message.updated",
+        "dialog.read.updated",
+        "dialog.teacher.context-mutated",
+        "dialog.teacher.requested",
+        "dialog.updated"
+      ],
+      "references": [],
+      "source_pins": [
+        {
+          "repository": "bemulima/ms-go-dialog",
+          "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+          "path": ".ai/contracts/events.yaml",
+          "blob_sha": "2d2491a234bb7598f2a1a66f6faa84c2fa34d381",
+          "content_sha256": "48f556d33915691e36b67396ea2b5492cd2b1c67c8c49507f12c7f5a351a0934"
+        },
+        {
+          "repository": "bemulima/ms-go-dialog",
+          "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+          "path": "internal/domain/outbox.go",
+          "blob_sha": "ffea635c057e9e0d274bdb6310b14312fff2a122",
+          "content_sha256": "9dbfae441fce4ffae47ce0149fb1a71b27f797933507a42bff7cc825cec370c8"
+        },
+        {
+          "repository": "bemulima/ms-go-dialog",
+          "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+          "path": "internal/domain/teacher_contracts.go",
+          "blob_sha": "e9a430db8f64a4f76205c4a0c54d549b2539b5c1",
+          "content_sha256": "89eb6bf623cd7958b7d6a00fdf6874ee2103d30d83cd13ea82c29dd2ee9ace1a"
+        },
+        {
+          "repository": "bemulima/ms-go-dialog",
+          "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+          "path": "internal/infrastructure/messaging/nats/client.go",
+          "blob_sha": "ba231150e03596b13d602dfe3e21b43707c7b60c",
+          "content_sha256": "0abf1b00b6044e309278007f501e2f6e087c0342edf5efa9d78a60e879647574"
+        },
+        {
+          "repository": "bemulima/ms-go-dialog",
+          "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+          "path": "internal/usecase/admin/service.go",
+          "blob_sha": "38b8903407792e2b575a02c8711df8d6777fc5a2",
+          "content_sha256": "449e88813d42631bf97c455e09bf57ae5cf478219ba78460794affbce693928c"
+        },
+        {
+          "repository": "bemulima/ms-go-dialog",
+          "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+          "path": "internal/usecase/attachment/service.go",
+          "blob_sha": "fd96127a00dd0a1abbbe619076159819a4263b72",
+          "content_sha256": "3dfc3d284d31f4b0eaaa13567b6d24a0fb8e19cbcea7bbdc888ae815d373ef31"
+        },
+        {
+          "repository": "bemulima/ms-go-dialog",
+          "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+          "path": "internal/usecase/dialog/service.go",
+          "blob_sha": "c1bc1835ea8d7a6809bf66bdb8c26ab7079930dd",
+          "content_sha256": "2a7631e052513ca7d2f53e08140ac66c8de838f0f168cc3b9780692d8bbe399f"
+        },
+        {
+          "repository": "bemulima/ms-go-dialog",
+          "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+          "path": "internal/usecase/message/service.go",
+          "blob_sha": "05d981d26f149d1240be82e2ccb0dd3e921f56e7",
+          "content_sha256": "79020e984f1a48770058dd35edcb295b2175c8a27797cb8128927ede5199f61b"
+        }
+      ]
+    },
+    {
+      "id": "ms-go-dialog.event.v2",
+      "kind": "EVENT",
+      "path": ".ai/contracts/events.yaml",
+      "version": "v2",
+      "version_semantics": "exact",
+      "blob_sha": "2d2491a234bb7598f2a1a66f6faa84c2fa34d381",
+      "content_sha256": "48f556d33915691e36b67396ea2b5492cd2b1c67c8c49507f12c7f5a351a0934",
+      "operations": [
+        "dialog.teacher.requested"
+      ],
+      "references": [],
+      "source_pins": [
+        {
+          "repository": "bemulima/ms-go-dialog",
+          "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+          "path": ".ai/contracts/events.yaml",
+          "blob_sha": "2d2491a234bb7598f2a1a66f6faa84c2fa34d381",
+          "content_sha256": "48f556d33915691e36b67396ea2b5492cd2b1c67c8c49507f12c7f5a351a0934"
+        },
+        {
+          "repository": "bemulima/ms-go-dialog",
+          "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+          "path": "internal/domain/teacher_contracts.go",
+          "blob_sha": "e9a430db8f64a4f76205c4a0c54d549b2539b5c1",
+          "content_sha256": "89eb6bf623cd7958b7d6a00fdf6874ee2103d30d83cd13ea82c29dd2ee9ace1a"
+        },
+        {
+          "repository": "bemulima/ms-go-dialog",
+          "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+          "path": "internal/infrastructure/messaging/nats/client.go",
+          "blob_sha": "ba231150e03596b13d602dfe3e21b43707c7b60c",
+          "content_sha256": "0abf1b00b6044e309278007f501e2f6e087c0342edf5efa9d78a60e879647574"
+        },
+        {
+          "repository": "bemulima/ms-go-dialog",
+          "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+          "path": "internal/usecase/message/service.go",
+          "blob_sha": "05d981d26f149d1240be82e2ccb0dd3e921f56e7",
+          "content_sha256": "79020e984f1a48770058dd35edcb295b2175c8a27797cb8128927ede5199f61b"
+        }
+      ]
+    },
+    {
+      "id": "ms-go-dialog.event.unversioned",
+      "kind": "EVENT",
+      "path": ".ai/contracts/events.yaml",
+      "version": "unversioned",
+      "version_semantics": "unversioned",
+      "blob_sha": "2d2491a234bb7598f2a1a66f6faa84c2fa34d381",
+      "content_sha256": "48f556d33915691e36b67396ea2b5492cd2b1c67c8c49507f12c7f5a351a0934",
+      "operations": [
+        "dialog.realtime.typing.*"
+      ],
+      "references": [],
+      "source_pins": [
+        {
+          "repository": "bemulima/ms-go-dialog",
+          "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+          "path": ".ai/contracts/events.yaml",
+          "blob_sha": "2d2491a234bb7598f2a1a66f6faa84c2fa34d381",
+          "content_sha256": "48f556d33915691e36b67396ea2b5492cd2b1c67c8c49507f12c7f5a351a0934"
+        },
+        {
+          "repository": "bemulima/ms-go-dialog",
+          "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+          "path": "internal/infrastructure/messaging/nats/client.go",
+          "blob_sha": "ba231150e03596b13d602dfe3e21b43707c7b60c",
+          "content_sha256": "0abf1b00b6044e309278007f501e2f6e087c0342edf5efa9d78a60e879647574"
+        }
+      ]
+    }
+  ]
+}

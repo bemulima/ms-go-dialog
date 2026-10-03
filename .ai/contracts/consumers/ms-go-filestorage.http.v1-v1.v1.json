@@ -1,0 +1,37 @@
+{
+  "schema_version": "consumer-contract-expectation.v1",
+  "consumer": {
+    "repository": "bemulima/ms-go-dialog",
+    "service": "ms-go-dialog",
+    "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9"
+  },
+  "provider_repository": "bemulima/ms-go-filestorage",
+  "provider_service": "ms-go-filestorage",
+  "contract_id": "ms-go-filestorage.http.v1",
+  "contract_path": "internal/transport/http/router.go",
+  "kind": "HTTP",
+  "version_semantics": "exact",
+  "expected_version": "v1",
+  "required_operations": [
+    "DELETE /internal/v1/files/:id",
+    "POST /internal/v1/files/:id/activate",
+    "POST /internal/v1/files/:id/signed-url",
+    "POST /internal/v1/files/upload"
+  ],
+  "source_pins": [
+    {
+      "repository": "bemulima/ms-go-dialog",
+      "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+      "path": "cmd/ms-dialog-service/main.go",
+      "blob_sha": "a6c2e08f2462eb4f847e9b9834783407e0032463",
+      "content_sha256": "cebbb9259ddc8ba67c9d5e7ea76d0fe0a25c3b59199c353647c8155b9c101f1c"
+    },
+    {
+      "repository": "bemulima/ms-go-dialog",
+      "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+      "path": "internal/infrastructure/filestorage/client.go",
+      "blob_sha": "1f455964acdbe54e158d46f53774fa068623943a",
+      "content_sha256": "5c962d49fcec514b07c6fbe863d0824cfe751a1bc75e45a4470b11f76bc239ac"
+    }
+  ]
+}

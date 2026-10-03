@@ -1,0 +1,31 @@
+{
+  "schema_version": "provider-owner-audit.v1",
+  "provider": {
+    "repository": "bemulima/ms-go-dialog",
+    "service": "ms-go-dialog",
+    "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9"
+  },
+  "classification": "PROVIDER_APPLICABLE",
+  "source_pins": [
+    {
+      "repository": "bemulima/ms-go-dialog",
+      "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+      "path": "internal/transport/http/router.go",
+      "blob_sha": "e22c85915b7817a42320c7f55561cf85b248d6c0",
+      "content_sha256": "e87276097711e72f1c3f31d0d061eab8e470e4b276c63a185919a6d4393f5ea5"
+    },
+    {
+      "repository": "bemulima/ms-go-dialog",
+      "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+      "path": "internal/domain/outbox.go",
+      "blob_sha": "ffea635c057e9e0d274bdb6310b14312fff2a122",
+      "content_sha256": "9dbfae441fce4ffae47ce0149fb1a71b27f797933507a42bff7cc825cec370c8"
+    }
+  ],
+  "reason": "Authoritative production routes and emitted event code expose platform interfaces.",
+  "inspected_paths": [
+    "internal/transport/http/router.go",
+    "internal/domain/outbox.go"
+  ],
+  "contract_set_path": ".ai/contracts/provider-contract-set.v1.json"
+}

@@ -1,0 +1,34 @@
+{
+  "schema_version": "consumer-contract-expectation.v1",
+  "consumer": {
+    "repository": "bemulima/ms-go-dialog",
+    "service": "ms-go-dialog",
+    "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9"
+  },
+  "provider_repository": "bemulima/ms-go-user",
+  "provider_service": "ms-go-user",
+  "contract_id": "ms-go-user.http.v1",
+  "contract_path": "internal/transport/http/private/router.go",
+  "kind": "HTTP",
+  "version_semantics": "exact",
+  "expected_version": "v1",
+  "required_operations": [
+    "POST /internal/v1/users/active/resolve"
+  ],
+  "source_pins": [
+    {
+      "repository": "bemulima/ms-go-dialog",
+      "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+      "path": "cmd/ms-dialog-service/main.go",
+      "blob_sha": "a6c2e08f2462eb4f847e9b9834783407e0032463",
+      "content_sha256": "cebbb9259ddc8ba67c9d5e7ea76d0fe0a25c3b59199c353647c8155b9c101f1c"
+    },
+    {
+      "repository": "bemulima/ms-go-dialog",
+      "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+      "path": "internal/infrastructure/http/user/client.go",
+      "blob_sha": "6aff4a86214bad47512e756e2603b81406258ab3",
+      "content_sha256": "83813cd19c4496871beec97c44730c75550d9d8c3d56eed34e32eee489a3ec50"
+    }
+  ]
+}
