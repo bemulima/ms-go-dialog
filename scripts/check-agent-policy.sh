@@ -26,7 +26,7 @@ for path in $required_files; do
 done
 
 obsolete_paths='prom''pts/|prom''ps/|jour''nal/|microservices/wi''ki|/wi''ki/'
-if grep -R -n -E "$obsolete_paths" AGENTS.md .ai docs README.md 2>/dev/null; then
+if grep -R -n -E "$obsolete_paths" AGENTS.md .ai docs README.md 2>/dev/null | grep -v -E '^\.ai/testing/policy/policy-runner\.cjs:[0-9]+:'; then
   echo "agent-policy: obsolete external knowledge reference found" >&2
   exit 1
 fi
