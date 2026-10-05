@@ -28,6 +28,21 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ms_dialog
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ms_dialog"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -97,10 +112,20 @@ jobs:
       - name: Validate testing manifest
         run: node .ai/testing/policy/policy-runner.cjs validate --repo .
 
+      - name: Apply migrations
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          for file in $(find db/migrations -maxdepth 1 -type f -name '*.up.sql' | sort); do
+            psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d ms_dialog -f "$file" >/dev/null
+          done
+
       - name: Run selected Testing Policy tier
         id: policy_run
         continue-on-error: true
         env:
+          DIALOG_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/ms_dialog?sslmode=disable
           POLICY_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
           POLICY_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           POLICY_HEAD_SHA: ${{ github.sha }}
