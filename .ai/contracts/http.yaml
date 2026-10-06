@@ -66,10 +66,14 @@ teacher_dialog:
     provisioning: internal command from ms-go-teacher-agent; browser cannot select personal_teacher_id
     request_context: exact source message plus at most 49 preceding messages; no unrestricted history
     lesson_context:
-        schema: lesson-message-context.v1
+        schemas: lesson-message-context.v1 and lesson-message-context.v2
         accepted_by: authenticated user message create for an exact lesson teacher dialog only
         modes: lesson_overview forbids selected_text; selection requires exact non-blank selected_text
         fields: strict schema, mode, non-zero course_id and lesson_id UUIDs, RFC3339Nano content_revision, optional selected_text
+        v2_fields: exact schema, mode, non-zero course_id/lesson_id/learning_path_id/learning_path_item_id UUIDs, UUID LessonRevision content_revision, sha256 lowercase64 content_digest; selected_text only selection
+        strictness: reject unknown, null, partial, and cross-schema fields; never downgrade v2
+        authority: Dialog binds lesson_id only; Teacher verifies full v2 anchor against Student authoritative frozen assignment, with no mutable Course fallback
+        storage: preserve complete anchor in existing lesson_context JSON column; database constraint must accept v2 before producer deployment
         limits: selected_text at most 12000 Unicode code points
         binding: lesson_id must equal the dialog context_id
         immutability: create replay compares the complete anchor; update rejects the field; delete clears it

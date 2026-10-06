@@ -65,6 +65,9 @@ type MessageContent struct {
 const MaxLessonSelectedTextRunes = 12000
 
 const LessonMessageContextSchemaV1 = "lesson-message-context.v1"
+const LessonMessageContextSchemaV2 = "lesson-message-context.v2"
+
+var lessonContentDigestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 type LessonMessageContextMode string
 
@@ -126,28 +129,63 @@ func NormalizeAssistantUI(input json.RawMessage) (json.RawMessage, error) {
 	return canonical, nil
 }
 
-// LessonMessageContext anchors a user question to the exact current Course
-// revision visible when it was sent. SelectedText is always treated as
-// untrusted until Course verifies it.
+// LessonMessageContext preserves the displayed revision anchor. V2 identifies a
+// frozen Student assignment; Teacher verifies its authoritative content and any
+// selection. Dialog validates transport shape and the contextual lesson binding.
 type LessonMessageContext struct {
-	Schema          string                   `json:"schema,omitempty"`
-	Mode            LessonMessageContextMode `json:"mode,omitempty"`
-	CourseID        *uuid.UUID               `json:"course_id,omitempty"`
-	LessonID        *uuid.UUID               `json:"lesson_id,omitempty"`
-	ContentRevision string                   `json:"content_revision"`
-	SelectedText    *string                  `json:"selected_text,omitempty"`
+	Schema             string                   `json:"schema,omitempty"`
+	Mode               LessonMessageContextMode `json:"mode,omitempty"`
+	CourseID           *uuid.UUID               `json:"course_id,omitempty"`
+	LessonID           *uuid.UUID               `json:"lesson_id,omitempty"`
+	ContentRevision    string                   `json:"content_revision"`
+	SelectedText       *string                  `json:"selected_text,omitempty"`
+	LearningPathID     *uuid.UUID               `json:"learning_path_id,omitempty"`
+	LearningPathItemID *uuid.UUID               `json:"learning_path_item_id,omitempty"`
+	ContentDigest      string                   `json:"content_digest,omitempty"`
 
 	selectedTextPresent bool
 }
 
 func (context *LessonMessageContext) UnmarshalJSON(input []byte) error {
+	// Decode keys separately: encoding/json's struct decoder otherwise accepts
+	// case-insensitive aliases and silently overwrites duplicate fields.
+	keyDecoder := json.NewDecoder(bytes.NewReader(input))
+	opening, err := keyDecoder.Token()
+	if err != nil || opening != json.Delim('{') {
+		return fmt.Errorf("%w: invalid lesson message context", ErrValidation)
+	}
+	fields := make(map[string]json.RawMessage)
+	for keyDecoder.More() {
+		token, err := keyDecoder.Token()
+		key, ok := token.(string)
+		if err != nil || !ok {
+			return fmt.Errorf("%w: invalid lesson message context field", ErrValidation)
+		}
+		if _, duplicate := fields[key]; duplicate {
+			return fmt.Errorf("%w: duplicate lesson message context field", ErrValidation)
+		}
+		var value json.RawMessage
+		if err := keyDecoder.Decode(&value); err != nil {
+			return fmt.Errorf("%w: invalid lesson message context field", ErrValidation)
+		}
+		fields[key] = value
+	}
+	if closing, err := keyDecoder.Token(); err != nil || closing != json.Delim('}') {
+		return fmt.Errorf("%w: invalid lesson message context", ErrValidation)
+	}
+	if err := keyDecoder.Decode(&struct{}{}); err != io.EOF {
+		return fmt.Errorf("%w: invalid lesson message context", ErrValidation)
+	}
 	type wireContext struct {
-		Schema          string                   `json:"schema"`
-		Mode            LessonMessageContextMode `json:"mode"`
-		CourseID        *uuid.UUID               `json:"course_id"`
-		LessonID        *uuid.UUID               `json:"lesson_id"`
-		ContentRevision string                   `json:"content_revision"`
-		SelectedText    *string                  `json:"selected_text"`
+		Schema             string                   `json:"schema"`
+		Mode               LessonMessageContextMode `json:"mode"`
+		CourseID           *uuid.UUID               `json:"course_id"`
+		LessonID           *uuid.UUID               `json:"lesson_id"`
+		ContentRevision    string                   `json:"content_revision"`
+		SelectedText       *string                  `json:"selected_text"`
+		LearningPathID     *uuid.UUID               `json:"learning_path_id"`
+		LearningPathItemID *uuid.UUID               `json:"learning_path_item_id"`
+		ContentDigest      string                   `json:"content_digest"`
 	}
 	decoder := json.NewDecoder(bytes.NewReader(input))
 	decoder.DisallowUnknownFields()
@@ -158,17 +196,40 @@ func (context *LessonMessageContext) UnmarshalJSON(input []byte) error {
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
 		return fmt.Errorf("%w: invalid lesson message context", ErrValidation)
 	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(input, &fields); err != nil || fields == nil {
-		return fmt.Errorf("%w: invalid lesson message context", ErrValidation)
+	if decoded.Schema == LessonMessageContextSchemaV2 {
+		requiredKeys := []string{"schema", "mode", "course_id", "lesson_id", "content_revision", "learning_path_id", "learning_path_item_id", "content_digest"}
+		expectedCount := len(requiredKeys)
+		if decoded.Mode == LessonMessageContextSelection {
+			requiredKeys = append(requiredKeys, "selected_text")
+			expectedCount++
+		}
+		if len(fields) != expectedCount || !utf8.Valid(input) {
+			return fmt.Errorf("%w: invalid frozen lesson message context fields", ErrValidation)
+		}
+		for _, key := range requiredKeys {
+			if _, present := fields[key]; !present {
+				return fmt.Errorf("%w: missing frozen lesson message context field", ErrValidation)
+			}
+		}
+	}
+	for key, value := range fields {
+		if bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+			return fmt.Errorf("%w: null lesson message context field", ErrValidation)
+		}
+		if decoded.Schema != LessonMessageContextSchemaV2 &&
+			(key == "learning_path_id" || key == "learning_path_item_id" || key == "content_digest") {
+			return fmt.Errorf("%w: cross-schema lesson message context field", ErrValidation)
+		}
 	}
 	_, selectedTextPresent := fields["selected_text"]
 	*context = LessonMessageContext{
 		Schema: decoded.Schema, Mode: decoded.Mode, CourseID: decoded.CourseID, LessonID: decoded.LessonID,
 		ContentRevision: decoded.ContentRevision, SelectedText: decoded.SelectedText,
+		LearningPathID: decoded.LearningPathID, LearningPathItemID: decoded.LearningPathItemID, ContentDigest: decoded.ContentDigest,
 		selectedTextPresent: selectedTextPresent,
 	}
-	return nil
+	_, err = NormalizeLessonMessageContext(context)
+	return err
 }
 
 func NormalizeLessonMessageContext(input *LessonMessageContext) (*LessonMessageContext, error) {
@@ -179,9 +240,23 @@ func NormalizeLessonMessageContext(input *LessonMessageContext) (*LessonMessageC
 	if input.Schema != "" && revisionText != input.ContentRevision {
 		return nil, fmt.Errorf("%w: invalid lesson message context revision", ErrValidation)
 	}
-	revision, err := time.Parse(time.RFC3339Nano, revisionText)
-	if err != nil || revision.IsZero() {
-		return nil, fmt.Errorf("%w: invalid lesson message context", ErrValidation)
+	if input.Schema == LessonMessageContextSchemaV2 {
+		revision, err := uuid.Parse(revisionText)
+		if err != nil || revision == uuid.Nil || revision.String() != revisionText ||
+			input.LearningPathID == nil || *input.LearningPathID == uuid.Nil ||
+			input.LearningPathItemID == nil || *input.LearningPathItemID == uuid.Nil ||
+			!lessonContentDigestPattern.MatchString(input.ContentDigest) {
+			return nil, fmt.Errorf("%w: invalid frozen lesson message context", ErrValidation)
+		}
+	} else {
+		if input.LearningPathID != nil || input.LearningPathItemID != nil || input.ContentDigest != "" {
+			return nil, fmt.Errorf("%w: cross-schema lesson message context", ErrValidation)
+		}
+		revision, err := time.Parse(time.RFC3339Nano, revisionText)
+		if err != nil || revision.IsZero() {
+			return nil, fmt.Errorf("%w: invalid lesson message context", ErrValidation)
+		}
+		revisionText = revision.UTC().Format(time.RFC3339Nano)
 	}
 	selectedTextPresent := input.selectedTextPresent || input.SelectedText != nil
 	validSelection := input.SelectedText != nil && utf8.ValidString(*input.SelectedText) &&
@@ -190,15 +265,15 @@ func NormalizeLessonMessageContext(input *LessonMessageContext) (*LessonMessageC
 		if input.Mode != "" || input.CourseID != nil || input.LessonID != nil || !selectedTextPresent || !validSelection {
 			return nil, fmt.Errorf("%w: invalid legacy lesson message context", ErrValidation)
 		}
-	} else if input.Schema != LessonMessageContextSchemaV1 || input.CourseID == nil || *input.CourseID == uuid.Nil ||
+	} else if (input.Schema != LessonMessageContextSchemaV1 && input.Schema != LessonMessageContextSchemaV2) || input.CourseID == nil || *input.CourseID == uuid.Nil ||
 		input.LessonID == nil || *input.LessonID == uuid.Nil ||
 		(input.Mode == LessonMessageContextOverview && selectedTextPresent) ||
 		(input.Mode == LessonMessageContextSelection && (!selectedTextPresent || !validSelection)) ||
 		(input.Mode != LessonMessageContextOverview && input.Mode != LessonMessageContextSelection) {
-		return nil, fmt.Errorf("%w: invalid lesson message context v1", ErrValidation)
+		return nil, fmt.Errorf("%w: invalid versioned lesson message context", ErrValidation)
 	}
 	result := &LessonMessageContext{
-		Schema: input.Schema, Mode: input.Mode, ContentRevision: revision.UTC().Format(time.RFC3339Nano),
+		Schema: input.Schema, Mode: input.Mode, ContentRevision: revisionText, ContentDigest: input.ContentDigest,
 		selectedTextPresent: selectedTextPresent,
 	}
 	if input.CourseID != nil {
@@ -208,6 +283,14 @@ func NormalizeLessonMessageContext(input *LessonMessageContext) (*LessonMessageC
 	if input.LessonID != nil {
 		lessonID := *input.LessonID
 		result.LessonID = &lessonID
+	}
+	if input.LearningPathID != nil {
+		pathID := *input.LearningPathID
+		result.LearningPathID = &pathID
+	}
+	if input.LearningPathItemID != nil {
+		itemID := *input.LearningPathItemID
+		result.LearningPathItemID = &itemID
 	}
 	if input.SelectedText != nil {
 		selectedText := *input.SelectedText
@@ -222,7 +305,9 @@ func LessonMessageContextsEqual(first, second *LessonMessageContext) bool {
 	}
 	return first.Schema == second.Schema && first.Mode == second.Mode && sameOptionalUUID(first.CourseID, second.CourseID) &&
 		sameOptionalUUID(first.LessonID, second.LessonID) && first.ContentRevision == second.ContentRevision &&
-		sameOptionalString(first.SelectedText, second.SelectedText)
+		sameOptionalString(first.SelectedText, second.SelectedText) &&
+		sameOptionalUUID(first.LearningPathID, second.LearningPathID) &&
+		sameOptionalUUID(first.LearningPathItemID, second.LearningPathItemID) && first.ContentDigest == second.ContentDigest
 }
 
 func sameOptionalUUID(first, second *uuid.UUID) bool {

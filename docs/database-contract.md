@@ -71,3 +71,14 @@ Migration `010_teacher_turn_ordering_v2` is additive and intentionally leaves
 all existing messages unsequenced. Its down migration fails closed when any
 high-water is non-zero, any stored turn exists, or a V2 Teacher request outbox
 row exists; it never deletes or invents historical order.
+
+Migration `012_lesson_message_context_v2` widens only the existing JSONB
+constraint, preserving the legacy and V1 branches. V2 requires exact non-zero
+Course/lesson/revision/path/item UUID strings, lowercase SHA-256 digest, and
+mode-dependent selection of at most 12,000 Unicode code points. It rejects
+missing, null, unknown, and cross-mode fields; it adds no column or table.
+Application validation binds the lesson UUID; Teacher verifies the complete
+anchor against Student's authoritative frozen assignment. Its down migration
+uses an explicit transaction and exclusive table lock, refuses while any V2
+anchor exists, and restores the exact migration 008 constraint without deleting
+or converting message data.

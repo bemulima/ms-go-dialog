@@ -31,13 +31,31 @@ bounded routing fact with its durable job. It does not create channel-specific
 pedagogy or history.
 
 For `lesson`, that bounded read includes the source message's complete immutable
-`lesson-message-context.v1` anchor (or a historical legacy revision/selection
-anchor). The ordinary `dialog.message.*` outbox/REST/WebSocket projection may
+`lesson-message-context.v1` or `lesson-message-context.v2` anchor (or a
+historical legacy revision/selection anchor). The ordinary `dialog.message.*` outbox/REST/WebSocket projection may
 carry that anchor under the same message membership ACL. The dedicated
 `dialog.teacher.requested` trigger remains body- and anchor-free. Teacher uses
 its source IDs to fetch the bounded request, then verifies Course/lesson,
 revision, and any exact substring; it must not treat Dialog as canonical Course
 content.
+
+V2 uses the exact fields `schema`, `mode`, `course_id`, `lesson_id`,
+`content_revision` (non-zero LessonRevision UUID), `learning_path_id`,
+`learning_path_item_id`, and `content_digest` (`sha256:` plus 64 lowercase hex
+characters). `selection` also requires exact non-blank `selected_text` of at
+most 12,000 Unicode code points; `lesson_overview` forbids that field. Unknown,
+null, incomplete, or cross-schema fields are rejected without downgrade. V1
+retains its timestamp revision; legacy revision/selection retries remain valid.
+
+Dialog requires the lesson UUID to equal its contextual lesson binding and
+preserves every V2 field in its existing `lesson_context` JSON column, source
+read, and ordinary lifecycle projections. Migration 012 widens the existing database
+constraint to accept V2 before deploying the producer. Course
+UUID validation here is syntactic: Teacher checks the complete anchor against
+Student's authoritative frozen assignment projection, including ownership,
+path/item, Course/lesson, revision, and digest. Dialog metadata is not evidence
+of authoritative content or ownership. V2 never authorizes mutable Course
+fallback. Create idempotency compares every anchor field.
 
 Rollout is Dialog migration/application, then the v1 lesson-message producer,
 then any Teacher release that requires v1 on new source messages. During the

@@ -19,8 +19,8 @@ invariants:
     - user and personal-teacher message authors are mutually exclusive
     - every message channel is web or telegram; a teacher response inherits its source channel
     - task and project teacher requests retain the opaque learning_action_id supplied on the source message
-    - new lesson teacher requests retain an exact lesson-message-context.v1 overview or selection anchor only on the user source message
-    - v1 lesson_id equals the lesson teacher dialog context_id; legacy revision/selection anchors remain readable and replayable
+    - lesson teacher requests retain an exact v1 timestamp or v2 frozen assignment overview/selection anchor only on the user source message
+    - v1 and v2 lesson_id equals the lesson teacher dialog context_id; legacy revision/selection anchors remain readable and replayable
     - body updates retain the immutable lesson_context; message deletion clears it together with user content
     - assistant_ui is nullable JSONB limited to PersonalTeacher-authored non-deleted messages and the assistant-ui.v1 envelope
     - max_teacher_turn_sequence and nullable dialog_message.teacher_turn_sequence form a private Dialog-owned dense V2 teacher-request order, never a derived message/event/timestamp/frontend order or public projection
@@ -38,7 +38,8 @@ migration_policy:
     format: ordered reversible up/down pairs
     ledger: dialog_schema_migration via scripts/migrate.sh
     destructive_change_requires: .ai/workflows/change-contract.yaml
-    lesson_context_rollback: migration 005 fails closed while anchored messages exist; migration 008 fails closed while v1 anchors exist
+    lesson_context_rollback: migration 005 fails closed while anchored messages exist; migration 008 fails closed while v1 anchors exist; migration 012 exclusively locks and refuses rollback while v2 anchors exist
+    frozen_lesson_context: migration 012 widens only the existing JSONB constraint with strict UUID revision/path/item/digest fields and retains legacy/v1 branches; rollback restores exact 008 definition
     message_channel_rollback: migration 006 fails closed while non-web messages exist
     assistant_ui_rollback: migration 007 fails closed while structured messages exist
     teacher_context_contracts_rollback: migration 009 fails closed while body-free mutation events exist

@@ -1430,7 +1430,7 @@ func validateLearningContextBinding(item domain.Dialog, learningActionID *uuid.U
 		if learningActionID != nil || lessonContext == nil {
 			return fmt.Errorf("%w: lesson context does not match teacher dialog", domain.ErrValidation)
 		}
-		if lessonContext.Schema == domain.LessonMessageContextSchemaV1 &&
+		if (lessonContext.Schema == domain.LessonMessageContextSchemaV1 || lessonContext.Schema == domain.LessonMessageContextSchemaV2) &&
 			(item.ContextID == nil || lessonContext.LessonID == nil || *lessonContext.LessonID != *item.ContextID) {
 			return fmt.Errorf("%w: lesson anchor does not match teacher dialog", domain.ErrValidation)
 		}

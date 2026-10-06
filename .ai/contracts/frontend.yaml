@@ -25,10 +25,10 @@ teacher_dialogs:
     author_discriminator: author_type is user or personal_teacher; sender_id is null for teacher messages
     channel_provenance: channel is web or telegram; all transports share the same ordered history
     task_request: lesson_task, practice_task, and project messages require learning_action_id
-    lesson_request: new lesson messages use lesson-message-context.v1 with strict Course/lesson UUIDs, Course revision, and lesson_overview or selection mode
+    lesson_request: lesson messages use v1 timestamp anchors or lesson-message-context.v2 frozen assignment anchors with exact Course/lesson/revision/path/item UUIDs and sha256 lowercase64 digest
     lesson_selection: omit selected_text for lesson_overview; preserve the exact non-blank selection without client normalization for selection
     lesson_compatibility: render historical legacy revision/selection anchors but never invent missing v1 IDs or mode
-    lesson_model_boundary: Dialog preserves the immutable anchor; Teacher verifies it against Course and sends only verified source material to prompt execution
+    lesson_model_boundary: Dialog preserves the immutable anchor; Teacher verifies v1 against Course and v2 against Student authoritative frozen assignment; no v2 mutable Course fallback
     response_delivery: normal message.created REST/WebSocket projection
     structured_response:
         field: optional assistant_ui
