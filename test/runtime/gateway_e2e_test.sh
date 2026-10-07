@@ -6,6 +6,7 @@ admin_gateway_url="${DIALOG_E2E_ADMIN_GATEWAY_URL:-http://localhost:9090}"
 origin="${DIALOG_E2E_ORIGIN:-http://localhost:3000}"
 admin_token="${DIALOG_E2E_ADMIN_TOKEN:-}"
 password="${DIALOG_E2E_PASSWORD:-Dialog-E2E-2026!}"
+verification_code_command="${DIALOG_E2E_VERIFICATION_CODE_COMMAND:-}"
 run_id="$(date +%s)-$$"
 repo_root="$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)"
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/ms-go-dialog-e2e.XXXXXX")"
@@ -42,7 +43,7 @@ expect_status() {
 }
 
 signup_user() {
-  local label="$1" email body http_status tarantool_body code verify_body token
+  local label="$1" email body http_status code verify_body token
   email="dialog-e2e-${run_id}-${label}@example.test"
   body="$(jq -nc --arg email "$email" --arg password "$password" '{email:$email,password:$password}')"
   http_status="$(curl -sS --max-time 30 -o "$work_dir/${label}-start.json" -w '%{http_code}' \
@@ -50,12 +51,11 @@ signup_user() {
     "$gateway_url/api/auth/v1/auth/signup/start")"
   expect_status 202 "$http_status" "$work_dir/${label}-start.json" "$label signup/start"
 
-  tarantool_body="$(jq -nc --arg email "$email" '{value:{email:$email,password:""}}')"
-  http_status="$(curl -sS --max-time 30 -o "$work_dir/${label}-tarantool.json" -w '%{http_code}' \
-    -H 'Content-Type: application/json' --data "$tarantool_body" \
-    "$gateway_url/api/tarantool/v1/set-new-user")"
-  expect_status 200 "$http_status" "$work_dir/${label}-tarantool.json" "$label verification code"
-  code="$(jq -er '.code' "$work_dir/${label}-tarantool.json")"
+  # The runtime coordinator supplies an executable that reads only this owned
+  # synthetic signup from its disposable Auth store with a fixture principal.
+  # It is not a production API or a runtime credential, and is never eval'd.
+  code="$("$verification_code_command" "$email")" || fail "$label isolated verification fixture failed"
+  [[ "$code" =~ ^[0-9]{4}$ ]] || fail "$label fixture must return one four-digit verification code"
 
   verify_body="$(jq -nc --arg email "$email" --arg code "$code" '{email:$email,code:$code}')"
   http_status="$(curl -sS --max-time 30 -o "$work_dir/${label}-auth.json" -w '%{http_code}' \
@@ -87,6 +87,8 @@ for command_name in curl jq go uuidgen base64; do
   require_command "$command_name"
 done
 [[ -n "$admin_token" ]] || fail "DIALOG_E2E_ADMIN_TOKEN is required"
+[[ "${DIALOG_E2E_ISOLATED_FIXTURE:-}" == true ]] || fail "DIALOG_E2E_ISOLATED_FIXTURE=true is required for disposable fixture data"
+[[ "$verification_code_command" == /* && -f "$verification_code_command" && -x "$verification_code_command" ]] || fail "DIALOG_E2E_VERIFICATION_CODE_COMMAND must be an absolute executable fixture path"
 
 http_status="$(curl -sS --max-time 30 -o "$work_dir/admin-me.json" -w '%{http_code}' \
   -H "Authorization: Bearer $admin_token" "$gateway_url/api/auth/v1/auth/me")"

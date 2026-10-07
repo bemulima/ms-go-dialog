@@ -2,6 +2,20 @@
 
 Every durable mutation stores a versioned outbox event in the same PostgreSQL transaction. A worker claims eligible rows with `FOR UPDATE SKIP LOCKED`, commits a finite lease before the network call, publishes to NATS JetStream with `event_id` deduplication, and records success or bounded retry evidence.
 
+`learning-platform-infrastructure` exclusively owns provisioning and maintenance
+of the shared `DIALOG_EVENTS` stream. Dialog worker startup reads its existing
+configuration and fails if the stream is missing or incompatible; it never
+creates or updates a shared stream. The publisher checks explicit durable
+subject coverage, Limits retention, File storage, a minimum seven-day retention
+(or unlimited retention), and ten-minute deduplication. Infrastructure validates
+all critical settings against its canonical manifest and repairs drift through
+its bounded maintenance workflow. Broad subjects and `dialog.realtime.*` are
+rejected to keep ephemeral traffic out of retained storage. Compatible explicit
+future subjects are preserved. Dedicated test brokers may be provisioned only
+inside explicitly guarded isolated fixture code. The T15 provider requires
+`T15_NATS_ISOLATED_FIXTURE=true`, an empty broker, and a non-`4222` loopback
+port before test-only creation; the coordinator owns the broker's lifecycle.
+
 Lifecycle subjects use the `dialog.*` namespace. Realtime instances subscribe without a shared queue group so every instance can deliver to its own local connections. Ephemeral typing uses Core NATS subject `dialog.realtime.typing.<dialog_uuid>` and is never stored in the outbox.
 
 `dialog.teacher.requested` is durable in the same stream but is not a WebSocket lifecycle event. It is consumed by Teacher only. The normal `dialog.message.created` event provides browser realtime for both the source student message and the later teacher response.

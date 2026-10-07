@@ -13,6 +13,13 @@ The same binary supports four explicit modes:
 
 For production, `api`, `realtime`, and `worker` can be deployed and scaled independently. All modes expose the private operational HTTP surface. FileStorage, ClamAV, and `ms-go-user` participant resolution are feature dependencies: an outage blocks the operations that need them but does not make unrelated message/dialog operations globally unready. Participant mutations use `USER_SERVICE_BASE_URL`, the outbound `USER_SERVICE_INTERNAL_TOKEN`, and `USER_SERVICE_TIMEOUT_SECONDS` (default `3`, maximum `30`) and fail with retryable `503 dependency_unavailable` when a trustworthy user lookup is unavailable. Dialog's inbound `INTERNAL_API_TOKEN` is a separate boundary and is not reused for User calls.
 
+Worker and `all` modes require the existing infrastructure-provisioned
+`DIALOG_EVENTS` stream. Provision the shared NATS manifests through
+`learning-platform-infrastructure` before starting Dialog. A missing or
+incompatible stream fails startup with an infrastructure validation error;
+restarting Dialog never creates or repairs shared streams. See
+[Realtime delivery](realtime-delivery.md) for publisher compatibility checks.
+
 The development Compose stack exposes the `all` mode on `http://localhost:8095` by default. `DIALOG_PORT` changes only that host binding; Gateway and other containers reach the stable internal address `ms-dialog-service:8080` on `ms-net`.
 
 `DIALOG_TEACHER_ORDERING_V2_ENABLED` defaults to `false` and is the only
@@ -33,10 +40,24 @@ closed deliberately.
 After Dialog and Gateway are running, the opt-in integration probe creates an isolated space and two temporary authenticated users, then verifies a three-member group, per-member unread cursors, read-all, image/file activation, signed URLs, WebSocket typing, single-use tickets, and reconnect:
 
 ```sh
+DIALOG_E2E_ISOLATED_FIXTURE=true \
+DIALOG_E2E_VERIFICATION_CODE_COMMAND='/absolute/path/to/isolated-auth-code-fixture' \
 DIALOG_E2E_ADMIN_TOKEN='<current ADMIN access token>' make runtime-e2e
 ```
 
-The probe uses the public Gateway on `http://localhost:7070`, the admin Gateway on `http://localhost:9090`, and the Tarantool integration hook through Gateway. Override `DIALOG_E2E_GATEWAY_URL`, `DIALOG_E2E_ADMIN_GATEWAY_URL`, or `DIALOG_E2E_ORIGIN` when the local topology differs. It creates integration data intentionally and never prints access tokens.
+The probe uses the public Gateway on `http://localhost:7070`, the admin Gateway
+on `http://localhost:9090`, and an explicitly supplied Auth verification fixture
+executable. The executable
+receives one synthetic `dialog-e2e-...@example.test` email argument and must
+return one four-digit decimal code on stdout, or fail with nonzero status. It
+reads only the owned
+signup from the coordinator's disposable loopback Auth store using a separate
+fixture principal; production runtime credentials do not grant broad reads.
+The coordinator must explicitly declare `DIALOG_E2E_ISOLATED_FIXTURE=true` and
+provide the absolute executable `DIALOG_E2E_VERIFICATION_CODE_COMMAND` path.
+There is no public code-extraction route. Override `DIALOG_E2E_GATEWAY_URL`,
+`DIALOG_E2E_ADMIN_GATEWAY_URL`, or `DIALOG_E2E_ORIGIN` when the local topology
+differs. It creates integration data intentionally and never prints access tokens.
 
 Attachment worker replicas coordinate through leased `SKIP LOCKED` claims. Keep `ATTACHMENT_WORKER_LEASE_SECONDS` (default `120`) longer than a normal FileStorage activation/deletion request; a crashed worker's items become eligible after that deadline.
 

@@ -6,6 +6,11 @@ delivery:
     persistence_boundary: PostgreSQL transactional outbox
     semantics: at-least-once
     deduplication_key: event_id
+    stream: DIALOG_EVENTS
+    stream_provisioning_owner: learning-platform-infrastructure
+    startup: validate existing infrastructure-provisioned stream; never create or update shared streams
+    publisher_compatibility: explicit durable subjects, limits retention, file storage, at least seven days retention and ten minutes deduplication
+    fixture_provisioning: test code only; explicitly isolated empty broker on non-platform loopback port
 subjects:
     - dialog.created
     - dialog.updated

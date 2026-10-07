@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,59 +27,53 @@ type Client struct {
 func Connect(url string) (*natsgo.Conn, error) {
 	return natsgo.Connect(url, natsgo.Name("ms-go-dialog"), natsgo.Timeout(5*time.Second), natsgo.MaxReconnects(-1), natsgo.ReconnectWait(time.Second))
 }
+
+// EnsureLifecycleStream validates the platform-owned stream. Only infrastructure
+// provisions or maintains shared streams; a Dialog restart must not change them.
 func (c *Client) EnsureLifecycleStream(ctx context.Context) error {
 	js, err := c.jetStream()
 	if err != nil {
 		return err
 	}
-	if info, streamErr := js.StreamInfo(LifecycleStream, natsgo.Context(ctx)); streamErr == nil {
-		desiredSubjects := mergeSubjects(info.Config.Subjects, durableSubjects)
-		if sameSubjects(info.Config.Subjects, desiredSubjects) {
-			return nil
-		}
-		config := info.Config
-		config.Subjects = desiredSubjects
-		_, err = js.UpdateStream(&config, natsgo.Context(ctx))
-		return err
-	} else if !errors.Is(streamErr, natsgo.ErrStreamNotFound) {
-		return streamErr
+	info, err := js.StreamInfo(LifecycleStream, natsgo.Context(ctx))
+	if err != nil {
+		return fmt.Errorf("validate infrastructure-provisioned %s: %w", LifecycleStream, err)
 	}
-	_, err = js.AddStream(&natsgo.StreamConfig{Name: LifecycleStream, Subjects: append([]string(nil), durableSubjects...), Retention: natsgo.LimitsPolicy, Storage: natsgo.FileStorage, MaxAge: 7 * 24 * time.Hour, Duplicates: 10 * time.Minute}, natsgo.Context(ctx))
-	return err
+	if info == nil {
+		return fmt.Errorf("infrastructure-provisioned %s returned no configuration", LifecycleStream)
+	}
+	return validateLifecycleStream(info.Config)
 }
 
-func mergeSubjects(existing, required []string) []string {
-	result := append([]string(nil), existing...)
-	seen := make(map[string]struct{}, len(result))
-	for _, subject := range result {
-		seen[subject] = struct{}{}
+// This is the publisher's compatibility check, not a second stream manifest.
+// Infrastructure separately validates every critical setting against its
+// canonical manifest and is the only owner allowed to repair drift.
+func validateLifecycleStream(config natsgo.StreamConfig) error {
+	if config.Name != LifecycleStream {
+		return fmt.Errorf("expected lifecycle stream %s, got %q", LifecycleStream, config.Name)
 	}
-	for _, subject := range required {
-		if _, ok := seen[subject]; ok {
-			continue
+	if config.Retention != natsgo.LimitsPolicy || config.Storage != natsgo.FileStorage {
+		return fmt.Errorf("%s requires limits retention and file storage; repair through infrastructure", LifecycleStream)
+	}
+	if (config.MaxAge != 0 && config.MaxAge < 7*24*time.Hour) || config.Duplicates < 10*time.Minute {
+		return fmt.Errorf("%s requires at least seven days retention and ten minutes deduplication; repair through infrastructure", LifecycleStream)
+	}
+	subjects := make(map[string]bool, len(config.Subjects))
+	for _, subject := range config.Subjects {
+		// Exact subjects keep Core NATS realtime traffic out of retained storage.
+		if strings.ContainsAny(subject, "*>") || strings.HasPrefix(subject, "dialog.realtime.") {
+			return fmt.Errorf("%s contains broad or ephemeral subject %q; repair through infrastructure", LifecycleStream, subject)
 		}
-		seen[subject] = struct{}{}
-		result = append(result, subject)
+		subjects[subject] = true
 	}
-	return result
+	for _, required := range durableSubjects {
+		if !subjects[required] {
+			return fmt.Errorf("%s is missing durable subject %q; provision through infrastructure", LifecycleStream, required)
+		}
+	}
+	return nil
 }
 
-func sameSubjects(first, second []string) bool {
-	if len(first) != len(second) {
-		return false
-	}
-	items := make(map[string]int, len(first))
-	for _, subject := range first {
-		items[subject]++
-	}
-	for _, subject := range second {
-		items[subject]--
-		if items[subject] < 0 {
-			return false
-		}
-	}
-	return true
-}
 func (c *Client) PublishLifecycle(ctx context.Context, event domain.OutboxEvent) error {
 	if err := event.Validate(); err != nil {
 		return err

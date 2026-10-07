@@ -130,7 +130,7 @@ func run() error {
 		dispatcher.Publisher = natsClient
 		if modeHasWorkers(cfg.ServiceMode) {
 			if err := natsClient.EnsureLifecycleStream(ctx); err != nil {
-				return fmt.Errorf("ensure NATS stream: %w", err)
+				return fmt.Errorf("validate infrastructure-provisioned NATS stream: %w", err)
 			}
 		}
 	}

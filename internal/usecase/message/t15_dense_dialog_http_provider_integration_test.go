@@ -29,7 +29,37 @@ import (
 	realtimeuc "github.com/bemulima/ms-go-dialog/internal/usecase/realtime"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	natsgo "github.com/nats-io/nats.go"
 )
+
+// Provisioning belongs only to this explicitly isolated test broker. Refuse the
+// platform port or any existing stream; ROOT owns its process/storage lifecycle.
+func t15ProvisionIsolatedLifecycleStream(ctx context.Context, conn *natsgo.Conn, endpoint *url.URL) error {
+	if os.Getenv("T15_NATS_ISOLATED_FIXTURE") != "true" || endpoint == nil || !t15Loopback(endpoint.Hostname()) || endpoint.Port() == "" || endpoint.Port() == "4222" {
+		return errors.New("T15 requires explicit isolated fixture NATS on a non-platform loopback port")
+	}
+	js, err := conn.JetStream()
+	if err != nil {
+		return err
+	}
+	for range js.StreamNames(natsgo.Context(ctx)) {
+		return errors.New("T15 requires an empty isolated NATS broker")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	// Fixture subjects are business-owned; this is not shared platform bootstrap.
+	subjects := []string{
+		string(domain.EventDialogCreated), string(domain.EventDialogUpdated), string(domain.EventDialogClosed),
+		string(domain.EventDialogMemberAdded), string(domain.EventDialogMemberRemoved), string(domain.EventDialogMemberRoleUpdated),
+		string(domain.EventDialogMessageCreated), string(domain.EventDialogMessageUpdated), string(domain.EventDialogMessageDeleted),
+		string(domain.EventDialogMessageHidden), string(domain.EventDialogMessageRestored), string(domain.EventDialogAttachmentReady),
+		string(domain.EventDialogAttachmentFailed), string(domain.EventDialogReadUpdated),
+		string(domain.EventDialogTeacherRequested), string(domain.EventDialogTeacherContextMutated),
+	}
+	_, err = js.AddStream(&natsgo.StreamConfig{Name: dialognats.LifecycleStream, Subjects: subjects, Retention: natsgo.LimitsPolicy, Storage: natsgo.FileStorage, MaxAge: 7 * 24 * time.Hour, Duplicates: 10 * time.Minute}, natsgo.Context(ctx))
+	return err
+}
 
 type t15DialogLane struct {
 	URL               string    `json:"url"`
@@ -99,7 +129,10 @@ func TestT15ServeDenseDialogHTTP(t *testing.T) {
 	defer conn.Close()
 	client := &dialognats.Client{Conn: conn}
 	setupCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	err = client.EnsureLifecycleStream(setupCtx)
+	err = t15ProvisionIsolatedLifecycleStream(setupCtx, conn, natsURL)
+	if err == nil {
+		err = client.EnsureLifecycleStream(setupCtx)
+	}
 	cancel()
 	if err != nil {
 		t.Fatal("owned lifecycle stream setup failed")

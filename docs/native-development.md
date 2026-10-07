@@ -11,6 +11,10 @@ From `learning-platform-infrastructure`, use its documented native-infrastructur
 workflow to start/check shared dependencies. The Dialog native launcher does not
 start containers or alter database state.
 
+Shared `DIALOG_EVENTS` provisioning is part of the infrastructure workflow.
+Dialog worker startup validates the existing stream and fails if provisioning
+is missing or incompatible. It does not create or modify shared NATS streams.
+
 The launcher reads `../../learning-platform-infrastructure/.env` by default.
 Set `LW_INFRA_ENV_FILE` only when the approved local environment file is stored
 elsewhere. It requires the registry assignments `DIALOG_NATIVE_HTTP_PORT` and
