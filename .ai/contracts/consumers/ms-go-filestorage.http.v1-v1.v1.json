@@ -3,7 +3,7 @@
   "consumer": {
     "repository": "bemulima/ms-go-dialog",
     "service": "ms-go-dialog",
-    "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9"
+    "commit_sha": "455249f02fa4cda960e080345d58269d392cfa83"
   },
   "provider_repository": "bemulima/ms-go-filestorage",
   "provider_service": "ms-go-filestorage",
@@ -21,14 +21,14 @@
   "source_pins": [
     {
       "repository": "bemulima/ms-go-dialog",
-      "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+      "commit_sha": "455249f02fa4cda960e080345d58269d392cfa83",
       "path": "cmd/ms-dialog-service/main.go",
-      "blob_sha": "a6c2e08f2462eb4f847e9b9834783407e0032463",
-      "content_sha256": "cebbb9259ddc8ba67c9d5e7ea76d0fe0a25c3b59199c353647c8155b9c101f1c"
+      "blob_sha": "5fd1891c90cd378fbbdc45484951589fee73892f",
+      "content_sha256": "cffdcbb79522a085dd596d67211adb1ddf5db69eee30287fe547464a510b9292"
     },
     {
       "repository": "bemulima/ms-go-dialog",
-      "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+      "commit_sha": "455249f02fa4cda960e080345d58269d392cfa83",
       "path": "internal/infrastructure/filestorage/client.go",
       "blob_sha": "1f455964acdbe54e158d46f53774fa068623943a",
       "content_sha256": "5c962d49fcec514b07c6fbe863d0824cfe751a1bc75e45a4470b11f76bc239ac"

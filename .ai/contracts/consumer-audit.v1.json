@@ -3,48 +3,48 @@
   "consumer": {
     "repository": "bemulima/ms-go-dialog",
     "service": "ms-go-dialog",
-    "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9"
+    "commit_sha": "455249f02fa4cda960e080345d58269d392cfa83"
   },
   "classification": "CONSUMER_APPLICABLE",
   "source_pins": [
     {
       "repository": "bemulima/ms-go-dialog",
-      "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+      "commit_sha": "455249f02fa4cda960e080345d58269d392cfa83",
       "path": "cmd/ms-dialog-service/main.go",
-      "blob_sha": "a6c2e08f2462eb4f847e9b9834783407e0032463",
-      "content_sha256": "cebbb9259ddc8ba67c9d5e7ea76d0fe0a25c3b59199c353647c8155b9c101f1c"
+      "blob_sha": "5fd1891c90cd378fbbdc45484951589fee73892f",
+      "content_sha256": "cffdcbb79522a085dd596d67211adb1ddf5db69eee30287fe547464a510b9292"
     },
     {
       "repository": "bemulima/ms-go-dialog",
-      "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+      "commit_sha": "455249f02fa4cda960e080345d58269d392cfa83",
       "path": "internal/domain/outbox.go",
       "blob_sha": "ffea635c057e9e0d274bdb6310b14312fff2a122",
       "content_sha256": "9dbfae441fce4ffae47ce0149fb1a71b27f797933507a42bff7cc825cec370c8"
     },
     {
       "repository": "bemulima/ms-go-dialog",
-      "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+      "commit_sha": "455249f02fa4cda960e080345d58269d392cfa83",
       "path": "internal/infrastructure/filestorage/client.go",
       "blob_sha": "1f455964acdbe54e158d46f53774fa068623943a",
       "content_sha256": "5c962d49fcec514b07c6fbe863d0824cfe751a1bc75e45a4470b11f76bc239ac"
     },
     {
       "repository": "bemulima/ms-go-dialog",
-      "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+      "commit_sha": "455249f02fa4cda960e080345d58269d392cfa83",
       "path": "internal/infrastructure/http/user/client.go",
       "blob_sha": "6aff4a86214bad47512e756e2603b81406258ab3",
       "content_sha256": "83813cd19c4496871beec97c44730c75550d9d8c3d56eed34e32eee489a3ec50"
     },
     {
       "repository": "bemulima/ms-go-dialog",
-      "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+      "commit_sha": "455249f02fa4cda960e080345d58269d392cfa83",
       "path": "internal/infrastructure/messaging/nats/client.go",
-      "blob_sha": "ba231150e03596b13d602dfe3e21b43707c7b60c",
-      "content_sha256": "0abf1b00b6044e309278007f501e2f6e087c0342edf5efa9d78a60e879647574"
+      "blob_sha": "19a1ca6158d0d5cbdd958f1e5a0b5c616209cdbb",
+      "content_sha256": "7fed55cd5588e8ee2b0a044952614ffd26e990def7f1956f06ebd2094e8272cb"
     },
     {
       "repository": "bemulima/ms-go-dialog",
-      "commit_sha": "6e721a924fb866a58c1753cdc41ad1b49d795db9",
+      "commit_sha": "455249f02fa4cda960e080345d58269d392cfa83",
       "path": "internal/transport/message/subscriber.go",
       "blob_sha": "496281ac98fd8b7efdf09c6e272ec6d25aebb134",
       "content_sha256": "33eddb28d16a5ba5be879223919175f868be6844b946a703508af6ec86dfa77a"
