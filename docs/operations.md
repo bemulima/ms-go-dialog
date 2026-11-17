@@ -1,5 +1,20 @@
 # Operations
 
+## Mentor contact gate
+
+`DIALOG_MENTOR_CONTACT_ENABLED=false` is the default. Enabling the private
+contact producer additionally requires `DIALOG_MENTOR_CONTACT_SPACE_KEY` to name
+an existing active personal-enabled Dialog space and
+`DIALOG_MENTOR_INTERNAL_TOKEN` to be a distinct 32–4096 byte credential without
+whitespace. It must not reuse the Teacher/general inbound token or outbound
+User/FileStorage credentials. Configuration is validated before serving.
+
+This source change does not provision a space, rotate credentials, enable the
+gate or run a migration. The public Gateway must never proxy
+`/internal/v1/mentor-dialog/ensure-personal`; only Mentor's verified selection
+action may call it using the purpose credential. Per-Student provisioning uses
+the existing actor rate limiter, independent of any client-declared user header.
+
 ## Runtime topology
 
 The same binary supports four explicit modes:

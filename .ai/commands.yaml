@@ -35,6 +35,11 @@ commands:
       source_path: Taskfile.yml
       requires_approval: true
       risk: lifecycle
+    - name: test_mentor_contact
+      run: go test -race ./internal/usecase/dialog ./internal/transport/http/private/handlers ./internal/transport/http ./internal/config -run '^TestMentorContact' -count=1 -timeout=45s
+      source_path: internal/usecase/dialog/mentor_contact_test.go
+      requires_approval: false
+      risk: verification
     - name: native_migration_status
       run: python3 scripts/native_config.py -- sh scripts/native_migrate_status.sh
       source_path: Taskfile.yml

@@ -1,5 +1,20 @@
 # Dialog business rules
 
+## Human Mentor pre-assignment contact
+
+- A verified Mentor service command may ensure an ordinary personal dialog for
+  the exact selected Student/human-Mentor pair in one configured existing space.
+  It has a distinct private purpose credential and is disabled by default.
+- Both participant accounts, current space policy and bidirectional user blocks
+  are checked. A final authorized pair readback returns only dialog identity,
+  version and the two input identities; it never returns history or learning data.
+- Provisioning reuses the existing pair key, membership transaction and created
+  outbox event. It cannot send a message or grant learning access. Repeating the
+  same pair cannot create an extra chat, consent or Teacher binding.
+- Ordinary personal history is participant-owned and is preserved when a Mentor
+  assignment is revoked. This contact contract must not be interpreted as an
+  assigned-scope or Cohort authority receipt.
+
 ## Identity and access
 
 - Every user API requires a non-guest UUID identity supplied by the trusted gateway.

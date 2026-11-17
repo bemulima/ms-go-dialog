@@ -111,6 +111,12 @@ type EnsureResult struct {
 }
 
 func (s Service) EnsurePersonal(ctx context.Context, actor domain.Actor, in EnsurePersonalInput) (EnsureResult, error) {
+	return s.ensurePersonal(ctx, actor, in, nil)
+}
+
+// current is an optional local authorization fence for a trusted provisioning
+// caller. It never performs owner HTTP calls while the transaction is held.
+func (s Service) ensurePersonal(ctx context.Context, actor domain.Actor, in EnsurePersonalInput, current func(context.Context) error) (EnsureResult, error) {
 	if err := actor.Validate(); err != nil {
 		return EnsureResult{}, err
 	}
@@ -148,6 +154,11 @@ func (s Service) EnsurePersonal(ctx context.Context, actor domain.Actor, in Ensu
 		if err := s.Dialogs.LockPersonalKey(txCtx, space.ID, key[:]); err != nil {
 			return err
 		}
+		if current != nil {
+			if err := current(txCtx); err != nil {
+				return err
+			}
+		}
 		existing, err := s.Dialogs.FindPersonalByKey(txCtx, space.ID, key[:])
 		if err == nil {
 			view, err := s.buildView(txCtx, actor.UserID, space, existing)
@@ -155,6 +166,9 @@ func (s Service) EnsurePersonal(ctx context.Context, actor domain.Actor, in Ensu
 				return err
 			}
 			result = EnsureResult{View: view}
+			if current != nil {
+				return current(txCtx)
+			}
 			return nil
 		}
 		if !errors.Is(err, domain.ErrNotFound) {
@@ -184,6 +198,9 @@ func (s Service) EnsurePersonal(ctx context.Context, actor domain.Actor, in Ensu
 			return err
 		}
 		result = EnsureResult{Created: true, View: View{Dialog: item, Space: space, Members: members, CurrentMember: members[0]}}
+		if current != nil {
+			return current(txCtx)
+		}
 		return nil
 	})
 	return result, err

@@ -5,9 +5,58 @@ Route groups follow the platform convention:
 - `/healthz`, `/readyz`, `/metrics`: private operational endpoints without actor authentication;
 - `/api/v1`: authenticated user operations;
 - `/admin/v1`: explicit role-protected administration and moderation;
-- `/internal/v1`: exact shared-token service calls when introduced.
+- `/internal/v1`: exact service-purpose tokens; Mentor contact uses a separate credential from Teacher operations.
 
 Bodies reject unknown fields and acting-user fields. Commands documented without a request body accept an absent/whitespace body or one empty `{}` object up to 1 KiB; additional JSON values, fields, and oversized bodies are rejected. Pagination cursors are opaque, base64url encoded, and bound to their dialog/direction.
+
+## Mentor contact (private, disabled by default)
+
+`POST /internal/v1/mentor-dialog/ensure-personal` is a private producer for
+`ms-go-mentor`. The caller authenticates the Student and resolves the selected
+published Offer to its current approved human Mentor. It must recheck that
+selection after the response. The route is never exposed through a public
+Gateway alias and never accepts a browser-declared role, actor or space.
+
+It requires exactly one `X-Internal-Token` with the distinct
+`DIALOG_MENTOR_INTERNAL_TOKEN`. `DIALOG_MENTOR_CONTACT_ENABLED` defaults to false;
+`DIALOG_MENTOR_CONTACT_SPACE_KEY` selects an existing active space whose policy
+allows personal dialogs. No space, table or migration is created by this feature.
+
+Request (`application/json`, at most 1024 bytes, no query/Content-Encoding):
+
+```json
+{"schema":"mentor-contact.ensure.v1","student_id":"11111111-1111-4111-8111-111111111111","mentor_id":"22222222-2222-4222-8222-222222222222"}
+```
+
+All three strings are required. UUIDs are distinct, nonzero and canonical
+lowercase. Unknown, duplicate (including escaped duplicate), null or nested
+fields and trailing JSON are rejected before any business operation.
+
+Create and idempotent pair replay both return `200` with `Cache-Control: no-store`:
+
+```json
+{"data":{"schema":"mentor-contact.dialog.v1","dialog_id":"33333333-3333-4333-8333-333333333333","dialog_version":1,"student_id":"11111111-1111-4111-8111-111111111111","mentor_id":"22222222-2222-4222-8222-222222222222"}}
+```
+
+`dialog_version` is a positive PostgreSQL integer, at most 2147483647. This
+closed response contains no messages, member roster, learning data or grants.
+One existing personal pair in the configured space is reused; selecting another
+Offer from the same Mentor does not create another conversation or change an
+assignment. The operation never sends a message.
+
+The existing error envelope is `{error,message,request_id,details:null}`:
+`400 invalid_request`, `401 authentication_required`, `403 user_blocked` or
+`dialog_forbidden`, `404 space_not_found` or `dialog_not_found`,
+`409 feature_disabled`, `422 participant_unavailable`, `429 rate_limited`
+(`Retry-After: 1`), and `503 dependency_unavailable`. If no distinct purpose
+credential is configured, the route is absent (`404`). Unexpected persistence
+failures use the existing body-safe `500 internal_error` response.
+
+Both participant accounts are resolved before and after provisioning. Current
+local space and pair-block checks fence the transaction and exact active-pair
+readback. A denial after commit suppresses the response; it does not delete
+previously committed personal history. A same-pair retry safely resolves that
+outcome. This is not a claim of atomic authorization across User/Mentor/Dialog.
 
 ## Operational API
 

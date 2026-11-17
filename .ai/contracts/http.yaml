@@ -48,7 +48,7 @@ route_groups:
         - PUT /message/hide/{messageID}
         - PUT /message/restore/{messageID}
     - prefix: /internal/v1
-      authentication: exact X-Internal-Token; never gateway or browser routed
+      authentication: exact purpose-specific X-Internal-Token; never gateway or browser routed
       routes:
         - PUT /teacher-dialog/ensure
         - GET /teacher-dialog/{dialogID}/request/{sourceMessageID}
@@ -57,6 +57,7 @@ route_groups:
         - POST /teacher-dialog/{dialogID}/message
         - POST /teacher-dialog/{dialogID}/proactive-message
         - POST /teacher-dialog/{dialogID}/student-channel-message
+        - POST /mentor-dialog/ensure-personal
 pagination:
     message_order: message_sequence
     cursor: opaque and dialog scoped
@@ -107,3 +108,19 @@ teacher_dialog:
             rollout: DIALOG_CANONICAL_STUDENT_TURN_ENABLED=false; requires DIALOG_TEACHER_ORDERING_V2_ENABLED
             privacy: ledger never appears in public REST, WebSocket, or ordinary lifecycle event
         browser_dual_write: forbidden
+mentor_contact:
+    status: implemented_gated_disabled_by_default
+    route: POST /internal/v1/mentor-dialog/ensure-personal
+    authentication: one exact X-Internal-Token using DIALOG_MENTOR_INTERNAL_TOKEN, distinct from Teacher and outbound credentials
+    gate: DIALOG_MENTOR_CONTACT_ENABLED=false
+    space: DIALOG_MENTOR_CONTACT_SPACE_KEY selects an existing personal-enabled space; never accepted from a caller
+    caller: ms-go-mentor validates current approved Mentor and published Offer for the verified Student before and after the call
+    request: exact mentor-contact.ensure.v1 schema, canonical distinct non-zero student_id and mentor_id UUIDs
+    request_limits: 1024 bytes, application/json, no query or Content-Encoding, no null/unknown/duplicate fields
+    response: data object with exact mentor-contact.dialog.v1 schema, dialog_id UUID, dialog_version 1..2147483647, student_id and mentor_id
+    status_codes: 200 create or pair replay; 400 invalid; 401 credential; 403 blocked/forbidden; 404 unavailable; 409 disabled; 422 participant unavailable; 429 rate limited; 503 dependency unavailable
+    authorization: both active participants before/after; local space/block fences before/inside/after ensure; active exact pair readback
+    identity: existing personal dialog pair per space; no Offer/Assignment binding and no new conversation type
+    effects: normal Dialog-created event and memberships only on first creation; no message, consent, progress, code, Teacher identity or learning grants
+    history: ordinary participant-owned history; assignment revoke does not erase it; existing block/moderation/message policies remain authoritative
+    limitation: source preparation, not runtime acceptance; no claim of assigned/Cohort ACL or cross-service atomicity

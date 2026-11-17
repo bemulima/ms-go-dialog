@@ -161,6 +161,8 @@ func run() error {
 		dependencies.AdminService = adminService
 		dependencies.UserRateLimiter = rateLimiter
 		dependencies.InternalToken = cfg.InternalAPIToken
+		dependencies.MentorInternalToken = cfg.MentorInternalToken
+		dependencies.MentorContactService = &dialoguc.MentorContactService{Dialogs: dialogService, Enabled: cfg.MentorContactEnabled, SpaceKey: cfg.MentorContactSpaceKey}
 	}
 	if modeHasRealtime(cfg.ServiceMode) {
 		dependencies.WebSocketHandler = websocketHandler

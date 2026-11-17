@@ -17,16 +17,18 @@ import (
 )
 
 type RouterDependencies struct {
-	AdminService      *adminuc.Service
-	DialogService     *dialoguc.Service
-	MessageService    *messageuc.Service
-	AttachmentService *attachmentuc.Service
-	RealtimeService   *realtimeuc.TicketService
-	WebSocketHandler  http.Handler
-	UserRateLimiter   middleware.ActorLimiter
-	Readiness         http.Handler
-	Metrics           Metrics
-	InternalToken     string
+	AdminService         *adminuc.Service
+	DialogService        *dialoguc.Service
+	MessageService       *messageuc.Service
+	AttachmentService    *attachmentuc.Service
+	RealtimeService      *realtimeuc.TicketService
+	WebSocketHandler     http.Handler
+	UserRateLimiter      middleware.ActorLimiter
+	Readiness            http.Handler
+	Metrics              Metrics
+	InternalToken        string
+	MentorInternalToken  string
+	MentorContactService *dialoguc.MentorContactService
 }
 
 // Metrics keeps the transport independent from the concrete observability implementation.
@@ -69,19 +71,28 @@ func NewRouter(deps RouterDependencies) http.Handler {
 			admin.Put("/message/restore/{messageID}", handler.RestoreMessage)
 		})
 	}
-	if deps.InternalToken != "" && deps.DialogService != nil && deps.MessageService != nil {
-		router.Route("/internal/v1", func(internal chi.Router) {
-			internal.Use(middleware.RequireInternalToken(deps.InternalToken, common.WriteError))
-			handler := privatehandlers.TeacherDialogHandler{Dialogs: deps.DialogService, Messages: deps.MessageService}
-			internal.Put("/teacher-dialog/ensure", handler.Ensure)
-			internal.Get("/teacher-dialog/{dialogID}/request/{sourceMessageID}", handler.RequestContext)
-			internal.Post("/teacher-dialog/{dialogID}/assistant-ui-source", handler.AssistantUISource)
-			internal.Post("/teacher-dialog/{dialogID}/canonical-student-turn", handler.CanonicalStudentTurn)
-			internal.Post("/teacher-dialog/{dialogID}/message", handler.AppendResponse)
-			internal.Post("/teacher-dialog/{dialogID}/proactive-message", handler.AppendProactive)
-			internal.Post("/teacher-dialog/{dialogID}/student-channel-message", handler.AppendStudentChannelMessage)
-		})
-	}
+	router.Route("/internal/v1", func(internal chi.Router) {
+		if deps.InternalToken != "" && deps.DialogService != nil && deps.MessageService != nil {
+			internal.Group(func(internal chi.Router) {
+				internal.Use(middleware.RequireInternalToken(deps.InternalToken, common.WriteError))
+				handler := privatehandlers.TeacherDialogHandler{Dialogs: deps.DialogService, Messages: deps.MessageService}
+				internal.Put("/teacher-dialog/ensure", handler.Ensure)
+				internal.Get("/teacher-dialog/{dialogID}/request/{sourceMessageID}", handler.RequestContext)
+				internal.Post("/teacher-dialog/{dialogID}/assistant-ui-source", handler.AssistantUISource)
+				internal.Post("/teacher-dialog/{dialogID}/canonical-student-turn", handler.CanonicalStudentTurn)
+				internal.Post("/teacher-dialog/{dialogID}/message", handler.AppendResponse)
+				internal.Post("/teacher-dialog/{dialogID}/proactive-message", handler.AppendProactive)
+				internal.Post("/teacher-dialog/{dialogID}/student-channel-message", handler.AppendStudentChannelMessage)
+			})
+		}
+		if deps.MentorContactService != nil && deps.MentorInternalToken != "" && deps.MentorInternalToken != deps.InternalToken {
+			internal.Group(func(internal chi.Router) {
+				internal.Use(middleware.RequireSingleInternalToken(deps.MentorInternalToken, common.WriteError))
+				handler := privatehandlers.MentorContactHandler{Service: deps.MentorContactService, Limiter: deps.UserRateLimiter}
+				internal.Post("/mentor-dialog/ensure-personal", handler.Ensure)
+			})
+		}
+	})
 
 	router.Route("/api/v1", func(api chi.Router) {
 		api.Use(middleware.RequireActor(common.WriteError))

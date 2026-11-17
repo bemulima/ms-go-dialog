@@ -27,6 +27,21 @@ func RequireInternalToken(token string, writeError ErrorWriter) func(http.Handle
 	}
 }
 
+// RequireSingleInternalToken keeps the purpose-bound Mentor command strict
+// when a proxy or client supplies more than one credential header.
+func RequireSingleInternalToken(token string, writeError ErrorWriter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		guarded := RequireInternalToken(token, writeError)(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if len(r.Header.Values("X-Internal-Token")) != 1 {
+				writeError(w, r, domain.ErrAuthentication)
+				return
+			}
+			guarded.ServeHTTP(w, r)
+		})
+	}
+}
+
 type ActorLimiter interface{ Allow(uuid.UUID) bool }
 type ActorRateLimiter struct {
 	mu          sync.Mutex
