@@ -124,3 +124,19 @@ mentor_contact:
     effects: normal Dialog-created event and memberships only on first creation; no message, consent, progress, code, Teacher identity or learning grants
     history: ordinary participant-owned history; assignment revoke does not erase it; existing block/moderation/message policies remain authoritative
     limitation: source preparation, not runtime acceptance; no claim of assigned/Cohort ACL or cross-service atomicity
+
+mentor_education:
+    source_of_truth: docs/mentor-education-v1.md
+    ensure: POST /api/v1/dialogs/mentor-context
+    selector_header: X-Mentor-Dialog-Context
+    owner_access: POST /internal/dialog/v1/context-access on ms-go-mentor
+    owner_token_header: X-Mentor-Dialog-Token
+    default_enabled: false
+    context_page_limit: 30
+abuse_reports:
+    source_of_truth: docs/mentor-education-v1.md
+    submit: POST /api/v1/message-report
+    queue: GET /admin/v1/message-report/list
+    resolve: POST /admin/v1/message-report/{reportID}/resolve
+    idempotency: exact single Idempotency-Key equals request_id on both mutations
+    default_enabled: false

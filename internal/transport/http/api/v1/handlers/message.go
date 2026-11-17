@@ -128,6 +128,14 @@ func (h MessageHandler) Window(w http.ResponseWriter, r *http.Request) {
 			newer = &value
 		}
 	}
+	if window.MentorOlder != nil {
+		value := common.EncodeMessageCursor(dialogID, *window.MentorOlder, "before")
+		older = &value
+	}
+	if window.MentorNewer != nil {
+		value := common.EncodeMessageCursor(dialogID, *window.MentorNewer, "after")
+		newer = &value
+	}
 	common.WriteJSON(w, http.StatusOK, map[string]any{"items": items, "older_cursor": older, "newer_cursor": newer, "read_state": window.ReadState})
 }
 
@@ -147,6 +155,28 @@ func (h MessageHandler) List(w http.ResponseWriter, r *http.Request) {
 	after, err := common.DecodeMessageCursor(afterRaw, dialogID, "after")
 	if err != nil {
 		common.WriteError(w, r, domain.ErrValidation)
+		return
+	}
+	if domain.SelectedMentorBinding(r.Context()) != nil {
+		page, err := h.Service.MentorPage(r.Context(), middleware.Actor(r), repository.MessageListQuery{DialogID: dialogID, Before: before, After: after, Limit: limit})
+		if err != nil {
+			common.WriteError(w, r, err)
+			return
+		}
+		responses := make([]common.MessageResponse, 0, len(page.Items))
+		for _, item := range page.Items {
+			responses = append(responses, common.NewMessageResponse(item))
+		}
+		var next *string
+		if page.Next != nil {
+			direction := "before"
+			if after != nil {
+				direction = "after"
+			}
+			value := common.EncodeMessageCursor(dialogID, *page.Next, direction)
+			next = &value
+		}
+		common.WriteJSON(w, 200, map[string]any{"items": responses, "next_cursor": next})
 		return
 	}
 	items, err := h.Service.List(r.Context(), middleware.Actor(r), repository.MessageListQuery{DialogID: dialogID, Before: before, After: after, Limit: limit + 1})
@@ -187,6 +217,19 @@ func (h MessageHandler) Changes(w http.ResponseWriter, r *http.Request) {
 	limit := common.QueryInt(r, "limit", messageuc.DefaultPageLimit)
 	if err != nil || parseErr != nil || limit < 1 || limit > messageuc.MaxPageLimit {
 		common.WriteError(w, r, domain.ErrValidation)
+		return
+	}
+	if domain.SelectedMentorBinding(r.Context()) != nil {
+		page, err := h.Service.MentorChanges(r.Context(), middleware.Actor(r), repository.MessageChangeQuery{DialogID: dialogID, AfterEventSequence: after, Limit: limit})
+		if err != nil {
+			common.WriteError(w, r, err)
+			return
+		}
+		responses := make([]common.MessageResponse, 0, len(page.Items))
+		for _, item := range page.Items {
+			responses = append(responses, common.NewMessageResponse(item))
+		}
+		common.WriteJSON(w, 200, map[string]any{"items": responses, "next_after_event_sequence": page.NextAfter, "has_more": page.HasMore})
 		return
 	}
 	items, err := h.Service.ListChanges(r.Context(), middleware.Actor(r), repository.MessageChangeQuery{DialogID: dialogID, AfterEventSequence: after, Limit: limit + 1})

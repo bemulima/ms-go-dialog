@@ -1,5 +1,10 @@
 schema_version: 1
 commands:
+    - name: test_mentor_education
+      run: go test ./internal/usecase/dialog ./internal/usecase/message ./internal/usecase/attachment ./internal/usecase/report ./internal/infrastructure/http/mentor ./internal/infrastructure/persistence/postgres ./internal/transport/http ./internal/transport/websocket ./cmd/ms-dialog-service -run '^TestMentorEducation' -count=1
+      source_path: internal/usecase/dialog/mentor_education_test.go
+      requires_approval: false
+      risk: verification
     - name: agent_policy
       run: ./scripts/check-agent-policy.sh
       source_path: scripts/check-agent-policy.sh

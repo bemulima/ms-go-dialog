@@ -13,22 +13,25 @@ import (
 	dialoguc "github.com/bemulima/ms-go-dialog/internal/usecase/dialog"
 	messageuc "github.com/bemulima/ms-go-dialog/internal/usecase/message"
 	realtimeuc "github.com/bemulima/ms-go-dialog/internal/usecase/realtime"
+	reportuc "github.com/bemulima/ms-go-dialog/internal/usecase/report"
 	"github.com/go-chi/chi/v5"
 )
 
 type RouterDependencies struct {
-	AdminService         *adminuc.Service
-	DialogService        *dialoguc.Service
-	MessageService       *messageuc.Service
-	AttachmentService    *attachmentuc.Service
-	RealtimeService      *realtimeuc.TicketService
-	WebSocketHandler     http.Handler
-	UserRateLimiter      middleware.ActorLimiter
-	Readiness            http.Handler
-	Metrics              Metrics
-	InternalToken        string
-	MentorInternalToken  string
-	MentorContactService *dialoguc.MentorContactService
+	ReportService          *reportuc.Service
+	AdminService           *adminuc.Service
+	DialogService          *dialoguc.Service
+	MessageService         *messageuc.Service
+	AttachmentService      *attachmentuc.Service
+	RealtimeService        *realtimeuc.TicketService
+	WebSocketHandler       http.Handler
+	UserRateLimiter        middleware.ActorLimiter
+	Readiness              http.Handler
+	Metrics                Metrics
+	InternalToken          string
+	MentorInternalToken    string
+	MentorContactService   *dialoguc.MentorContactService
+	MentorEducationService *dialoguc.MentorEducationService
 }
 
 // Metrics keeps the transport independent from the concrete observability implementation.
@@ -69,6 +72,11 @@ func NewRouter(deps RouterDependencies) http.Handler {
 			admin.Put("/dialog/reopen/{dialogID}", handler.ReopenDialog)
 			admin.Put("/message/hide/{messageID}", handler.HideMessage)
 			admin.Put("/message/restore/{messageID}", handler.RestoreMessage)
+			if deps.ReportService != nil {
+				reports := apihandlers.ReportHandler{Service: deps.ReportService}
+				admin.Get("/message-report/list", reports.List)
+				admin.Post("/message-report/{reportID}/resolve", reports.Resolve)
+			}
 		})
 	}
 	router.Route("/internal/v1", func(internal chi.Router) {
@@ -96,6 +104,7 @@ func NewRouter(deps RouterDependencies) http.Handler {
 
 	router.Route("/api/v1", func(api chi.Router) {
 		api.Use(middleware.RequireActor(common.WriteError))
+		api.Use(middleware.MentorContext(common.WriteError))
 		if deps.UserRateLimiter != nil {
 			api.Use(middleware.RateLimitActor(deps.UserRateLimiter, common.WriteError))
 		}
@@ -112,6 +121,12 @@ func NewRouter(deps RouterDependencies) http.Handler {
 			api.Put("/dialog-member/role/{dialogID}/{userID}", handler.ChangeRole)
 			api.Put("/user-block/{userID}", handler.BlockUser)
 			api.Delete("/user-block/{userID}", handler.UnblockUser)
+		}
+		if deps.ReportService != nil {
+			api.Post("/message-report", (apihandlers.ReportHandler{Service: deps.ReportService}).Create)
+		}
+		if deps.MentorEducationService != nil {
+			api.Post("/dialogs/mentor-context", (apihandlers.MentorEducationHandler{Service: deps.MentorEducationService}).Ensure)
 		}
 		if deps.MessageService != nil {
 			handler := apihandlers.MessageHandler{Service: deps.MessageService}

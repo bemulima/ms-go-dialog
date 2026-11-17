@@ -31,6 +31,8 @@ func classifyError(err error) (int, string, string) {
 		return http.StatusNotFound, "dialog_not_found", "dialog was not found"
 	case errors.Is(err, domain.ErrSpaceNotFound):
 		return http.StatusNotFound, "space_not_found", "space was not found"
+	case errors.Is(err, domain.ErrReportNotFound):
+		return http.StatusNotFound, "report_not_found", "message report was not found"
 	case errors.Is(err, domain.ErrMessageNotFound):
 		return http.StatusNotFound, "message_not_found", "message was not found"
 	case errors.Is(err, domain.ErrMemberNotFound):

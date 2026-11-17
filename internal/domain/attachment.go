@@ -27,6 +27,7 @@ const (
 )
 
 type Attachment struct {
+	MentorBindingID         *uuid.UUID
 	ID                      uuid.UUID
 	DialogID                uuid.UUID
 	MessageID               *uuid.UUID
@@ -54,6 +55,9 @@ type Attachment struct {
 }
 
 func (a Attachment) Validate(policy Policy) error {
+	if a.MentorBindingID != nil && *a.MentorBindingID == uuid.Nil {
+		return ErrInvalidAttachment
+	}
 	if a.ID == uuid.Nil || a.DialogID == uuid.Nil || a.UploaderID == uuid.Nil || a.FileStorageID == uuid.Nil ||
 		a.Status < AttachmentStatusPending || a.Status > AttachmentStatusDeleted || strings.TrimSpace(a.OriginalFilename) == "" ||
 		a.SizeBytes < 1 || !a.ExpiresAt.After(a.CreatedAt) || a.ActivationAttempts < 0 || a.DeleteAttempts < 0 {

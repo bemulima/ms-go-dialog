@@ -28,6 +28,7 @@ import (
 	dialoguc "github.com/bemulima/ms-go-dialog/internal/usecase/dialog"
 	messageuc "github.com/bemulima/ms-go-dialog/internal/usecase/message"
 	realtimeuc "github.com/bemulima/ms-go-dialog/internal/usecase/realtime"
+	reportuc "github.com/bemulima/ms-go-dialog/internal/usecase/report"
 	"go.uber.org/zap"
 )
 
@@ -67,6 +68,7 @@ func run() error {
 	tickets := &postgres.RealtimeTicketRepository{Pool: pool}
 	blocks := &postgres.BlockRepository{Pool: pool}
 	tx := &postgres.TransactionManager{Pool: pool}
+	mentorBindings := &postgres.MentorRepository{Pool: pool}
 
 	dialogService := &dialoguc.Service{
 		Spaces: spaces, Dialogs: dialogs, TeacherDialogs: dialogs, Members: members, Blocks: blocks, Outbox: outbox, Tx: tx,
@@ -76,8 +78,14 @@ func run() error {
 			HTTPClient:    &http.Client{Timeout: time.Duration(cfg.UserServiceTimeoutSeconds) * time.Second},
 		},
 	}
+	education, err := newMentorEducation(cfg, dialogService, mentorBindings)
+	if err != nil {
+		return err
+	}
+	dialogService.Education = education
 	metrics := observability.NewMetrics()
 	messageService := &messageuc.Service{
+		Education: education, MentorReads: mentorBindings,
 		Spaces: spaces, Dialogs: dialogs, Members: members, Messages: messages, TeacherMessages: messages, CanonicalStudentTurns: canonicalStudentTurns,
 		Attachments: attachments, Outbox: outbox, Tx: tx,
 		Blocks: blocks, TeacherOrderingV2Enabled: cfg.DialogTeacherOrderingV2Enabled, CanonicalStudentTurnEnabled: cfg.DialogCanonicalStudentTurnEnabled,
@@ -109,8 +117,10 @@ func run() error {
 		},
 	}
 	attachmentService := &attachmentuc.Service{Spaces: spaces, Dialogs: dialogs, Members: members, Messages: messages, Attachments: attachments, Outbox: outbox, Tx: tx,
-		Files: &filestorage.Client{BaseURL: cfg.FileStorageServiceBaseURL, InternalToken: cfg.FileStorageInternalToken}, Scanner: &filescan.ClamAV{Address: cfg.ClamAVAddress, Timeout: time.Duration(cfg.ClamAVTimeoutSeconds) * time.Second}, TTLMinutes: cfg.AttachmentTTLMinutes, SignedURLMinutes: cfg.AttachmentSignedURLMinutes, ActivationMaxAttempts: cfg.AttachmentActivationAttempts, WorkerLease: time.Duration(cfg.AttachmentWorkerLeaseSeconds) * time.Second}
+		Education: education,
+		Files:     &filestorage.Client{BaseURL: cfg.FileStorageServiceBaseURL, InternalToken: cfg.FileStorageInternalToken}, Scanner: &filescan.ClamAV{Address: cfg.ClamAVAddress, Timeout: time.Duration(cfg.ClamAVTimeoutSeconds) * time.Second}, TTLMinutes: cfg.AttachmentTTLMinutes, SignedURLMinutes: cfg.AttachmentSignedURLMinutes, ActivationMaxAttempts: cfg.AttachmentActivationAttempts, WorkerLease: time.Duration(cfg.AttachmentWorkerLeaseSeconds) * time.Second}
 	adminService := &adminuc.Service{Spaces: spaces, Dialogs: dialogs, Members: members, Messages: messages, Attachments: attachments, Outbox: outbox, Tx: tx}
+	reportService := &reportuc.Service{Enabled: cfg.AbuseReportEnabled, Reports: postgres.ReportRepository{Pool: pool}, Messages: messages, Reader: messageService, Moderator: adminService, Tx: tx}
 	realtimeService := &realtimeuc.TicketService{Spaces: spaces, Members: members, Tickets: tickets, TTL: time.Duration(cfg.RealtimeTicketTTLSeconds) * time.Second}
 	dispatcher := &realtimeuc.Dispatcher{Outbox: outbox, Lease: time.Duration(cfg.OutboxLeaseSeconds) * time.Second}
 	rateLimiter, err := httpmiddleware.NewActorRateLimiter(cfg.HTTPUserRateLimitRPS, cfg.HTTPUserRateLimitBurst, cfg.HTTPUserRateLimitMaxActors, time.Duration(cfg.HTTPUserRateLimitIdleSeconds)*time.Second)
@@ -139,6 +149,7 @@ func run() error {
 	var websocketHandler http.Handler
 	if modeHasRealtime(cfg.ServiceMode) {
 		hub = websocketadapter.NewHub(cfg.WSMaxConnectionsPerUser, cfg.WSQueueSize)
+		hub.Visibility = realtimeuc.PublicVisibility{Bindings: mentorBindings, Messages: messages}
 		websocketHandler = websocketadapter.Handler{Tickets: realtimeService, Hub: hub, Typing: natsClient, Metrics: metrics, MaxFrameBytes: cfg.WSMaxFrameBytes}
 		subscription, err = messageadapter.SubscribeRealtime(natsClient.Conn, hub)
 		if err != nil {
@@ -163,6 +174,8 @@ func run() error {
 		dependencies.InternalToken = cfg.InternalAPIToken
 		dependencies.MentorInternalToken = cfg.MentorInternalToken
 		dependencies.MentorContactService = &dialoguc.MentorContactService{Dialogs: dialogService, Enabled: cfg.MentorContactEnabled, SpaceKey: cfg.MentorContactSpaceKey}
+		dependencies.MentorEducationService = education
+		dependencies.ReportService = reportService
 	}
 	if modeHasRealtime(cfg.ServiceMode) {
 		dependencies.WebSocketHandler = websocketHandler

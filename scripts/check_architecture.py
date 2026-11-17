@@ -65,7 +65,7 @@ def check(root: Path) -> list[str]:
             + "; found "
             + ", ".join(sorted(actual_infrastructure))
         )
-    for parent, expected in {"http": {"user"}, "messaging": {"nats"}, "persistence": {"postgres"}}.items():
+    for parent, expected in {"http": {"user", "mentor"}, "messaging": {"nats"}, "persistence": {"postgres"}}.items():
         if directories(infrastructure / parent) != expected:
             errors.append(f"internal/infrastructure/{parent} must contain only {', '.join(sorted(expected))}")
 

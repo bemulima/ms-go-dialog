@@ -73,20 +73,23 @@ func scanMember(row pgx.Row) (domain.Member, error) {
 
 const messageColumns = `id, dialog_id, author_type, channel, sender_id, personal_teacher_id, learning_action_id, lesson_context, assistant_ui, reply_to_message_id, body, links,
 	status, version, message_sequence, last_event_sequence, teacher_turn_sequence, idempotency_key,
-edited_at, deleted_at, created_at, updated_at`
+edited_at, deleted_at, created_at, updated_at, mentor_binding_id, mentor_context_revision, mentor_author_membership_id`
 
 func scanMessage(row pgx.Row) (domain.Message, error) {
 	var item domain.Message
 	var links []byte
 	var lessonContext, assistantUI []byte
-	var senderID, personalTeacherID *uuid.UUID
+	var senderID, personalTeacherID, mentorAuthor *uuid.UUID
 	err := row.Scan(
 		&item.ID, &item.DialogID, &item.AuthorType, &item.Channel, &senderID, &personalTeacherID, &item.LearningActionID, &lessonContext, &assistantUI, &item.ReplyToMessageID, &item.Body, &links,
 		&item.Status, &item.Version, &item.MessageSequence, &item.LastEventSequence, &item.TeacherTurnSequence,
-		&item.IdempotencyKey, &item.EditedAt, &item.DeletedAt, &item.CreatedAt, &item.UpdatedAt,
+		&item.IdempotencyKey, &item.EditedAt, &item.DeletedAt, &item.CreatedAt, &item.UpdatedAt, &item.MentorBindingID, &item.MentorContextRevision, &mentorAuthor,
 	)
 	if err != nil {
 		return domain.Message{}, mapError(err)
+	}
+	if mentorAuthor != nil {
+		item.MentorAuthorMembershipID = *mentorAuthor
 	}
 	if senderID != nil {
 		item.SenderID = *senderID
@@ -132,7 +135,7 @@ func scanMessages(rows pgx.Rows) ([]domain.Message, error) {
 const attachmentColumns = `id, dialog_id, message_id, uploader_id, filestorage_id,
 kind, status, mime_type, size_bytes, width, height, checksum_sha256, original_filename,
 expires_at, activated_at, deleted_at, activation_attempts, activation_next_attempt_at,
-delete_attempts, delete_next_attempt_at, last_error, storage_deleted_at, created_at, updated_at`
+delete_attempts, delete_next_attempt_at, last_error, storage_deleted_at, created_at, updated_at, mentor_binding_id`
 
 func scanAttachment(row pgx.Row) (domain.Attachment, error) {
 	var item domain.Attachment
@@ -143,7 +146,7 @@ func scanAttachment(row pgx.Row) (domain.Attachment, error) {
 		&item.ChecksumSHA256, &item.OriginalFilename, &item.ExpiresAt, &item.ActivatedAt,
 		&item.DeletedAt, &item.ActivationAttempts, &item.ActivationNextAttemptAt,
 		&item.DeleteAttempts, &item.DeleteNextAttemptAt, &lastError,
-		&item.StorageDeletedAt, &item.CreatedAt, &item.UpdatedAt,
+		&item.StorageDeletedAt, &item.CreatedAt, &item.UpdatedAt, &item.MentorBindingID,
 	)
 	if lastError != nil {
 		item.LastError = *lastError

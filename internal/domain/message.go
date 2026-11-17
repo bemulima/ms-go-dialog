@@ -371,22 +371,25 @@ func (c MessageContent) Validate(policy Policy) error {
 }
 
 type Message struct {
-	ID                uuid.UUID
-	DialogID          uuid.UUID
-	AuthorType        MessageAuthorType
-	Channel           MessageChannel
-	SenderID          uuid.UUID
-	PersonalTeacherID uuid.UUID
-	LearningActionID  *uuid.UUID
-	LessonContext     *LessonMessageContext
-	AssistantUI       json.RawMessage
-	ReplyToMessageID  *uuid.UUID
-	Body              string
-	Links             []Link
-	Status            MessageStatus
-	Version           int
-	MessageSequence   int64
-	LastEventSequence int64
+	MentorBindingID          *uuid.UUID
+	MentorContextRevision    int64
+	MentorAuthorMembershipID uuid.UUID
+	ID                       uuid.UUID
+	DialogID                 uuid.UUID
+	AuthorType               MessageAuthorType
+	Channel                  MessageChannel
+	SenderID                 uuid.UUID
+	PersonalTeacherID        uuid.UUID
+	LearningActionID         *uuid.UUID
+	LessonContext            *LessonMessageContext
+	AssistantUI              json.RawMessage
+	ReplyToMessageID         *uuid.UUID
+	Body                     string
+	Links                    []Link
+	Status                   MessageStatus
+	Version                  int
+	MessageSequence          int64
+	LastEventSequence        int64
 	// TeacherTurnSequence is private durable ordering evidence for a
 	// student-authored teacher request. It is intentionally not a public REST,
 	// WebSocket, or ordinary lifecycle-event field.
@@ -399,6 +402,9 @@ type Message struct {
 }
 
 func (m Message) Validate() error {
+	if (m.MentorBindingID == nil) != (m.MentorContextRevision == 0 && m.MentorAuthorMembershipID == uuid.Nil) || m.MentorBindingID != nil && (*m.MentorBindingID == uuid.Nil || m.MentorContextRevision < 1 || m.MentorAuthorMembershipID == uuid.Nil || m.AuthorType != MessageAuthorUser || m.LearningActionID != nil || m.LessonContext != nil || len(m.AssistantUI) > 0) {
+		return ErrValidation
+	}
 	if m.ID == uuid.Nil || m.DialogID == uuid.Nil || !m.AuthorType.Valid() || !m.Channel.Valid() || m.IdempotencyKey == uuid.Nil ||
 		m.Version < 1 || m.MessageSequence < 1 || m.LastEventSequence < m.MessageSequence ||
 		m.Status < MessageStatusActive || m.Status > MessageStatusHidden {

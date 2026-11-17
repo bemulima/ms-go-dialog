@@ -39,6 +39,7 @@ type FileScanner interface {
 }
 
 type Service struct {
+	Education             domain.MentorAccessGuard
 	Spaces                repository.SpaceRepository
 	Dialogs               repository.DialogRepository
 	Members               repository.MemberRepository
@@ -75,6 +76,11 @@ func (s Service) Upload(ctx context.Context, actor domain.Actor, input UploadInp
 	if err := actor.Validate(); err != nil {
 		return domain.Attachment{}, err
 	}
+	access, err := domain.CheckMentorRead(ctx, s.Education, actor.UserID, input.DialogID, nil)
+	if err != nil {
+		return domain.Attachment{}, err
+	}
+	ctx = domain.WithMentorAccess(ctx, access)
 	if s.Files == nil {
 		return domain.Attachment{}, errors.New("filestorage adapter is not configured")
 	}
@@ -114,10 +120,14 @@ func (s Service) Upload(ctx context.Context, actor domain.Actor, input UploadInp
 		Kind: metadata.Kind, Status: domain.AttachmentStatusPending, MIMEType: metadata.MIMEType, SizeBytes: metadata.SizeBytes,
 		Width: metadata.Width, Height: metadata.Height, ChecksumSHA256: metadata.ChecksumSHA256,
 		OriginalFilename: metadata.OriginalFilename, ExpiresAt: now.Add(time.Duration(ttl) * time.Minute), CreatedAt: now, UpdatedAt: now}
+	item.MentorBindingID = domain.SelectedMentorBinding(ctx)
 	if err := item.Validate(space.Policy); err != nil {
 		return domain.Attachment{}, err
 	}
 	if err := s.Attachments.Create(ctx, item); err != nil {
+		return domain.Attachment{}, err
+	}
+	if err := s.mentorFence(ctx, actor.UserID, item.DialogID, access, nil); err != nil {
 		return domain.Attachment{}, err
 	}
 	return item, nil
@@ -141,6 +151,13 @@ func (s Service) GetSignedURL(ctx context.Context, actor domain.Actor, id uuid.U
 	if err != nil || message.Status != domain.MessageStatusActive {
 		return SignedURL{}, domain.ErrAttachmentNotFound
 	}
+	access, err := domain.CheckMentorRead(ctx, s.Education, actor.UserID, item.DialogID, []uuid.UUID{message.SenderID})
+	if err != nil {
+		return SignedURL{}, err
+	}
+	if !access.Allows(message) || !mentorAttachmentMatches(item, domain.SelectedMentorBinding(ctx)) {
+		return SignedURL{}, domain.ErrAttachmentNotFound
+	}
 	_, _, member, err := s.readContext(ctx, actor, item.DialogID)
 	if err != nil {
 		return SignedURL{}, err
@@ -153,6 +170,9 @@ func (s Service) GetSignedURL(ctx context.Context, actor domain.Actor, id uuid.U
 	if err != nil {
 		return SignedURL{}, fmt.Errorf("request signed attachment URL: %w", err)
 	}
+	if err = s.mentorFence(ctx, actor.UserID, item.DialogID, access, &message); err != nil {
+		return SignedURL{}, err
+	}
 	return SignedURL{URL: url, ExpiresAt: s.now().Add(time.Duration(minutes) * time.Minute)}, nil
 }
 
@@ -161,6 +181,7 @@ func (s Service) Delete(ctx context.Context, actor domain.Actor, id uuid.UUID) (
 		return domain.Attachment{}, err
 	}
 	var result domain.Attachment
+	var accessBefore *domain.MentorAccess
 	err := s.Tx.WithinTransaction(ctx, func(txCtx context.Context) error {
 		item, err := s.Attachments.GetByIDForUpdate(txCtx, id)
 		if err != nil {
@@ -168,6 +189,23 @@ func (s Service) Delete(ctx context.Context, actor domain.Actor, id uuid.UUID) (
 		}
 		if item.UploaderID != actor.UserID {
 			return domain.ErrForbidden
+		}
+		access, err := domain.CheckMentorRead(txCtx, s.Education, actor.UserID, item.DialogID, nil)
+		if err != nil {
+			return err
+		}
+		accessBefore = access
+		if !mentorAttachmentMatches(item, domain.SelectedMentorBinding(txCtx)) {
+			return domain.ErrAttachmentNotFound
+		}
+		if item.MessageID != nil {
+			message, err := s.Messages.GetByID(txCtx, *item.MessageID)
+			if err != nil {
+				return err
+			}
+			if err = s.mentorFence(txCtx, actor.UserID, item.DialogID, access, &message); err != nil {
+				return err
+			}
 		}
 		if _, _, _, err := s.readContext(txCtx, actor, item.DialogID); err != nil {
 			return err
@@ -191,6 +229,11 @@ func (s Service) Delete(ctx context.Context, actor domain.Actor, id uuid.UUID) (
 		result = item
 		return nil
 	})
+	if err == nil {
+		if checkErr := s.mentorFence(ctx, actor.UserID, result.DialogID, accessBefore, nil); checkErr != nil {
+			return domain.Attachment{}, checkErr
+		}
+	}
 	return result, err
 }
 
@@ -354,6 +397,11 @@ func (s Service) emitLifecycleLocked(ctx context.Context, item domain.Attachment
 	if err := s.Dialogs.UpdateState(ctx, dialogItem, dialogItem.Version-1); err != nil {
 		return err
 	}
+	// Guarded REST changes still need a durable cursor when file processing
+	// changes the message projection. Generic realtime must receive no payload.
+	if lockedMessage.MentorBindingID != nil {
+		return nil
+	}
 	attachments, err := s.Attachments.ListByMessage(ctx, item.DialogID, message.ID)
 	if err != nil {
 		return err
@@ -366,6 +414,10 @@ func (s Service) emitLifecycleLocked(ctx context.Context, item domain.Attachment
 	return s.Outbox.Add(ctx, domain.OutboxEvent{ID: eventID, DialogID: item.DialogID, AggregateType: "attachment", AggregateID: item.ID, Subject: subject, EventSequence: eventSequence, SchemaVersion: 1, Payload: payload, NextAttemptAt: s.now(), CreatedAt: s.now()})
 }
 func (s Service) readContext(ctx context.Context, actor domain.Actor, dialogID uuid.UUID) (domain.Dialog, domain.Space, domain.Member, error) {
+	access, accessErr := domain.CheckMentorRead(ctx, s.Education, actor.UserID, dialogID, nil)
+	if accessErr != nil {
+		return domain.Dialog{}, domain.Space{}, domain.Member{}, accessErr
+	}
 	item, err := s.Dialogs.GetByID(ctx, dialogID)
 	if err != nil || item.Status == domain.DialogStatusHidden {
 		return domain.Dialog{}, domain.Space{}, domain.Member{}, domain.ErrDialogNotFound
@@ -374,11 +426,38 @@ func (s Service) readContext(ctx context.Context, actor domain.Actor, dialogID u
 	if err != nil || space.Status != domain.SpaceStatusActive {
 		return domain.Dialog{}, domain.Space{}, domain.Member{}, domain.ErrDialogNotFound
 	}
-	member, err := s.Members.Get(ctx, dialogID, actor.UserID)
+	member, synthetic := access.CohortMember(item, actor.UserID)
+	if !synthetic {
+		member, err = s.Members.Get(ctx, dialogID, actor.UserID)
+	}
 	if err != nil || member.Status != domain.MemberStatusActive {
 		return domain.Dialog{}, domain.Space{}, domain.Member{}, domain.ErrForbidden
 	}
 	return item, space, member, nil
+}
+
+func mentorAttachmentMatches(item domain.Attachment, selected *uuid.UUID) bool {
+	if selected == nil || item.MentorBindingID == nil {
+		return selected == nil && item.MentorBindingID == nil
+	}
+	return *selected == *item.MentorBindingID
+}
+func (s Service) mentorFence(ctx context.Context, user, dialog uuid.UUID, before *domain.MentorAccess, message *domain.Message) error {
+	ids := []uuid.UUID{}
+	if message != nil && message.MentorBindingID != nil {
+		ids = append(ids, message.SenderID)
+	}
+	after, err := domain.CheckMentorRead(ctx, s.Education, user, dialog, ids)
+	if err != nil {
+		return err
+	}
+	if (before == nil) != (after == nil) || before != nil && !before.SameCurrent(*after) {
+		return domain.ErrForbidden
+	}
+	if message != nil && !after.Allows(*message) {
+		return domain.ErrAttachmentNotFound
+	}
+	return nil
 }
 func (s Service) now() time.Time {
 	if s.Now != nil {

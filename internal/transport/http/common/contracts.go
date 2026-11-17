@@ -95,27 +95,29 @@ func NewAttachmentResponse(item domain.Attachment) AttachmentResponse {
 }
 
 type MessageResponse struct {
-	ID                uuid.UUID                    `json:"id"`
-	DialogID          uuid.UUID                    `json:"dialog_id"`
-	AuthorType        domain.MessageAuthorType     `json:"author_type"`
-	Channel           domain.MessageChannel        `json:"channel"`
-	SenderID          *uuid.UUID                   `json:"sender_id"`
-	PersonalTeacherID *uuid.UUID                   `json:"personal_teacher_id,omitempty"`
-	LearningActionID  *uuid.UUID                   `json:"learning_action_id,omitempty"`
-	LessonContext     *domain.LessonMessageContext `json:"lesson_context,omitempty"`
-	AssistantUI       json.RawMessage              `json:"assistant_ui,omitempty"`
-	ReplyToMessageID  *uuid.UUID                   `json:"reply_to_message_id"`
-	Body              string                       `json:"body"`
-	Links             []domain.Link                `json:"links"`
-	Status            domain.MessageStatus         `json:"status"`
-	Version           int                          `json:"version"`
-	MessageSequence   int64                        `json:"message_sequence"`
-	LastEventSequence int64                        `json:"last_event_sequence"`
-	Attachments       []AttachmentResponse         `json:"attachments"`
-	EditedAt          *time.Time                   `json:"edited_at"`
-	DeletedAt         *time.Time                   `json:"deleted_at"`
-	CreatedAt         time.Time                    `json:"created_at"`
-	UpdatedAt         time.Time                    `json:"updated_at"`
+	MentorBindingID       *uuid.UUID                   `json:"mentor_binding_id,omitempty"`
+	MentorContextRevision int64                        `json:"mentor_context_revision,omitempty"`
+	ID                    uuid.UUID                    `json:"id"`
+	DialogID              uuid.UUID                    `json:"dialog_id"`
+	AuthorType            domain.MessageAuthorType     `json:"author_type"`
+	Channel               domain.MessageChannel        `json:"channel"`
+	SenderID              *uuid.UUID                   `json:"sender_id"`
+	PersonalTeacherID     *uuid.UUID                   `json:"personal_teacher_id,omitempty"`
+	LearningActionID      *uuid.UUID                   `json:"learning_action_id,omitempty"`
+	LessonContext         *domain.LessonMessageContext `json:"lesson_context,omitempty"`
+	AssistantUI           json.RawMessage              `json:"assistant_ui,omitempty"`
+	ReplyToMessageID      *uuid.UUID                   `json:"reply_to_message_id"`
+	Body                  string                       `json:"body"`
+	Links                 []domain.Link                `json:"links"`
+	Status                domain.MessageStatus         `json:"status"`
+	Version               int                          `json:"version"`
+	MessageSequence       int64                        `json:"message_sequence"`
+	LastEventSequence     int64                        `json:"last_event_sequence"`
+	Attachments           []AttachmentResponse         `json:"attachments"`
+	EditedAt              *time.Time                   `json:"edited_at"`
+	DeletedAt             *time.Time                   `json:"deleted_at"`
+	CreatedAt             time.Time                    `json:"created_at"`
+	UpdatedAt             time.Time                    `json:"updated_at"`
 }
 
 func NewMessageResponse(view message.View) MessageResponse {
@@ -124,6 +126,7 @@ func NewMessageResponse(view message.View) MessageResponse {
 		attachments = append(attachments, NewAttachmentResponse(item))
 	}
 	return MessageResponse{
+		MentorBindingID: view.Message.MentorBindingID, MentorContextRevision: view.Message.MentorContextRevision,
 		ID: view.Message.ID, DialogID: view.Message.DialogID, AuthorType: view.Message.AuthorType, Channel: view.Message.Channel,
 		SenderID: UUIDPointer(view.Message.SenderID), PersonalTeacherID: UUIDPointer(view.Message.PersonalTeacherID), LearningActionID: view.Message.LearningActionID,
 		LessonContext:    view.Message.LessonContext,

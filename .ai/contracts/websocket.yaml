@@ -38,3 +38,8 @@ limits:
     default_max_frame_bytes: 16384
     default_connections_per_user: 5
     default_outbound_queue_frames: 64
+
+mentor_education:
+    source_of_truth: docs/mentor-education-v1.md
+    payload_delivery: denied on generic websocket; use current-owner HTTP polling
+    durable_fence: check message binding and protected Cohort before any lifecycle or ephemeral fanout
