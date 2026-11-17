@@ -12,6 +12,8 @@ route_groups:
       authentication: required gateway identity and active membership where dialog-scoped
       routes:
         - PUT /dialog/personal/ensure
+        - POST /dialogs/mentor-context
+        - POST /message-report
         - POST /dialog/group/create
         - GET /dialog/list
         - GET /dialog/get/{dialogID}
@@ -47,6 +49,8 @@ route_groups:
         - PUT /dialog/reopen/{dialogID}
         - PUT /message/hide/{messageID}
         - PUT /message/restore/{messageID}
+        - GET /message-report/list
+        - POST /message-report/{reportID}/resolve
     - prefix: /internal/v1
       authentication: exact purpose-specific X-Internal-Token; never gateway or browser routed
       routes:
@@ -140,3 +144,11 @@ abuse_reports:
     resolve: POST /admin/v1/message-report/{reportID}/resolve
     idempotency: exact single Idempotency-Key equals request_id on both mutations
     default_enabled: false
+
+teacher_policy_selection:
+    source_of_truth: docs/teacher-policy-selection-v1.md
+    contract: .ai/contracts/teacher-policy-selection.yaml
+    path: POST /api/v1/message/create
+    field: teacher_policy_selection
+    default_enabled: false
+    new_endpoint: false

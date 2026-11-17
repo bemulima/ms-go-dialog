@@ -14,3 +14,4 @@ project_specific:
     - .ai/contracts/frontend.yaml
     - .ai/contracts/http.yaml
     - .ai/contracts/websocket.yaml
+    - .ai/contracts/teacher-policy-selection.yaml

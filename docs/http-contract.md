@@ -273,3 +273,7 @@ response. The response contains no receipt, interaction, digest, command ID,
 or private sequence. Reusing receipt, command, source action, body, or metadata
 inconsistently returns `409`; exact committed replay remains available when the
 runtime flags are later disabled.
+
+## Explicit Teacher policy selection
+
+The existing message Create command and Message DTO accept/echo the optional closed `teacher_policy_selection` union. See [the owned selector contract](teacher-policy-selection-v1.md) for supported Teacher contexts, default-off admission, immutable source intent, same-key recovery, and current Mentor proof in the companion Teacher consumer. No new route or user grant is introduced.

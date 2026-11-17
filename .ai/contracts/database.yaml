@@ -69,3 +69,11 @@ reports:
     migration: db/migrations/014_message_reports.up.sql
     moderation: current message hide and immutable resolution share one transaction
     rollback: refuse loss of existing conversation or report history
+
+teacher_policy_selection:
+    source_of_truth: docs/teacher-policy-selection-v1.md
+    migration: 015_teacher_policy_selection
+    column: dialog_message.teacher_policy_selection
+    lifecycle: optional immutable source intent retained after soft deletion
+    rollback: exclusive lock and refusal while selected messages exist
+    required_before_app_deploy: true

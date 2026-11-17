@@ -90,3 +90,8 @@ commands:
       source_path: Taskfile.yml
       requires_approval: true
       risk: state_change
+    - name: test_teacher_policy_selection
+      run: go test -race ./internal/domain ./internal/usecase/message ./internal/transport/http/api/v1/handlers ./internal/transport/http/private/handlers ./internal/infrastructure/persistence/postgres ./internal/config -run '^TestTeacherPolicySelection|^TestScanMessage' -count=1
+      source_path: docs/teacher-policy-selection-v1.md
+      requires_approval: false
+      risk: verification

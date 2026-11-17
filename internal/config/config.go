@@ -36,6 +36,7 @@ type Config struct {
 	MentorContactSpaceKey             string `envconfig:"DIALOG_MENTOR_CONTACT_SPACE_KEY" default:""`
 	AbuseReportEnabled                bool   `envconfig:"DIALOG_ABUSE_REPORT_ENABLED" default:"false"`
 	MentorEducationEnabled            bool   `envconfig:"DIALOG_MENTOR_EDUCATION_ENABLED" default:"false"`
+	TeacherMentorPolicyEnabled        bool   `envconfig:"DIALOG_TEACHER_MENTOR_POLICY_ENABLED" default:"false"`
 	MentorEducationSpaceKey           string `envconfig:"DIALOG_MENTOR_EDUCATION_SPACE_KEY" default:""`
 	MentorAccessOrigin                string `envconfig:"DIALOG_MENTOR_ACCESS_ORIGIN" default:""`
 	MentorAccessToken                 string `envconfig:"DIALOG_MENTOR_ACCESS_TOKEN" default:""`

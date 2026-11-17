@@ -382,6 +382,7 @@ type Message struct {
 	PersonalTeacherID        uuid.UUID
 	LearningActionID         *uuid.UUID
 	LessonContext            *LessonMessageContext
+	TeacherPolicySelection   *TeacherPolicySelection
 	AssistantUI              json.RawMessage
 	ReplyToMessageID         *uuid.UUID
 	Body                     string
@@ -402,6 +403,9 @@ type Message struct {
 }
 
 func (m Message) Validate() error {
+	if m.TeacherPolicySelection != nil && (!m.TeacherPolicySelection.Valid() || m.MentorBindingID != nil || m.AuthorType != MessageAuthorUser || m.Channel != MessageChannelWeb) {
+		return ErrValidation
+	}
 	if (m.MentorBindingID == nil) != (m.MentorContextRevision == 0 && m.MentorAuthorMembershipID == uuid.Nil) || m.MentorBindingID != nil && (*m.MentorBindingID == uuid.Nil || m.MentorContextRevision < 1 || m.MentorAuthorMembershipID == uuid.Nil || m.AuthorType != MessageAuthorUser || m.LearningActionID != nil || m.LessonContext != nil || len(m.AssistantUI) > 0) {
 		return ErrValidation
 	}

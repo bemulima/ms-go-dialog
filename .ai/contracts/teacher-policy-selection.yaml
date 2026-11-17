@@ -1,0 +1,39 @@
+schema_version: 1
+owner: ms-go-dialog
+status: implemented_gated_disabled_by_default
+source_of_truth: docs/teacher-policy-selection-v1.md
+command:
+  method: POST
+  path: /api/v1/message/create
+  field: teacher_policy_selection
+  optional: true
+  null_allowed: false
+  union:
+    OFFER: [kind, offering_id, assignment_id]
+    COHORT: [kind, cohort_id, enrollment_id]
+  maximum_field_bytes: 512
+  idempotency: existing sender and message command key; selector equality required
+contexts: [lesson_v2, practice_task, project]
+admission:
+  flag: DIALOG_TEACHER_MENTOR_POLICY_ENABLED
+  default: false
+  disabled: 409 feature_disabled
+  exact_retained_replay: allowed after admission rollback
+projection:
+  rest_message: exact optional union; omit when absent
+  private_teacher_source: same exact optional union
+  event_and_websocket_envelopes: unchanged
+authority:
+  role: existing real Student membership in the Teacher dialog
+  mentor_resolution: separate current owner proof in Teacher
+  human_binding_inference: forbidden
+  grants_or_policy_text: none
+persistence:
+  migration: 015_teacher_policy_selection
+  table: dialog_message
+  mutable: false
+  soft_delete: retain identity; reject use as Teacher source
+  down: lock and refuse retained selected messages
+  up_transaction: existing migration script owns DDL and ledger together
+  required_before_app_deploy: true
+runtime_verified: false

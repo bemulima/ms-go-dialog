@@ -36,7 +36,8 @@ type Service struct {
 	// TeacherOrderingV2Enabled is the sole rollout switch for both private
 	// teacher_turn_sequence allocation and exactly one V2 request emission.
 	// When false, the V1 request code path remains byte-compatible.
-	TeacherOrderingV2Enabled bool
+	TeacherOrderingV2Enabled   bool
+	TeacherMentorPolicyEnabled bool
 	// CanonicalStudentTurnEnabled gates only new trusted receipt
 	// materializations. Exact committed replays remain recoverable when it is
 	// disabled; it is valid only together with the V2 ordering producer.
@@ -75,13 +76,14 @@ type CanonicalStudentTurnObservation struct {
 }
 
 type CreateInput struct {
-	DialogID         uuid.UUID
-	ReplyToMessageID *uuid.UUID
-	Body             string
-	AttachmentIDs    []uuid.UUID
-	IdempotencyKey   uuid.UUID
-	LearningActionID *uuid.UUID
-	LessonContext    *domain.LessonMessageContext
+	DialogID               uuid.UUID
+	ReplyToMessageID       *uuid.UUID
+	Body                   string
+	AttachmentIDs          []uuid.UUID
+	IdempotencyKey         uuid.UUID
+	LearningActionID       *uuid.UUID
+	LessonContext          *domain.LessonMessageContext
+	TeacherPolicySelection *domain.TeacherPolicySelection
 }
 
 type UpdateInput struct {
@@ -180,6 +182,9 @@ func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput)
 	if err := uniqueIDs(in.AttachmentIDs); err != nil {
 		return CreateResult{}, err
 	}
+	if in.TeacherPolicySelection != nil && !in.TeacherPolicySelection.Valid() {
+		return CreateResult{}, domain.ErrValidation
+	}
 	lessonContext, err := domain.NormalizeLessonMessageContext(in.LessonContext)
 	if err != nil {
 		return CreateResult{}, err
@@ -206,6 +211,9 @@ func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput)
 		if !errors.Is(err, domain.ErrNotFound) {
 			return err
 		}
+		if in.TeacherPolicySelection != nil && !s.TeacherMentorPolicyEnabled {
+			return domain.ErrFeatureDisabled
+		}
 
 		dialogItem, space, currentMember, err := s.loadWritableContext(txCtx, actor, in.DialogID, true)
 		if err != nil {
@@ -230,6 +238,9 @@ func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput)
 			}
 		}
 		if err := validateLearningContextBinding(dialogItem, in.LearningActionID, in.LessonContext); err != nil {
+			return err
+		}
+		if err := domain.ValidateTeacherPolicySelectionBinding(dialogItem, in.TeacherPolicySelection, in.LessonContext); err != nil {
 			return err
 		}
 		attachments, imageCount, fileCount, err := s.bindableAttachments(txCtx, actor.UserID, in.DialogID, in.AttachmentIDs, space.Policy)
@@ -263,7 +274,8 @@ func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput)
 		item := domain.Message{
 			ID: s.newID(), DialogID: in.DialogID, AuthorType: domain.MessageAuthorUser, Channel: domain.MessageChannelWeb, SenderID: actor.UserID,
 			LearningActionID: in.LearningActionID, LessonContext: in.LessonContext, ReplyToMessageID: in.ReplyToMessageID,
-			Body: content.Body, Links: content.Links, Status: domain.MessageStatusActive, Version: 1,
+			TeacherPolicySelection: in.TeacherPolicySelection,
+			Body:                   content.Body, Links: content.Links, Status: domain.MessageStatusActive, Version: 1,
 			MessageSequence: messageSequence, LastEventSequence: eventSequence, TeacherTurnSequence: teacherTurnSequence,
 			IdempotencyKey: in.IdempotencyKey, CreatedAt: now, UpdatedAt: now,
 		}
@@ -654,6 +666,9 @@ func (s Service) GetTeacherRequestContext(ctx context.Context, dialogID, persona
 		return TeacherRequestContext{}, domain.ErrMessageNotFound
 	}
 	if err := validateLearningContextBinding(dialogItem, source.LearningActionID, source.LessonContext); err != nil {
+		return TeacherRequestContext{}, err
+	}
+	if err := domain.ValidateTeacherPolicySelectionBinding(dialogItem, source.TeacherPolicySelection, source.LessonContext); err != nil {
 		return TeacherRequestContext{}, err
 	}
 	items, err := s.Messages.Window(ctx, repository.MessageWindowQuery{
@@ -1380,6 +1395,7 @@ func (s Service) resolveReplay(ctx context.Context, existing domain.Message, in 
 	if existing.DialogID != in.DialogID || existing.AuthorType != domain.MessageAuthorUser || existing.Channel != domain.MessageChannelWeb ||
 		existing.Body != in.Body || !sameUUID(existing.ReplyToMessageID, in.ReplyToMessageID) ||
 		!sameUUID(existing.LearningActionID, in.LearningActionID) || !sameLessonContext(existing.LessonContext, in.LessonContext) ||
+		!domain.TeacherPolicySelectionsEqual(existing.TeacherPolicySelection, in.TeacherPolicySelection) ||
 		!sameAttachmentIDs(attachments, in.AttachmentIDs) {
 		return domain.ErrIdempotencyConflict
 	}

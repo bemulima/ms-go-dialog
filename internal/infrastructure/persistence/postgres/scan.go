@@ -73,23 +73,33 @@ func scanMember(row pgx.Row) (domain.Member, error) {
 
 const messageColumns = `id, dialog_id, author_type, channel, sender_id, personal_teacher_id, learning_action_id, lesson_context, assistant_ui, reply_to_message_id, body, links,
 	status, version, message_sequence, last_event_sequence, teacher_turn_sequence, idempotency_key,
-edited_at, deleted_at, created_at, updated_at, mentor_binding_id, mentor_context_revision, mentor_author_membership_id`
+edited_at, deleted_at, created_at, updated_at, mentor_binding_id, mentor_context_revision, mentor_author_membership_id, teacher_policy_selection`
 
 func scanMessage(row pgx.Row) (domain.Message, error) {
 	var item domain.Message
 	var links []byte
-	var lessonContext, assistantUI []byte
+	var lessonContext, assistantUI, teacherSelection []byte
 	var senderID, personalTeacherID, mentorAuthor *uuid.UUID
 	err := row.Scan(
 		&item.ID, &item.DialogID, &item.AuthorType, &item.Channel, &senderID, &personalTeacherID, &item.LearningActionID, &lessonContext, &assistantUI, &item.ReplyToMessageID, &item.Body, &links,
 		&item.Status, &item.Version, &item.MessageSequence, &item.LastEventSequence, &item.TeacherTurnSequence,
-		&item.IdempotencyKey, &item.EditedAt, &item.DeletedAt, &item.CreatedAt, &item.UpdatedAt, &item.MentorBindingID, &item.MentorContextRevision, &mentorAuthor,
+		&item.IdempotencyKey, &item.EditedAt, &item.DeletedAt, &item.CreatedAt, &item.UpdatedAt, &item.MentorBindingID, &item.MentorContextRevision, &mentorAuthor, &teacherSelection,
 	)
 	if err != nil {
 		return domain.Message{}, mapError(err)
 	}
 	if mentorAuthor != nil {
 		item.MentorAuthorMembershipID = *mentorAuthor
+	}
+	if len(teacherSelection) > 0 {
+		var selection domain.TeacherPolicySelection
+		if err := json.Unmarshal(teacherSelection, &selection); err != nil {
+			return domain.Message{}, err
+		}
+		if item.MentorBindingID != nil || item.AuthorType != domain.MessageAuthorUser || item.Channel != domain.MessageChannelWeb {
+			return domain.Message{}, domain.ErrValidation
+		}
+		item.TeacherPolicySelection = &selection
 	}
 	if senderID != nil {
 		item.SenderID = *senderID

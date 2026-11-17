@@ -85,7 +85,8 @@ func run() error {
 	dialogService.Education = education
 	metrics := observability.NewMetrics()
 	messageService := &messageuc.Service{
-		Education: education, MentorReads: mentorBindings,
+		TeacherMentorPolicyEnabled: cfg.TeacherMentorPolicyEnabled,
+		Education:                  education, MentorReads: mentorBindings,
 		Spaces: spaces, Dialogs: dialogs, Members: members, Messages: messages, TeacherMessages: messages, CanonicalStudentTurns: canonicalStudentTurns,
 		Attachments: attachments, Outbox: outbox, Tx: tx,
 		Blocks: blocks, TeacherOrderingV2Enabled: cfg.DialogTeacherOrderingV2Enabled, CanonicalStudentTurnEnabled: cfg.DialogCanonicalStudentTurnEnabled,

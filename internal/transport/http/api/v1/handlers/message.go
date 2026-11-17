@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	common "github.com/bemulima/ms-go-dialog/internal/transport/http/common"
 	"net/http"
 	"strconv"
@@ -16,23 +17,24 @@ import (
 type MessageHandler struct{ Service *messageuc.Service }
 
 func (h MessageHandler) Create(w http.ResponseWriter, r *http.Request) {
-	var request struct {
-		DialogID         uuid.UUID                    `json:"dialog_id"`
-		ReplyToMessageID *uuid.UUID                   `json:"reply_to_message_id"`
-		Body             string                       `json:"body"`
-		AttachmentIDs    []uuid.UUID                  `json:"attachment_ids"`
-		IdempotencyKey   uuid.UUID                    `json:"idempotency_key"`
-		LearningActionID *uuid.UUID                   `json:"learning_action_id"`
-		LessonContext    *domain.LessonMessageContext `json:"lesson_context"`
-	}
+	var request messageCreateRequest
 	if err := common.DecodeJSON(w, r, &request); err != nil {
 		common.WriteError(w, r, domain.ErrValidation)
 		return
 	}
+	var selection *domain.TeacherPolicySelection
+	if len(request.TeacherPolicySelection) > 0 {
+		var value domain.TeacherPolicySelection
+		if json.Unmarshal(request.TeacherPolicySelection, &value) != nil {
+			common.WriteError(w, r, domain.ErrValidation)
+			return
+		}
+		selection = &value
+	}
 	result, err := h.Service.Create(r.Context(), middleware.Actor(r), messageuc.CreateInput{
 		DialogID: request.DialogID, ReplyToMessageID: request.ReplyToMessageID,
 		Body: request.Body, AttachmentIDs: request.AttachmentIDs, IdempotencyKey: request.IdempotencyKey,
-		LearningActionID: request.LearningActionID, LessonContext: request.LessonContext,
+		LearningActionID: request.LearningActionID, LessonContext: request.LessonContext, TeacherPolicySelection: selection,
 	})
 	if err != nil {
 		common.WriteError(w, r, err)

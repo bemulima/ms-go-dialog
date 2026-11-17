@@ -26,6 +26,9 @@ stack:
       value: NATS JetStream and Gorilla WebSocket
       source_path: go.mod
 capabilities:
+    - name: explicit_teacher_policy_selection
+      status: implemented_gated_disabled_by_default
+      source_path: docs/teacher-policy-selection-v1.md
     - name: repository_bootstrap
       status: implemented
       source_path: AGENTS.md
@@ -100,6 +103,7 @@ relations:
     - name: provisions_personal_contact_for
       value: ms-go-mentor
 contracts:
+    - .ai/contracts/teacher-policy-selection.yaml
     - .ai/contracts/database.yaml
     - .ai/contracts/http.yaml
     - .ai/contracts/websocket.yaml
@@ -116,6 +120,7 @@ instructions:
     - docs/operations.md
     - docs/native-development.md
 commands:
+    - test_teacher_policy_selection
     - format
     - dependencies
     - tidy
