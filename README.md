@@ -17,6 +17,9 @@
 
 ## Local commands
 
+The [`.env.example`](.env.example) documents the environment injected by the
+central infrastructure Compose over the existing Docker network.
+
 ```sh
 cp .env.dist .env
 make deps
