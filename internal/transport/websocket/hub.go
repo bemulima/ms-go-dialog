@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"github.com/bemulima/ms-go-dialog/internal/domain"
@@ -13,6 +14,9 @@ import (
 var errConnectionLimit = errors.New("realtime connection limit reached")
 
 type Hub struct {
+	Visibility interface {
+		AllowPublic(context.Context, uuid.UUID, *uuid.UUID) (bool, error)
+	}
 	mu                    sync.RWMutex
 	dialogs               map[uuid.UUID]map[*client]struct{}
 	users                 map[uuid.UUID]map[*client]struct{}
@@ -113,6 +117,12 @@ func (h *Hub) BroadcastLifecycle(subject domain.EventSubject, payload []byte) {
 	if err != nil {
 		return
 	}
+	var identity struct {
+		MessageID *uuid.UUID `json:"message_id"`
+	}
+	if json.Unmarshal(payload, &identity) != nil || !h.publicVisible(route.DialogID, identity.MessageID) {
+		return
+	}
 	h.mu.Lock()
 	switch subject {
 	case domain.EventDialogCreated:
@@ -160,7 +170,20 @@ func (h *Hub) BroadcastEphemeral(payload []byte) {
 	if json.Unmarshal(payload, &event) != nil || event.V != protocolVersion || (event.Type != "typing.started" && event.Type != "typing.stopped") || event.EventID == uuid.Nil || event.DialogID == uuid.Nil || event.Data.UserID == uuid.Nil || event.OccurredAt.IsZero() {
 		return
 	}
+	if !h.publicVisible(event.DialogID, nil) {
+		return
+	}
 	h.broadcast(event.DialogID, append([]byte(nil), payload...))
+}
+
+func (h *Hub) publicVisible(dialog uuid.UUID, message *uuid.UUID) bool {
+	if h.Visibility == nil {
+		return true
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	allowed, err := h.Visibility.AllowPublic(ctx, dialog, message)
+	return err == nil && allowed && ctx.Err() == nil
 }
 func (h *Hub) broadcast(dialogID uuid.UUID, payload []byte) {
 	h.mu.RLock()

@@ -107,9 +107,9 @@ WHERE dialog_id=$1 AND status=1 AND role=1`, dialogID).Scan(&count)
 }
 
 func (r MemberRepository) ListActiveDialogSequencesForUser(ctx context.Context, spaceID, userID uuid.UUID) (map[uuid.UUID]int64, error) {
-	rows, err := runner(ctx, r.Pool).Query(ctx, `SELECT d.id,d.max_event_sequence
+	rows, err := runner(ctx, r.Pool).Query(ctx, `SELECT d.id,COALESCE((SELECT max(dm.last_event_sequence) FROM dialog_message dm WHERE dm.dialog_id=d.id AND dm.mentor_binding_id IS NULL),1)
 FROM dialog d JOIN dialog_member m ON m.dialog_id=d.id
-WHERE d.space_id=$1 AND d.status<>3 AND m.user_id=$2 AND m.status=1`, spaceID, userID)
+WHERE d.space_id=$1 AND d.status<>3 AND m.user_id=$2 AND m.status=1 AND NOT EXISTS(SELECT 1 FROM dialog_mentor_binding mb WHERE mb.dialog_id=d.id AND mb.source_kind='COHORT')`, spaceID, userID)
 	if err != nil {
 		return nil, err
 	}

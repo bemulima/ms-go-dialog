@@ -56,3 +56,11 @@ teacher_dialogs:
             - block_id
             - action_id
         projection: ordinary message.created REST/WebSocket evidence only
+
+mentor_education:
+    source_of_truth: docs/mentor-education-v1.md
+    delivery: current-owner HTTP polling; educational payloads never enter generic WebSocket fanout
+    selection: explicit X-Mentor-Dialog-Context on reads, sends, read state and attachments
+    pagination: advance over observed context rows even when author filtering leaves an empty page
+    read_state: visible-message cursor per membership; no global educational unread total
+    privacy: no ordinary last-message, count, activity or roster projection of educational data

@@ -176,6 +176,14 @@ func (h AdminHandler) messageStatus(w http.ResponseWriter, r *http.Request, acti
 		common.WriteError(w, r, err)
 		return
 	}
+	if view.Message.MentorBindingID != nil {
+		// Moderation authority permits a transition, not an educational content
+		// read. The report queue preserves the reporter's independent evidence.
+		view.Message.Body = ""
+		view.Message.Links = nil
+		view.Message.ReplyToMessageID = nil
+		view.Attachments = nil
+	}
 	common.WriteJSON(w, http.StatusOK, common.NewMessageResponse(messageuc.View{Message: view.Message, Attachments: view.Attachments}))
 }
 func (p policyRequest) domain() domain.Policy {

@@ -82,3 +82,7 @@ anchor against Student's authoritative frozen assignment. Its down migration
 uses an explicit transaction and exclusive table lock, refuses while any V2
 anchor exists, and restores the exact migration 008 constraint without deleting
 or converting message data.
+
+## Teacher policy source selection (015)
+
+Migration 015 adds nullable immutable `dialog_message.teacher_policy_selection`, bound to an existing Student-authored Teacher message. Its up migration uses the existing script transaction; down locks and refuses retained data. The [selector contract](teacher-policy-selection-v1.md) records replay, deletion, and deployment semantics. Source SQL has not been executed.

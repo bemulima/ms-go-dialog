@@ -11,6 +11,10 @@ This repository is the canonical owner of the Dialog service's business rules, c
 
 ## Contracts
 
+- [Explicit Teacher policy selection](teacher-policy-selection-v1.md)
+
+- [Educational Mentor Dialog and abuse intake](mentor-education-v1.md)
+
 - [HTTP contract](http-contract.md)
 - [WebSocket contract](websocket-contract.md)
 - [Database contract](database-contract.md)

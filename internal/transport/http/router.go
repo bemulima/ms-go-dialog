@@ -13,20 +13,25 @@ import (
 	dialoguc "github.com/bemulima/ms-go-dialog/internal/usecase/dialog"
 	messageuc "github.com/bemulima/ms-go-dialog/internal/usecase/message"
 	realtimeuc "github.com/bemulima/ms-go-dialog/internal/usecase/realtime"
+	reportuc "github.com/bemulima/ms-go-dialog/internal/usecase/report"
 	"github.com/go-chi/chi/v5"
 )
 
 type RouterDependencies struct {
-	AdminService      *adminuc.Service
-	DialogService     *dialoguc.Service
-	MessageService    *messageuc.Service
-	AttachmentService *attachmentuc.Service
-	RealtimeService   *realtimeuc.TicketService
-	WebSocketHandler  http.Handler
-	UserRateLimiter   middleware.ActorLimiter
-	Readiness         http.Handler
-	Metrics           Metrics
-	InternalToken     string
+	ReportService          *reportuc.Service
+	AdminService           *adminuc.Service
+	DialogService          *dialoguc.Service
+	MessageService         *messageuc.Service
+	AttachmentService      *attachmentuc.Service
+	RealtimeService        *realtimeuc.TicketService
+	WebSocketHandler       http.Handler
+	UserRateLimiter        middleware.ActorLimiter
+	Readiness              http.Handler
+	Metrics                Metrics
+	InternalToken          string
+	MentorInternalToken    string
+	MentorContactService   *dialoguc.MentorContactService
+	MentorEducationService *dialoguc.MentorEducationService
 }
 
 // Metrics keeps the transport independent from the concrete observability implementation.
@@ -67,24 +72,39 @@ func NewRouter(deps RouterDependencies) http.Handler {
 			admin.Put("/dialog/reopen/{dialogID}", handler.ReopenDialog)
 			admin.Put("/message/hide/{messageID}", handler.HideMessage)
 			admin.Put("/message/restore/{messageID}", handler.RestoreMessage)
+			if deps.ReportService != nil {
+				reports := apihandlers.ReportHandler{Service: deps.ReportService}
+				admin.Get("/message-report/list", reports.List)
+				admin.Post("/message-report/{reportID}/resolve", reports.Resolve)
+			}
 		})
 	}
-	if deps.InternalToken != "" && deps.DialogService != nil && deps.MessageService != nil {
-		router.Route("/internal/v1", func(internal chi.Router) {
-			internal.Use(middleware.RequireInternalToken(deps.InternalToken, common.WriteError))
-			handler := privatehandlers.TeacherDialogHandler{Dialogs: deps.DialogService, Messages: deps.MessageService}
-			internal.Put("/teacher-dialog/ensure", handler.Ensure)
-			internal.Get("/teacher-dialog/{dialogID}/request/{sourceMessageID}", handler.RequestContext)
-			internal.Post("/teacher-dialog/{dialogID}/assistant-ui-source", handler.AssistantUISource)
-			internal.Post("/teacher-dialog/{dialogID}/canonical-student-turn", handler.CanonicalStudentTurn)
-			internal.Post("/teacher-dialog/{dialogID}/message", handler.AppendResponse)
-			internal.Post("/teacher-dialog/{dialogID}/proactive-message", handler.AppendProactive)
-			internal.Post("/teacher-dialog/{dialogID}/student-channel-message", handler.AppendStudentChannelMessage)
-		})
-	}
+	router.Route("/internal/v1", func(internal chi.Router) {
+		if deps.InternalToken != "" && deps.DialogService != nil && deps.MessageService != nil {
+			internal.Group(func(internal chi.Router) {
+				internal.Use(middleware.RequireInternalToken(deps.InternalToken, common.WriteError))
+				handler := privatehandlers.TeacherDialogHandler{Dialogs: deps.DialogService, Messages: deps.MessageService}
+				internal.Put("/teacher-dialog/ensure", handler.Ensure)
+				internal.Get("/teacher-dialog/{dialogID}/request/{sourceMessageID}", handler.RequestContext)
+				internal.Post("/teacher-dialog/{dialogID}/assistant-ui-source", handler.AssistantUISource)
+				internal.Post("/teacher-dialog/{dialogID}/canonical-student-turn", handler.CanonicalStudentTurn)
+				internal.Post("/teacher-dialog/{dialogID}/message", handler.AppendResponse)
+				internal.Post("/teacher-dialog/{dialogID}/proactive-message", handler.AppendProactive)
+				internal.Post("/teacher-dialog/{dialogID}/student-channel-message", handler.AppendStudentChannelMessage)
+			})
+		}
+		if deps.MentorContactService != nil && deps.MentorInternalToken != "" && deps.MentorInternalToken != deps.InternalToken {
+			internal.Group(func(internal chi.Router) {
+				internal.Use(middleware.RequireSingleInternalToken(deps.MentorInternalToken, common.WriteError))
+				handler := privatehandlers.MentorContactHandler{Service: deps.MentorContactService, Limiter: deps.UserRateLimiter}
+				internal.Post("/mentor-dialog/ensure-personal", handler.Ensure)
+			})
+		}
+	})
 
 	router.Route("/api/v1", func(api chi.Router) {
 		api.Use(middleware.RequireActor(common.WriteError))
+		api.Use(middleware.MentorContext(common.WriteError))
 		if deps.UserRateLimiter != nil {
 			api.Use(middleware.RateLimitActor(deps.UserRateLimiter, common.WriteError))
 		}
@@ -101,6 +121,12 @@ func NewRouter(deps RouterDependencies) http.Handler {
 			api.Put("/dialog-member/role/{dialogID}/{userID}", handler.ChangeRole)
 			api.Put("/user-block/{userID}", handler.BlockUser)
 			api.Delete("/user-block/{userID}", handler.UnblockUser)
+		}
+		if deps.ReportService != nil {
+			api.Post("/message-report", (apihandlers.ReportHandler{Service: deps.ReportService}).Create)
+		}
+		if deps.MentorEducationService != nil {
+			api.Post("/dialogs/mentor-context", (apihandlers.MentorEducationHandler{Service: deps.MentorEducationService}).Ensure)
 		}
 		if deps.MessageService != nil {
 			handler := apihandlers.MessageHandler{Service: deps.MessageService}

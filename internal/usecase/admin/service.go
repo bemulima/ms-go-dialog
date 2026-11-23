@@ -180,13 +180,15 @@ func (s Service) moderate(ctx context.Context, actor domain.Actor, id uuid.UUID,
 		if err := s.Messages.UpdateModerationStatus(txCtx, item, previous, version); err != nil {
 			return err
 		}
-		if target == domain.MessageStatusHidden {
-			if err := s.Members.DecrementUnreadForDeletedMessage(txCtx, item.DialogID, item.SenderID, item.MessageSequence, eventSequence); err != nil {
-				return err
-			}
-		} else {
-			if err := s.Members.IncrementUnreadForRestoredMessage(txCtx, item.DialogID, item.SenderID, item.MessageSequence, eventSequence); err != nil {
-				return err
+		if item.MentorBindingID == nil {
+			if target == domain.MessageStatusHidden {
+				if err := s.Members.DecrementUnreadForDeletedMessage(txCtx, item.DialogID, item.SenderID, item.MessageSequence, eventSequence); err != nil {
+					return err
+				}
+			} else {
+				if err := s.Members.IncrementUnreadForRestoredMessage(txCtx, item.DialogID, item.SenderID, item.MessageSequence, eventSequence); err != nil {
+					return err
+				}
 			}
 		}
 		dialogItem.MaxEventSequence = eventSequence
@@ -194,6 +196,10 @@ func (s Service) moderate(ctx context.Context, actor domain.Actor, id uuid.UUID,
 		dialogItem.UpdatedAt = now
 		if err := s.Dialogs.UpdateState(txCtx, dialogItem, dialogItem.Version-1); err != nil {
 			return err
+		}
+		if item.MentorBindingID != nil {
+			result = ModerationView{Message: item, Attachments: attachments}
+			return nil
 		}
 		eventID := s.newID()
 		eventPayload := map[string]any{

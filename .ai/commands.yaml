@@ -1,5 +1,10 @@
 schema_version: 1
 commands:
+    - name: test_mentor_education
+      run: go test ./internal/usecase/dialog ./internal/usecase/message ./internal/usecase/attachment ./internal/usecase/report ./internal/infrastructure/http/mentor ./internal/infrastructure/persistence/postgres ./internal/transport/http ./internal/transport/websocket ./cmd/ms-dialog-service -run '^TestMentorEducation' -count=1
+      source_path: internal/usecase/dialog/mentor_education_test.go
+      requires_approval: false
+      risk: verification
     - name: agent_policy
       run: ./scripts/check-agent-policy.sh
       source_path: scripts/check-agent-policy.sh
@@ -35,6 +40,11 @@ commands:
       source_path: Taskfile.yml
       requires_approval: true
       risk: lifecycle
+    - name: test_mentor_contact
+      run: go test -race ./internal/usecase/dialog ./internal/transport/http/private/handlers ./internal/transport/http ./internal/config -run '^TestMentorContact' -count=1 -timeout=45s
+      source_path: internal/usecase/dialog/mentor_contact_test.go
+      requires_approval: false
+      risk: verification
     - name: native_migration_status
       run: python3 scripts/native_config.py -- sh scripts/native_migrate_status.sh
       source_path: Taskfile.yml
@@ -80,3 +90,8 @@ commands:
       source_path: Taskfile.yml
       requires_approval: true
       risk: state_change
+    - name: test_teacher_policy_selection
+      run: go test -race ./internal/domain ./internal/usecase/message ./internal/transport/http/api/v1/handlers ./internal/transport/http/private/handlers ./internal/infrastructure/persistence/postgres ./internal/config -run '^TestTeacherPolicySelection|^TestScanMessage' -count=1
+      source_path: docs/teacher-policy-selection-v1.md
+      requires_approval: false
+      risk: verification

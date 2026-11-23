@@ -10,6 +10,9 @@ owned_tables:
     - dialog_outbox
     - dialog_ws_ticket
     - dialog_user_block
+    - dialog_mentor_binding
+    - dialog_mentor_read_state
+    - dialog_message_report
 invariants:
     - personal dialog is unique per unordered pair inside a space
     - every member owns an independent monotonic read cursor and unread count
@@ -56,3 +59,21 @@ canonical_student_turn:
     identifier_type: UUID, including correlation_id and causation_id
     terminal_failure_owner: ms-go-teacher-agent durable records and structured logs; no_effect_proof_id, recoverable_outcome_id, and bounded failure_code are not Dialog persistence in S0
 repository_ports: internal/domain/repository
+
+mentor_education:
+    migration: db/migrations/013_mentor_education.up.sql
+    history: exact nullable binding and observed revision plus author membership pin
+    cohort_membership: current owner proof, not a persisted shadow Student roster
+    read_state: per binding, actor and current membership
+reports:
+    migration: db/migrations/014_message_reports.up.sql
+    moderation: current message hide and immutable resolution share one transaction
+    rollback: refuse loss of existing conversation or report history
+
+teacher_policy_selection:
+    source_of_truth: docs/teacher-policy-selection-v1.md
+    migration: 015_teacher_policy_selection
+    column: dialog_message.teacher_policy_selection
+    lifecycle: optional immutable source intent retained after soft deletion
+    rollback: exclusive lock and refusal while selected messages exist
+    required_before_app_deploy: true

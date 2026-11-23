@@ -19,6 +19,8 @@ const (
 )
 
 type Service struct {
+	Education             domain.MentorAccessGuard
+	MentorReads           repository.MentorRepository
 	Spaces                repository.SpaceRepository
 	Dialogs               repository.DialogRepository
 	Members               repository.MemberRepository
@@ -34,7 +36,8 @@ type Service struct {
 	// TeacherOrderingV2Enabled is the sole rollout switch for both private
 	// teacher_turn_sequence allocation and exactly one V2 request emission.
 	// When false, the V1 request code path remains byte-compatible.
-	TeacherOrderingV2Enabled bool
+	TeacherOrderingV2Enabled   bool
+	TeacherMentorPolicyEnabled bool
 	// CanonicalStudentTurnEnabled gates only new trusted receipt
 	// materializations. Exact committed replays remain recoverable when it is
 	// disabled; it is valid only together with the V2 ordering producer.
@@ -73,13 +76,14 @@ type CanonicalStudentTurnObservation struct {
 }
 
 type CreateInput struct {
-	DialogID         uuid.UUID
-	ReplyToMessageID *uuid.UUID
-	Body             string
-	AttachmentIDs    []uuid.UUID
-	IdempotencyKey   uuid.UUID
-	LearningActionID *uuid.UUID
-	LessonContext    *domain.LessonMessageContext
+	DialogID               uuid.UUID
+	ReplyToMessageID       *uuid.UUID
+	Body                   string
+	AttachmentIDs          []uuid.UUID
+	IdempotencyKey         uuid.UUID
+	LearningActionID       *uuid.UUID
+	LessonContext          *domain.LessonMessageContext
+	TeacherPolicySelection *domain.TeacherPolicySelection
 }
 
 type UpdateInput struct {
@@ -113,10 +117,11 @@ type ReadState struct {
 }
 
 type Window struct {
-	Items     []View
-	ReadState ReadState
-	HasOlder  bool
-	HasNewer  bool
+	MentorOlder, MentorNewer *repository.MessageCursor
+	Items                    []View
+	ReadState                ReadState
+	HasOlder                 bool
+	HasNewer                 bool
 }
 
 const MaxTeacherContextMessages = 50
@@ -177,11 +182,18 @@ func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput)
 	if err := uniqueIDs(in.AttachmentIDs); err != nil {
 		return CreateResult{}, err
 	}
+	if in.TeacherPolicySelection != nil && !in.TeacherPolicySelection.Valid() {
+		return CreateResult{}, domain.ErrValidation
+	}
 	lessonContext, err := domain.NormalizeLessonMessageContext(in.LessonContext)
 	if err != nil {
 		return CreateResult{}, err
 	}
 	in.LessonContext = lessonContext
+	ctx, access, err := s.mentorStart(ctx, actor.UserID, in.DialogID)
+	if err != nil {
+		return CreateResult{}, err
+	}
 
 	var result CreateResult
 	var teacherRequestV2 *TeacherRequestV2Observation
@@ -191,10 +203,16 @@ func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput)
 		}
 		existing, err := s.Messages.GetByIdempotencyKey(txCtx, actor.UserID, in.IdempotencyKey)
 		if err == nil {
+			if _, err := s.mentorMessage(txCtx, actor.UserID, existing); err != nil {
+				return err
+			}
 			return s.resolveReplay(txCtx, existing, in, &result)
 		}
 		if !errors.Is(err, domain.ErrNotFound) {
 			return err
+		}
+		if in.TeacherPolicySelection != nil && !s.TeacherMentorPolicyEnabled {
+			return domain.ErrFeatureDisabled
 		}
 
 		dialogItem, space, currentMember, err := s.loadWritableContext(txCtx, actor, in.DialogID, true)
@@ -222,6 +240,9 @@ func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput)
 		if err := validateLearningContextBinding(dialogItem, in.LearningActionID, in.LessonContext); err != nil {
 			return err
 		}
+		if err := domain.ValidateTeacherPolicySelectionBinding(dialogItem, in.TeacherPolicySelection, in.LessonContext); err != nil {
+			return err
+		}
 		attachments, imageCount, fileCount, err := s.bindableAttachments(txCtx, actor.UserID, in.DialogID, in.AttachmentIDs, space.Policy)
 		if err != nil {
 			return err
@@ -234,6 +255,9 @@ func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput)
 			reply, err := s.Messages.GetByID(txCtx, *in.ReplyToMessageID)
 			if err != nil || reply.DialogID != in.DialogID || reply.Status == domain.MessageStatusHidden || reply.MessageSequence < currentMember.HistoryFromMessageSequence {
 				return domain.ErrMessageNotFound
+			}
+			if _, err := s.mentorMessage(txCtx, actor.UserID, reply); err != nil {
+				return err
 			}
 		}
 
@@ -250,9 +274,16 @@ func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput)
 		item := domain.Message{
 			ID: s.newID(), DialogID: in.DialogID, AuthorType: domain.MessageAuthorUser, Channel: domain.MessageChannelWeb, SenderID: actor.UserID,
 			LearningActionID: in.LearningActionID, LessonContext: in.LessonContext, ReplyToMessageID: in.ReplyToMessageID,
-			Body: content.Body, Links: content.Links, Status: domain.MessageStatusActive, Version: 1,
+			TeacherPolicySelection: in.TeacherPolicySelection,
+			Body:                   content.Body, Links: content.Links, Status: domain.MessageStatusActive, Version: 1,
 			MessageSequence: messageSequence, LastEventSequence: eventSequence, TeacherTurnSequence: teacherTurnSequence,
 			IdempotencyKey: in.IdempotencyKey, CreatedAt: now, UpdatedAt: now,
+		}
+		if access != nil {
+			id := access.Binding.ID
+			item.MentorBindingID = &id
+			item.MentorContextRevision = access.Revision
+			item.MentorAuthorMembershipID = access.MembershipID
 		}
 		if err := item.Validate(); err != nil {
 			return err
@@ -278,8 +309,10 @@ func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput)
 		if err := s.Dialogs.UpdateState(txCtx, dialogItem, dialogItem.Version-1); err != nil {
 			return err
 		}
-		if err := s.Members.IncrementUnreadRecipients(txCtx, item.DialogID, actor.UserID, eventSequence); err != nil {
-			return err
+		if item.MentorBindingID == nil {
+			if err := s.Members.IncrementUnreadRecipients(txCtx, item.DialogID, actor.UserID, eventSequence); err != nil {
+				return err
+			}
 		}
 		if err := s.addEvent(txCtx, item, attachments, domain.EventDialogMessageCreated, actor.UserID, now); err != nil {
 			return err
@@ -292,10 +325,19 @@ func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput)
 			teacherRequestV2 = observation
 		}
 		result = CreateResult{Created: true, View: View{Message: item, Attachments: attachments}}
-		return nil
+		_, err = s.mentorViews(txCtx, actor.UserID, in.DialogID, []View{result.View})
+		return err
 	})
 	if err == nil {
 		s.observeTeacherRequestV2(teacherRequestV2)
+		views, checkErr := s.mentorViews(ctx, actor.UserID, in.DialogID, []View{result.View})
+		if checkErr != nil {
+			return CreateResult{}, checkErr
+		}
+		if len(views) != 1 {
+			return CreateResult{}, domain.ErrForbidden
+		}
+		result.View = views[0]
 	}
 	return result, err
 }
@@ -626,6 +668,9 @@ func (s Service) GetTeacherRequestContext(ctx context.Context, dialogID, persona
 	if err := validateLearningContextBinding(dialogItem, source.LearningActionID, source.LessonContext); err != nil {
 		return TeacherRequestContext{}, err
 	}
+	if err := domain.ValidateTeacherPolicySelectionBinding(dialogItem, source.TeacherPolicySelection, source.LessonContext); err != nil {
+		return TeacherRequestContext{}, err
+	}
 	items, err := s.Messages.Window(ctx, repository.MessageWindowQuery{
 		DialogID: dialogID, FromSequence: 0, AnchorSequence: source.MessageSequence,
 		Before: before, After: 1,
@@ -850,6 +895,10 @@ func (s Service) Update(ctx context.Context, actor domain.Actor, in UpdateInput)
 		if err != nil {
 			return domain.ErrMessageNotFound
 		}
+		txCtx, err = s.mentorMessage(txCtx, actor.UserID, item)
+		if err != nil {
+			return err
+		}
 		if err := s.rejectCanonicalStudentTurnMutation(txCtx, item.ID); err != nil {
 			return err
 		}
@@ -894,8 +943,30 @@ func (s Service) Update(ctx context.Context, actor domain.Actor, in UpdateInput)
 			return err
 		}
 		result = View{Message: item, Attachments: attachments}
+		views, err := s.mentorViews(txCtx, actor.UserID, item.DialogID, []View{result})
+		if err != nil {
+			return err
+		}
+		if len(views) != 1 {
+			return domain.ErrMessageNotFound
+		}
+		result = views[0]
 		return nil
 	})
+	if err == nil {
+		next, checkErr := s.mentorMessage(ctx, actor.UserID, result.Message)
+		if checkErr != nil {
+			return View{}, checkErr
+		}
+		views, checkErr := s.mentorViews(next, actor.UserID, result.Message.DialogID, []View{result})
+		if checkErr != nil {
+			return View{}, checkErr
+		}
+		if len(views) != 1 {
+			return View{}, domain.ErrMessageNotFound
+		}
+		result = views[0]
+	}
 	return result, err
 }
 
@@ -908,6 +979,10 @@ func (s Service) Delete(ctx context.Context, actor domain.Actor, in DeleteInput)
 		item, err := s.Messages.GetByIDForUpdate(txCtx, in.MessageID)
 		if err != nil {
 			return domain.ErrMessageNotFound
+		}
+		txCtx, err = s.mentorMessage(txCtx, actor.UserID, item)
+		if err != nil {
+			return err
 		}
 		if err := s.rejectCanonicalStudentTurnMutation(txCtx, item.ID); err != nil {
 			return err
@@ -935,8 +1010,10 @@ func (s Service) Delete(ctx context.Context, actor domain.Actor, in DeleteInput)
 				return err
 			}
 		}
-		if err := s.Members.DecrementUnreadForDeletedMessage(txCtx, item.DialogID, item.SenderID, item.MessageSequence, eventSequence); err != nil {
-			return err
+		if item.MentorBindingID == nil {
+			if err := s.Members.DecrementUnreadForDeletedMessage(txCtx, item.DialogID, item.SenderID, item.MessageSequence, eventSequence); err != nil {
+				return err
+			}
 		}
 		dialogItem.MaxEventSequence, dialogItem.Version, dialogItem.UpdatedAt = eventSequence, dialogItem.Version+1, now
 		if err := s.Dialogs.UpdateState(txCtx, dialogItem, dialogItem.Version-1); err != nil {
@@ -949,8 +1026,30 @@ func (s Service) Delete(ctx context.Context, actor domain.Actor, in DeleteInput)
 			return err
 		}
 		result = View{Message: item}
+		views, err := s.mentorViews(txCtx, actor.UserID, item.DialogID, []View{result})
+		if err != nil {
+			return err
+		}
+		if len(views) != 1 {
+			return domain.ErrMessageNotFound
+		}
+		result = views[0]
 		return nil
 	})
+	if err == nil {
+		next, checkErr := s.mentorMessage(ctx, actor.UserID, result.Message)
+		if checkErr != nil {
+			return View{}, checkErr
+		}
+		views, checkErr := s.mentorViews(next, actor.UserID, result.Message.DialogID, []View{result})
+		if checkErr != nil {
+			return View{}, checkErr
+		}
+		if len(views) != 1 {
+			return View{}, domain.ErrMessageNotFound
+		}
+		result = views[0]
+	}
 	return result, err
 }
 
@@ -966,6 +1065,12 @@ func (s Service) advanceRead(ctx context.Context, actor domain.Actor, dialogID u
 	if err := actor.Validate(); err != nil {
 		return ReadState{}, err
 	}
+	if domain.SelectedMentorBinding(ctx) != nil {
+		return s.mentorAdvanceRead(ctx, actor, dialogID, requested)
+	}
+	if _, err := domain.CheckMentorRead(ctx, s.Education, actor.UserID, dialogID, nil); err != nil {
+		return ReadState{}, err
+	}
 	var state ReadState
 	err := s.Tx.WithinTransaction(ctx, func(txCtx context.Context) error {
 		dialogItem, err := s.Dialogs.GetByIDForUpdate(txCtx, dialogID)
@@ -979,6 +1084,10 @@ func (s Service) advanceRead(ctx context.Context, actor domain.Actor, dialogID u
 		member, err := s.Members.GetForUpdate(txCtx, dialogID, actor.UserID)
 		if err != nil || member.Status != domain.MemberStatusActive {
 			return domain.ErrForbidden
+		}
+		dialogItem, member, err = s.publicReadProjection(txCtx, dialogItem, member)
+		if err != nil {
+			return err
 		}
 		through := dialogItem.MaxMessageSequence
 		if requested != nil {
@@ -1038,6 +1147,13 @@ func (s Service) Window(ctx context.Context, actor domain.Actor, dialogID uuid.U
 	if before < 0 || after < 0 || before+after < 1 || before+after > MaxPageLimit {
 		return Window{}, fmt.Errorf("%w: invalid message window", domain.ErrValidation)
 	}
+	if domain.SelectedMentorBinding(ctx) != nil && before+after > 30 {
+		return Window{}, domain.ErrValidation
+	}
+	ctx, _, startErr := s.mentorStart(ctx, actor.UserID, dialogID)
+	if startErr != nil {
+		return Window{}, startErr
+	}
 	dialogItem, _, member, err := s.loadReadableContext(ctx, actor, dialogID)
 	if err != nil {
 		return Window{}, err
@@ -1069,12 +1185,43 @@ func (s Service) Window(ctx context.Context, actor domain.Actor, dialogID uuid.U
 	if hasNewer {
 		items = items[:len(items)-1]
 	}
+	var olderPosition, newerPosition *repository.MessageCursor
+	if binding := domain.SelectedMentorBinding(ctx); binding != nil && len(items) > 0 {
+		if hasOlder {
+			olderPosition = &repository.MessageCursor{Sequence: items[0].MessageSequence, ID: *binding}
+		}
+		if hasNewer {
+			newerPosition = &repository.MessageCursor{Sequence: items[len(items)-1].MessageSequence, ID: *binding}
+		}
+	}
 	views, err := s.views(ctx, items)
 	if err != nil {
 		return Window{}, err
 	}
 	state, err := s.readState(ctx, dialogItem, member)
-	return Window{Items: views, ReadState: state, HasOlder: hasOlder, HasNewer: hasNewer}, err
+	if err != nil {
+		return Window{}, err
+	}
+	views, err = s.mentorViews(ctx, actor.UserID, dialogID, views)
+	if err != nil {
+		return Window{}, err
+	}
+	if domain.SelectedMentorBinding(ctx) != nil {
+		access := domain.CurrentMentorAccess(ctx)
+		if access == nil || s.MentorReads == nil {
+			return Window{}, domain.ErrDependencyUnavailable
+		}
+		lastRead, err := s.MentorReads.ReadSequence(ctx, access.Binding.ID, actor.UserID, access.MembershipID)
+		if err != nil {
+			return Window{}, err
+		}
+		state = ReadState{LastReadMessageSequence: lastRead, MaxMessageSequence: lastRead}
+		for _, view := range views {
+			state.MaxMessageSequence = max(state.MaxMessageSequence, view.Message.MessageSequence)
+			state.MaxEventSequence = max(state.MaxEventSequence, view.Message.LastEventSequence)
+		}
+	}
+	return Window{Items: views, ReadState: state, HasOlder: hasOlder, HasNewer: hasNewer, MentorOlder: olderPosition, MentorNewer: newerPosition}, err
 }
 
 func (s Service) List(ctx context.Context, actor domain.Actor, query repository.MessageListQuery) ([]View, error) {
@@ -1083,6 +1230,10 @@ func (s Service) List(ctx context.Context, actor domain.Actor, query repository.
 	}
 	if query.Limit < 1 || query.Limit > MaxPageLimit+1 {
 		return nil, fmt.Errorf("%w: invalid page limit", domain.ErrValidation)
+	}
+	ctx, _, startErr := s.mentorStart(ctx, actor.UserID, query.DialogID)
+	if startErr != nil {
+		return nil, startErr
 	}
 	_, _, member, err := s.loadReadableContext(ctx, actor, query.DialogID)
 	if err != nil {
@@ -1093,7 +1244,11 @@ func (s Service) List(ctx context.Context, actor domain.Actor, query repository.
 	if err != nil {
 		return nil, err
 	}
-	return s.views(ctx, items)
+	views, err := s.views(ctx, items)
+	if err != nil {
+		return nil, err
+	}
+	return s.mentorViews(ctx, actor.UserID, query.DialogID, views)
 }
 
 func (s Service) ListChanges(ctx context.Context, actor domain.Actor, query repository.MessageChangeQuery) ([]View, error) {
@@ -1102,6 +1257,10 @@ func (s Service) ListChanges(ctx context.Context, actor domain.Actor, query repo
 	}
 	if query.AfterEventSequence < 0 || query.Limit < 1 || query.Limit > MaxPageLimit+1 {
 		return nil, fmt.Errorf("%w: invalid changes cursor or limit", domain.ErrValidation)
+	}
+	ctx, _, startErr := s.mentorStart(ctx, actor.UserID, query.DialogID)
+	if startErr != nil {
+		return nil, startErr
 	}
 	_, _, member, err := s.loadReadableContext(ctx, actor, query.DialogID)
 	if err != nil {
@@ -1112,7 +1271,11 @@ func (s Service) ListChanges(ctx context.Context, actor domain.Actor, query repo
 	if err != nil {
 		return nil, err
 	}
-	return s.views(ctx, items)
+	views, err := s.views(ctx, items)
+	if err != nil {
+		return nil, err
+	}
+	return s.mentorViews(ctx, actor.UserID, query.DialogID, views)
 }
 
 func (s Service) Get(ctx context.Context, actor domain.Actor, messageID uuid.UUID) (View, error) {
@@ -1123,6 +1286,10 @@ func (s Service) Get(ctx context.Context, actor domain.Actor, messageID uuid.UUI
 	if err != nil || item.Status == domain.MessageStatusHidden {
 		return View{}, domain.ErrMessageNotFound
 	}
+	ctx, err = s.mentorMessage(ctx, actor.UserID, item)
+	if err != nil {
+		return View{}, err
+	}
 	_, _, member, err := s.loadReadableContext(ctx, actor, item.DialogID)
 	if err != nil {
 		return View{}, err
@@ -1131,7 +1298,17 @@ func (s Service) Get(ctx context.Context, actor domain.Actor, messageID uuid.UUI
 		return View{}, domain.ErrMessageNotFound
 	}
 	attachments, err := s.listAttachments(ctx, item.DialogID, item.ID)
-	return View{Message: item, Attachments: attachments}, err
+	if err != nil {
+		return View{}, err
+	}
+	views, err := s.mentorViews(ctx, actor.UserID, item.DialogID, []View{{Message: item, Attachments: attachments}})
+	if err != nil {
+		return View{}, err
+	}
+	if len(views) != 1 {
+		return View{}, domain.ErrMessageNotFound
+	}
+	return views[0], nil
 }
 
 func (s Service) loadReadableContext(ctx context.Context, actor domain.Actor, dialogID uuid.UUID) (domain.Dialog, domain.Space, domain.Member, error) {
@@ -1143,11 +1320,15 @@ func (s Service) loadReadableContext(ctx context.Context, actor domain.Actor, di
 	if err != nil || space.Status != domain.SpaceStatusActive {
 		return domain.Dialog{}, domain.Space{}, domain.Member{}, domain.ErrDialogNotFound
 	}
-	member, err := s.Members.Get(ctx, dialogID, actor.UserID)
+	member, synthetic := domain.CurrentMentorAccess(ctx).CohortMember(item, actor.UserID)
+	if !synthetic {
+		member, err = s.Members.Get(ctx, dialogID, actor.UserID)
+	}
 	if err != nil || member.Status != domain.MemberStatusActive {
 		return domain.Dialog{}, domain.Space{}, domain.Member{}, domain.ErrForbidden
 	}
-	return item, space, member, nil
+	item, member, err = s.publicReadProjection(ctx, item, member)
+	return item, space, member, err
 }
 
 func (s Service) loadWritableContext(ctx context.Context, actor domain.Actor, dialogID uuid.UUID, forUpdate bool) (domain.Dialog, domain.Space, domain.Member, error) {
@@ -1168,7 +1349,10 @@ func (s Service) loadWritableContext(ctx context.Context, actor domain.Actor, di
 	if err != nil || space.Status != domain.SpaceStatusActive {
 		return domain.Dialog{}, domain.Space{}, domain.Member{}, domain.ErrDialogNotFound
 	}
-	member, err := s.Members.Get(ctx, dialogID, actor.UserID)
+	member, synthetic := domain.CurrentMentorAccess(ctx).CohortMember(item, actor.UserID)
+	if !synthetic {
+		member, err = s.Members.Get(ctx, dialogID, actor.UserID)
+	}
 	if err != nil || member.Status != domain.MemberStatusActive {
 		return domain.Dialog{}, domain.Space{}, domain.Member{}, domain.ErrForbidden
 	}
@@ -1188,6 +1372,9 @@ func (s Service) bindableAttachments(ctx context.Context, uploaderID, dialogID u
 		if err != nil || item.DialogID != dialogID || item.UploaderID != uploaderID || item.MessageID != nil || item.Status != domain.AttachmentStatusPending || !item.ExpiresAt.After(s.now()) {
 			return nil, 0, 0, domain.ErrInvalidAttachment
 		}
+		if !sameUUID(item.MentorBindingID, domain.SelectedMentorBinding(ctx)) {
+			return nil, 0, 0, domain.ErrInvalidAttachment
+		}
 		if err := item.Validate(policy); err != nil {
 			return nil, 0, 0, err
 		}
@@ -1198,6 +1385,9 @@ func (s Service) bindableAttachments(ctx context.Context, uploaderID, dialogID u
 }
 
 func (s Service) resolveReplay(ctx context.Context, existing domain.Message, in CreateInput, result *CreateResult) error {
+	if !sameUUID(existing.MentorBindingID, domain.SelectedMentorBinding(ctx)) {
+		return domain.ErrIdempotencyConflict
+	}
 	attachments, err := s.listAttachments(ctx, existing.DialogID, existing.ID)
 	if err != nil {
 		return err
@@ -1205,6 +1395,7 @@ func (s Service) resolveReplay(ctx context.Context, existing domain.Message, in 
 	if existing.DialogID != in.DialogID || existing.AuthorType != domain.MessageAuthorUser || existing.Channel != domain.MessageChannelWeb ||
 		existing.Body != in.Body || !sameUUID(existing.ReplyToMessageID, in.ReplyToMessageID) ||
 		!sameUUID(existing.LearningActionID, in.LearningActionID) || !sameLessonContext(existing.LessonContext, in.LessonContext) ||
+		!domain.TeacherPolicySelectionsEqual(existing.TeacherPolicySelection, in.TeacherPolicySelection) ||
 		!sameAttachmentIDs(attachments, in.AttachmentIDs) {
 		return domain.ErrIdempotencyConflict
 	}
@@ -1248,6 +1439,11 @@ func (s Service) readState(ctx context.Context, item domain.Dialog, member domai
 }
 
 func (s Service) addEvent(ctx context.Context, item domain.Message, attachments []domain.Attachment, subject domain.EventSubject, actorID uuid.UUID, now time.Time) error {
+	// Educational payloads use current-owner HTTP reads; generic user-scoped
+	// WebSocket fan-out cannot retain an educational authorization snapshot.
+	if item.MentorBindingID != nil {
+		return nil
+	}
 	eventID := s.newID()
 	eventPayload := map[string]any{
 		"schema_version": 1, "event_id": eventID, "occurred_at": now,

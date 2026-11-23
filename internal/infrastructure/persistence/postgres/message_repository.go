@@ -3,7 +3,9 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/bemulima/ms-go-dialog/internal/domain"
 	"github.com/bemulima/ms-go-dialog/internal/domain/repository"
@@ -37,14 +39,24 @@ func (r MessageRepository) Create(ctx context.Context, item domain.Message) erro
 	if len(assistantUI) > 0 {
 		assistantUIValue = []byte(assistantUI)
 	}
+	var teacherSelection any
+	if item.TeacherPolicySelection != nil {
+		if !item.TeacherPolicySelection.Valid() {
+			return domain.ErrValidation
+		}
+		teacherSelection, err = json.Marshal(item.TeacherPolicySelection)
+		if err != nil {
+			return err
+		}
+	}
 	_, err = runner(ctx, r.Pool).Exec(ctx, `INSERT INTO dialog_message (
 id, dialog_id, author_type, channel, sender_id, personal_teacher_id, learning_action_id, lesson_context, assistant_ui, reply_to_message_id, body, links, status, version,
 	message_sequence, last_event_sequence, teacher_turn_sequence, idempotency_key, edited_at, deleted_at,
-	created_at, updated_at
-) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
+	created_at, updated_at, mentor_binding_id, mentor_context_revision, mentor_author_membership_id, teacher_policy_selection
+) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)`,
 		item.ID, item.DialogID, item.AuthorType, item.Channel, nullableUUID(item.SenderID), nullableUUID(item.PersonalTeacherID), item.LearningActionID, lessonContext,
 		assistantUIValue, item.ReplyToMessageID, item.Body, links, item.Status, item.Version, item.MessageSequence, item.LastEventSequence, item.TeacherTurnSequence,
-		item.IdempotencyKey, item.EditedAt, item.DeletedAt, item.CreatedAt, item.UpdatedAt)
+		item.IdempotencyKey, item.EditedAt, item.DeletedAt, item.CreatedAt, item.UpdatedAt, item.MentorBindingID, item.MentorContextRevision, nullableUUID(item.MentorAuthorMembershipID), teacherSelection)
 	return mapError(err)
 }
 
@@ -92,6 +104,16 @@ func (r MessageRepository) List(ctx context.Context, query repository.MessageLis
 		base += ` ORDER BY message_sequence DESC,id DESC LIMIT $3`
 		descending = true
 	}
+	binding, floor := mentorMessageScope(ctx)
+	pos := len(args) + 1
+	scope := fmt.Sprintf(" AND mentor_binding_id IS NOT DISTINCT FROM $%d::uuid AND mentor_context_revision >= $%d", pos, pos+1)
+	if binding != nil {
+		base = strings.Replace(base, "(message_sequence,id)<($3,$4)", "message_sequence<$3 AND $4::uuid IS NOT NULL", 1)
+		base = strings.Replace(base, "(message_sequence,id)>($3,$4)", "message_sequence>$3 AND $4::uuid IS NOT NULL", 1)
+	}
+	index := strings.Index(base, " ORDER BY ")
+	base = base[:index] + scope + base[index:]
+	args = append(args, binding, floor)
 	rows, err := runner(ctx, r.Pool).Query(ctx, base, args...)
 	if err != nil {
 		return nil, err
@@ -105,15 +127,16 @@ func (r MessageRepository) List(ctx context.Context, query repository.MessageLis
 }
 
 func (r MessageRepository) Window(ctx context.Context, query repository.MessageWindowQuery) ([]domain.Message, error) {
+	binding, floor := mentorMessageScope(ctx)
 	rows, err := runner(ctx, r.Pool).Query(ctx, `SELECT `+messageColumns+` FROM (
     (SELECT `+messageColumns+` FROM dialog_message
-     WHERE dialog_id=$1 AND message_sequence>=$5 AND message_sequence<$2 AND status<>3
+     WHERE dialog_id=$1 AND message_sequence>=$5 AND message_sequence<$2 AND status<>3 AND mentor_binding_id IS NOT DISTINCT FROM $6::uuid AND mentor_context_revision >= $7
      ORDER BY message_sequence DESC,id DESC LIMIT $3)
     UNION ALL
     (SELECT `+messageColumns+` FROM dialog_message
-     WHERE dialog_id=$1 AND message_sequence>=$5 AND message_sequence>=$2 AND status<>3
+     WHERE dialog_id=$1 AND message_sequence>=$5 AND message_sequence>=$2 AND status<>3 AND mentor_binding_id IS NOT DISTINCT FROM $6::uuid AND mentor_context_revision >= $7
      ORDER BY message_sequence,id LIMIT $4)
-) AS message_window ORDER BY message_sequence,id`, query.DialogID, query.AnchorSequence, query.Before, query.After, query.FromSequence)
+) AS message_window ORDER BY message_sequence,id`, query.DialogID, query.AnchorSequence, query.Before, query.After, query.FromSequence, binding, floor)
 	if err != nil {
 		return nil, err
 	}
@@ -122,9 +145,10 @@ func (r MessageRepository) Window(ctx context.Context, query repository.MessageW
 }
 
 func (r MessageRepository) ListChanges(ctx context.Context, query repository.MessageChangeQuery) ([]domain.Message, error) {
+	binding, floor := mentorMessageScope(ctx)
 	rows, err := runner(ctx, r.Pool).Query(ctx, `SELECT `+messageColumns+`
-FROM dialog_message WHERE dialog_id=$1 AND message_sequence>=$2 AND last_event_sequence>$3
-ORDER BY last_event_sequence,id LIMIT $4`, query.DialogID, query.FromSequence, query.AfterEventSequence, query.Limit)
+FROM dialog_message WHERE dialog_id=$1 AND message_sequence>=$2 AND last_event_sequence>$3 AND mentor_binding_id IS NOT DISTINCT FROM $5::uuid AND mentor_context_revision >= $6
+ORDER BY last_event_sequence,id LIMIT $4`, query.DialogID, query.FromSequence, query.AfterEventSequence, query.Limit, binding, floor)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +159,7 @@ ORDER BY last_event_sequence,id LIMIT $4`, query.DialogID, query.FromSequence, q
 func (r MessageRepository) FirstUnreadIncoming(ctx context.Context, dialogID, readerID uuid.UUID, afterSequence int64) (int64, error) {
 	var sequence int64
 	err := runner(ctx, r.Pool).QueryRow(ctx, `SELECT message_sequence FROM dialog_message
-WHERE dialog_id=$1 AND (sender_id IS NULL OR sender_id<>$2) AND message_sequence>$3 AND status=1
+WHERE dialog_id=$1 AND (sender_id IS NULL OR sender_id<>$2) AND message_sequence>$3 AND status=1 AND mentor_binding_id IS NULL
 ORDER BY message_sequence LIMIT 1`, dialogID, readerID, afterSequence).Scan(&sequence)
 	return sequence, mapError(err)
 }
@@ -146,7 +170,7 @@ func (r MessageRepository) CountUnreadIncoming(ctx context.Context, dialogID, re
 	}
 	var count int64
 	err := runner(ctx, r.Pool).QueryRow(ctx, `SELECT COUNT(*) FROM dialog_message
-WHERE dialog_id=$1 AND (sender_id IS NULL OR sender_id<>$2) AND message_sequence>$3 AND message_sequence<=$4 AND status=1`,
+WHERE dialog_id=$1 AND (sender_id IS NULL OR sender_id<>$2) AND message_sequence>$3 AND message_sequence<=$4 AND status=1 AND mentor_binding_id IS NULL`,
 		dialogID, readerID, afterExclusive, throughInclusive).Scan(&count)
 	return count, err
 }

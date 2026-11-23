@@ -26,6 +26,9 @@ stack:
       value: NATS JetStream and Gorilla WebSocket
       source_path: go.mod
 capabilities:
+    - name: explicit_teacher_policy_selection
+      status: implemented_gated_disabled_by_default
+      source_path: docs/teacher-policy-selection-v1.md
     - name: repository_bootstrap
       status: implemented
       source_path: AGENTS.md
@@ -77,6 +80,9 @@ capabilities:
     - name: teacher_turn_ordering_v2
       status: implemented_gated_disabled_by_default
       source_path: docs/realtime-delivery.md
+    - name: mentor_personal_contact_provisioning
+      status: implemented_gated_disabled_by_default
+      source_path: docs/integration-contract.md
 relations:
     - name: depends_on
       value: postgres
@@ -94,7 +100,10 @@ relations:
       value: ms-go-teacher-agent
     - name: emits_teacher_context_invalidation_to
       value: ms-go-teacher-agent
+    - name: provisions_personal_contact_for
+      value: ms-go-mentor
 contracts:
+    - .ai/contracts/teacher-policy-selection.yaml
     - .ai/contracts/database.yaml
     - .ai/contracts/http.yaml
     - .ai/contracts/websocket.yaml
@@ -111,10 +120,12 @@ instructions:
     - docs/operations.md
     - docs/native-development.md
 commands:
+    - test_teacher_policy_selection
     - format
     - dependencies
     - tidy
     - test
+    - test_mentor_contact
     - lint
     - validate_contracts
     - runtime_e2e

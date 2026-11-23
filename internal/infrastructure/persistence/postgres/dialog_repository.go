@@ -70,7 +70,7 @@ func (r DialogRepository) ListForUser(ctx context.Context, query repository.Dial
 FROM dialog d
 JOIN dialog_member m ON m.dialog_id=d.id
 JOIN dialog_space s ON s.id=d.space_id AND s.status=1
-WHERE m.user_id=$1 AND m.status=1 AND d.status<>3`
+WHERE m.user_id=$1 AND m.status=1 AND d.status<>3 AND NOT EXISTS(SELECT 1 FROM dialog_mentor_binding mb WHERE mb.dialog_id=d.id AND mb.source_kind='COHORT')`
 	args := []any{query.UserID}
 	if query.SpaceID != nil {
 		args = append(args, *query.SpaceID)
@@ -78,10 +78,10 @@ WHERE m.user_id=$1 AND m.status=1 AND d.status<>3`
 	}
 	if query.After != nil {
 		args = append(args, query.After.ActivityAt, query.After.ID)
-		base += fmt.Sprintf(" AND (COALESCE(d.last_message_at,d.created_at),d.id)<($%d,$%d)", len(args)-1, len(args))
+		base += fmt.Sprintf(" AND (COALESCE((SELECT max(dm.created_at) FROM dialog_message dm WHERE dm.dialog_id=d.id AND dm.mentor_binding_id IS NULL AND dm.status<>3),d.created_at),d.id)<($%d,$%d)", len(args)-1, len(args))
 	}
 	args = append(args, query.Limit)
-	base += fmt.Sprintf(" ORDER BY COALESCE(d.last_message_at,d.created_at) DESC,d.id DESC LIMIT $%d", len(args))
+	base += fmt.Sprintf(" ORDER BY COALESCE((SELECT max(dm.created_at) FROM dialog_message dm WHERE dm.dialog_id=d.id AND dm.mentor_binding_id IS NULL AND dm.status<>3),d.created_at) DESC,d.id DESC LIMIT $%d", len(args))
 	rows, err := runner(ctx, r.Pool).Query(ctx, base, args...)
 	if err != nil {
 		return nil, err

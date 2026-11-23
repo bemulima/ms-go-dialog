@@ -8,6 +8,34 @@ The gateway must not forward `/healthz`, `/readyz`, or `/metrics`. Orchestrators
 
 The WebSocket flow is: authenticated REST request to `POST /api/v1/realtime/ticket`, then `GET /api/v1/ws` with subprotocols `dialog.v1` and `ticket.<opaque>`. The browser never sends a bearer token or ticket in a URL.
 
+## Human Mentor contact
+
+The purpose-authenticated `ms-go-mentor` consumer uses the private
+`POST /internal/v1/mentor-dialog/ensure-personal` contract described in
+[HTTP contract](http-contract.md#mentor-contact-private-disabled-by-default).
+Mentor owns current approval, the published Offer and the authenticated Student
+selection. Dialog owns the ordinary personal pair, current participant checks,
+space policy, bidirectional user blocks, rate limiting, memberships and history.
+
+The consumer must match the returned Student/Mentor pair exactly and recheck
+current approval and selected Offer after the call. A failed/unknown response
+cannot be treated as consent, a message acknowledgement or a new assignment.
+Pair retries reuse Dialog's existing `(space, unordered participant pair)`
+identity and local transaction/outbox. The explicit Student action opens the
+conversation; it does not send a prewritten message.
+
+Pre-assignment contact never obtains Student progress, code or Teacher history.
+Existing conversation access remains governed by ordinary personal membership,
+block/moderation and message policies. Revoking a learning assignment does not
+erase personal history. This producer does not claim implementation of
+assigned-scope private learning reads or automatic Cohort membership/history.
+Those need their own complete owner contracts before activation.
+
+The feature is disabled by default. Its credential must differ from Dialog's
+Teacher/general inbound credential and from outbound User/FileStorage tokens.
+No external User call runs inside the local Dialog transaction. Final local
+readback/fences suppress stale data; cross-service atomicity is not promised.
+
 ## User service
 
 Dialog stores user UUIDs only. Profile names and avatars are hydrated from `ms-go-user` by the consuming application; they are not copied into dialog tables or events. The gateway authenticates the acting user.

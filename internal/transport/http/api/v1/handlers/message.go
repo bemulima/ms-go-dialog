@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	common "github.com/bemulima/ms-go-dialog/internal/transport/http/common"
 	"net/http"
 	"strconv"
@@ -16,23 +17,24 @@ import (
 type MessageHandler struct{ Service *messageuc.Service }
 
 func (h MessageHandler) Create(w http.ResponseWriter, r *http.Request) {
-	var request struct {
-		DialogID         uuid.UUID                    `json:"dialog_id"`
-		ReplyToMessageID *uuid.UUID                   `json:"reply_to_message_id"`
-		Body             string                       `json:"body"`
-		AttachmentIDs    []uuid.UUID                  `json:"attachment_ids"`
-		IdempotencyKey   uuid.UUID                    `json:"idempotency_key"`
-		LearningActionID *uuid.UUID                   `json:"learning_action_id"`
-		LessonContext    *domain.LessonMessageContext `json:"lesson_context"`
-	}
+	var request messageCreateRequest
 	if err := common.DecodeJSON(w, r, &request); err != nil {
 		common.WriteError(w, r, domain.ErrValidation)
 		return
 	}
+	var selection *domain.TeacherPolicySelection
+	if len(request.TeacherPolicySelection) > 0 {
+		var value domain.TeacherPolicySelection
+		if json.Unmarshal(request.TeacherPolicySelection, &value) != nil {
+			common.WriteError(w, r, domain.ErrValidation)
+			return
+		}
+		selection = &value
+	}
 	result, err := h.Service.Create(r.Context(), middleware.Actor(r), messageuc.CreateInput{
 		DialogID: request.DialogID, ReplyToMessageID: request.ReplyToMessageID,
 		Body: request.Body, AttachmentIDs: request.AttachmentIDs, IdempotencyKey: request.IdempotencyKey,
-		LearningActionID: request.LearningActionID, LessonContext: request.LessonContext,
+		LearningActionID: request.LearningActionID, LessonContext: request.LessonContext, TeacherPolicySelection: selection,
 	})
 	if err != nil {
 		common.WriteError(w, r, err)
@@ -128,6 +130,14 @@ func (h MessageHandler) Window(w http.ResponseWriter, r *http.Request) {
 			newer = &value
 		}
 	}
+	if window.MentorOlder != nil {
+		value := common.EncodeMessageCursor(dialogID, *window.MentorOlder, "before")
+		older = &value
+	}
+	if window.MentorNewer != nil {
+		value := common.EncodeMessageCursor(dialogID, *window.MentorNewer, "after")
+		newer = &value
+	}
 	common.WriteJSON(w, http.StatusOK, map[string]any{"items": items, "older_cursor": older, "newer_cursor": newer, "read_state": window.ReadState})
 }
 
@@ -147,6 +157,28 @@ func (h MessageHandler) List(w http.ResponseWriter, r *http.Request) {
 	after, err := common.DecodeMessageCursor(afterRaw, dialogID, "after")
 	if err != nil {
 		common.WriteError(w, r, domain.ErrValidation)
+		return
+	}
+	if domain.SelectedMentorBinding(r.Context()) != nil {
+		page, err := h.Service.MentorPage(r.Context(), middleware.Actor(r), repository.MessageListQuery{DialogID: dialogID, Before: before, After: after, Limit: limit})
+		if err != nil {
+			common.WriteError(w, r, err)
+			return
+		}
+		responses := make([]common.MessageResponse, 0, len(page.Items))
+		for _, item := range page.Items {
+			responses = append(responses, common.NewMessageResponse(item))
+		}
+		var next *string
+		if page.Next != nil {
+			direction := "before"
+			if after != nil {
+				direction = "after"
+			}
+			value := common.EncodeMessageCursor(dialogID, *page.Next, direction)
+			next = &value
+		}
+		common.WriteJSON(w, 200, map[string]any{"items": responses, "next_cursor": next})
 		return
 	}
 	items, err := h.Service.List(r.Context(), middleware.Actor(r), repository.MessageListQuery{DialogID: dialogID, Before: before, After: after, Limit: limit + 1})
@@ -187,6 +219,19 @@ func (h MessageHandler) Changes(w http.ResponseWriter, r *http.Request) {
 	limit := common.QueryInt(r, "limit", messageuc.DefaultPageLimit)
 	if err != nil || parseErr != nil || limit < 1 || limit > messageuc.MaxPageLimit {
 		common.WriteError(w, r, domain.ErrValidation)
+		return
+	}
+	if domain.SelectedMentorBinding(r.Context()) != nil {
+		page, err := h.Service.MentorChanges(r.Context(), middleware.Actor(r), repository.MessageChangeQuery{DialogID: dialogID, AfterEventSequence: after, Limit: limit})
+		if err != nil {
+			common.WriteError(w, r, err)
+			return
+		}
+		responses := make([]common.MessageResponse, 0, len(page.Items))
+		for _, item := range page.Items {
+			responses = append(responses, common.NewMessageResponse(item))
+		}
+		common.WriteJSON(w, 200, map[string]any{"items": responses, "next_after_event_sequence": page.NextAfter, "has_more": page.HasMore})
 		return
 	}
 	items, err := h.Service.ListChanges(r.Context(), middleware.Actor(r), repository.MessageChangeQuery{DialogID: dialogID, AfterEventSequence: after, Limit: limit + 1})

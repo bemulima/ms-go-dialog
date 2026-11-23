@@ -18,14 +18,14 @@ id, dialog_id, message_id, uploader_id, filestorage_id, kind, status, mime_type,
 size_bytes, width, height, checksum_sha256, original_filename, expires_at,
 activated_at, deleted_at, activation_attempts, activation_next_attempt_at,
 delete_attempts, delete_next_attempt_at, last_error, storage_deleted_at,
-created_at, updated_at
-) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)`,
+created_at, updated_at, mentor_binding_id
+) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)`,
 		item.ID, item.DialogID, item.MessageID, item.UploaderID, item.FileStorageID,
 		item.Kind, item.Status, item.MIMEType, item.SizeBytes, item.Width, item.Height,
 		nullableBytes(item.ChecksumSHA256), item.OriginalFilename, item.ExpiresAt,
 		item.ActivatedAt, item.DeletedAt, item.ActivationAttempts, item.ActivationNextAttemptAt,
 		item.DeleteAttempts, item.DeleteNextAttemptAt, nullableString(item.LastError),
-		item.StorageDeletedAt, item.CreatedAt, item.UpdatedAt)
+		item.StorageDeletedAt, item.CreatedAt, item.UpdatedAt, item.MentorBindingID)
 	return mapError(err)
 }
 

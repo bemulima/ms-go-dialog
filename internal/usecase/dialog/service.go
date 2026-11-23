@@ -24,6 +24,7 @@ type ParticipantResolver interface {
 }
 
 type Service struct {
+	Education      domain.MentorAccessGuard
 	Spaces         repository.SpaceRepository
 	Dialogs        repository.DialogRepository
 	TeacherDialogs repository.TeacherDialogRepository
@@ -111,6 +112,12 @@ type EnsureResult struct {
 }
 
 func (s Service) EnsurePersonal(ctx context.Context, actor domain.Actor, in EnsurePersonalInput) (EnsureResult, error) {
+	return s.ensurePersonal(ctx, actor, in, nil)
+}
+
+// current is an optional local authorization fence for a trusted provisioning
+// caller. It never performs owner HTTP calls while the transaction is held.
+func (s Service) ensurePersonal(ctx context.Context, actor domain.Actor, in EnsurePersonalInput, current func(context.Context) error) (EnsureResult, error) {
 	if err := actor.Validate(); err != nil {
 		return EnsureResult{}, err
 	}
@@ -148,6 +155,11 @@ func (s Service) EnsurePersonal(ctx context.Context, actor domain.Actor, in Ensu
 		if err := s.Dialogs.LockPersonalKey(txCtx, space.ID, key[:]); err != nil {
 			return err
 		}
+		if current != nil {
+			if err := current(txCtx); err != nil {
+				return err
+			}
+		}
 		existing, err := s.Dialogs.FindPersonalByKey(txCtx, space.ID, key[:])
 		if err == nil {
 			view, err := s.buildView(txCtx, actor.UserID, space, existing)
@@ -155,6 +167,9 @@ func (s Service) EnsurePersonal(ctx context.Context, actor domain.Actor, in Ensu
 				return err
 			}
 			result = EnsureResult{View: view}
+			if current != nil {
+				return current(txCtx)
+			}
 			return nil
 		}
 		if !errors.Is(err, domain.ErrNotFound) {
@@ -184,6 +199,9 @@ func (s Service) EnsurePersonal(ctx context.Context, actor domain.Actor, in Ensu
 			return err
 		}
 		result = EnsureResult{Created: true, View: View{Dialog: item, Space: space, Members: members, CurrentMember: members[0]}}
+		if current != nil {
+			return current(txCtx)
+		}
 		return nil
 	})
 	return result, err
@@ -405,7 +423,28 @@ func (s Service) List(ctx context.Context, actor domain.Actor, query repository.
 		return nil, fmt.Errorf("%w: invalid page limit", domain.ErrValidation)
 	}
 	query.UserID = actor.UserID
-	return s.Dialogs.ListForUser(ctx, query)
+	if domain.SelectedMentorBinding(ctx) != nil {
+		return nil, domain.ErrValidation
+	}
+	items, err := s.Dialogs.ListForUser(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]repository.DialogListItem, 0, len(items))
+	for _, entry := range items {
+		if _, err := domain.CheckMentorRead(ctx, s.Education, actor.UserID, entry.Dialog.ID, nil); err != nil {
+			if errors.Is(err, domain.ErrDialogNotFound) {
+				continue
+			}
+			return nil, err
+		}
+		entry.Dialog, entry.Member, err = s.publicProjection(ctx, entry.Dialog, entry.Member)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, entry)
+	}
+	return result, nil
 }
 
 func (s Service) AddMember(ctx context.Context, actor domain.Actor, in AddMemberInput) (View, error) {
@@ -596,6 +635,15 @@ func (s Service) ChangeRole(ctx context.Context, actor domain.Actor, in ChangeRo
 }
 
 func (s Service) authorizeGroupManager(ctx context.Context, actor domain.Actor, dialogID uuid.UUID) error {
+	if s.Education != nil {
+		protected, err := s.Education.Protected(ctx, dialogID)
+		if err != nil {
+			return err
+		}
+		if protected {
+			return domain.ErrForbidden
+		}
+	}
 	item, err := s.Dialogs.GetByID(ctx, dialogID)
 	if err != nil || item.Status == domain.DialogStatusHidden {
 		return domain.ErrDialogNotFound
@@ -615,6 +663,15 @@ func (s Service) authorizeGroupManager(ctx context.Context, actor domain.Actor, 
 }
 
 func (s Service) loadGroupForManagement(ctx context.Context, actor domain.Actor, dialogID uuid.UUID) (domain.Dialog, domain.Space, domain.Member, error) {
+	if s.Education != nil {
+		protected, err := s.Education.Protected(ctx, dialogID)
+		if err != nil {
+			return domain.Dialog{}, domain.Space{}, domain.Member{}, err
+		}
+		if protected {
+			return domain.Dialog{}, domain.Space{}, domain.Member{}, domain.ErrForbidden
+		}
+	}
 	item, err := s.Dialogs.GetByIDForUpdate(ctx, dialogID)
 	if err != nil || item.Status == domain.DialogStatusHidden {
 		return domain.Dialog{}, domain.Space{}, domain.Member{}, domain.ErrDialogNotFound
@@ -665,7 +722,14 @@ func (s Service) activeSpace(ctx context.Context, key string) (domain.Space, err
 }
 
 func (s Service) buildView(ctx context.Context, userID uuid.UUID, space domain.Space, item domain.Dialog) (View, error) {
-	current, err := s.Members.Get(ctx, item.ID, userID)
+	access, err := domain.CheckMentorRead(ctx, s.Education, userID, item.ID, nil)
+	if err != nil {
+		return View{}, err
+	}
+	current, synthetic := access.CohortMember(item, userID)
+	if !synthetic {
+		current, err = s.Members.Get(ctx, item.ID, userID)
+	}
 	if err != nil || current.Status != domain.MemberStatusActive {
 		return View{}, domain.ErrForbidden
 	}
@@ -673,7 +737,68 @@ func (s Service) buildView(ctx context.Context, userID uuid.UUID, space domain.S
 	if err != nil {
 		return View{}, err
 	}
+	if access != nil {
+		filtered := []domain.Member{}
+		for _, m := range members {
+			if m.UserID == userID || m.UserID == access.Binding.MentorID {
+				m.UnreadCount = 0
+				m.LastReadMessageSequence = 0
+				m.LastReadAt = nil
+				filtered = append(filtered, m)
+			}
+		}
+		if synthetic && userID != access.Binding.MentorID {
+			filtered = append(filtered, current)
+		}
+		members = filtered
+		item.MemberCount = len(members)
+		item.MessageCount = 0
+		item.MaxMessageSequence = 0
+		item.MaxEventSequence = 0
+		item.LastMessageID = nil
+		item.LastMessageAt = nil
+		current.UnreadCount = 0
+		current.LastReadMessageSequence = 0
+		current.LastReadAt = nil
+		fresh, err := domain.CheckMentorRead(ctx, s.Education, userID, item.ID, nil)
+		if err != nil {
+			return View{}, err
+		}
+		if fresh == nil || !access.SameCurrent(*fresh) {
+			return View{}, domain.ErrForbidden
+		}
+	} else {
+		item, current, err = s.publicProjection(ctx, item, current)
+		if err != nil {
+			return View{}, err
+		}
+	}
 	return View{Dialog: item, Space: space, Members: members, CurrentMember: current}, nil
+}
+
+func (s Service) publicProjection(ctx context.Context, item domain.Dialog, member domain.Member) (domain.Dialog, domain.Member, error) {
+	if s.Education == nil {
+		return item, member, nil
+	}
+	reader, ok := s.Dialogs.(repository.PublicDialogProjectionReader)
+	if !ok {
+		return item, member, domain.ErrDependencyUnavailable
+	}
+	p, err := reader.PublicProjection(ctx, item.ID, member.UserID, member.LastReadMessageSequence)
+	if err != nil {
+		return item, member, err
+	}
+	item.MessageCount, item.MaxMessageSequence, item.MaxEventSequence = p.MessageCount, p.MaxMessageSequence, p.MaxEventSequence
+	item.LastMessageID, item.LastMessageAt = p.LastMessageID, p.LastMessageAt
+	member.UnreadCount = p.UnreadCount
+	if item.Type == domain.DialogTypePersonal {
+		item.Version = int(min(p.MaxEventSequence+1, 2147483647))
+		item.UpdatedAt = item.CreatedAt
+		if p.LastMessageAt != nil {
+			item.UpdatedAt = *p.LastMessageAt
+		}
+	}
+	return item, member, nil
 }
 
 func (s Service) addCreatedEvent(ctx context.Context, item domain.Dialog, members []domain.Member, now time.Time) error {
