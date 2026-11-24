@@ -198,7 +198,7 @@ func (h *Hub) activateWithTeacherPreview(item *client, ready []byte) [][]byte {
 	initial := [][]byte{ready}
 	for dialogID := range item.dialogs {
 		preview, ok := h.teacherPreviews[dialogID]
-		if ok && !preview.terminal && preview.StudentID == item.session.UserID &&
+		if ok && preview.StudentID == item.session.UserID &&
 			now.Sub(preview.OccurredAt) < teacherPreviewLifetime {
 			frame, err := json.Marshal(preview.teacherResponseFrame)
 			if err == nil {

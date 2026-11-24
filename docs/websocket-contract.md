@@ -45,5 +45,5 @@ authorized subscription. The event identifies the originating message,
 response, fenced attempt, correlation, and per-attempt sequence. A delta
 contains a cumulative snapshot of the provisional text. The stream does not
 advance the durable Dialog cursor or carry a business receipt. On reconnect,
-Dialog can return the most recent active in-memory snapshot for 45 seconds.
+Dialog can return the most recent in-memory snapshot or a text-free terminal state for 45 seconds.
 After completion, the regular message record is authoritative.

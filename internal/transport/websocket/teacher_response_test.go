@@ -73,6 +73,10 @@ func TestHubTeacherResponseReplayIsOwnerScopedAndFenced(t *testing.T) {
 	send()
 	read(owner, event.Type)
 	read(reconnected, event.Type)
+	_, afterCancellation := connect(studentID)
+	if len(afterCancellation) != 2 || frameType(t, afterCancellation[1]) != event.Type {
+		t.Fatal("reconnected learner did not receive the content-free terminal state")
+	}
 	event.Type, event.Text, event.Sequence = "teacher.response.delta", "Late duplicate", 4
 	send()
 	if len(owner.send) != 0 || len(reconnected.send) != 0 {

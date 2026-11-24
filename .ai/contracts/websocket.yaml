@@ -50,5 +50,5 @@ teacher_response_preview_v1:
     events: [teacher.response.started, teacher.response.delta, teacher.response.completed, teacher.response.failed, teacher.response.cancelled]
     owner_scope: active membership and matching student in a regular Teacher dialog
     sequence: independent of the durable event cursor and fenced by the processing attempt
-    reconnect: latest active snapshot only, best-effort in-memory for up to 45 seconds
+    reconnect: latest active snapshot or text-free terminal state, best-effort in-memory for up to 45 seconds
     final_answer: recover the canonical message by the existing durable Dialog mechanism
