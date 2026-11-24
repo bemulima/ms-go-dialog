@@ -25,8 +25,13 @@ Tokens and tickets in query strings are forbidden.
 }
 ```
 
-Durable events include dialog/member/message/read/attachment lifecycle types. Ephemeral events are `connection.ready`, `typing.started`, `typing.stopped`, `error`, and `ping`. Client frames are `typing.start`, `typing.stop`, and `pong`.
+Durable events include dialog/member/message/read/attachment lifecycle types. Ephemeral events are `connection.ready`, `typing.started`, `typing.stopped`, `teacher.progress.updated`, `error`, and `ping`. Client frames are `typing.start`, `typing.stop`, and `pong`.
 
 The hub indexes connections by user and active dialog memberships. Membership removal revokes the subscription. A bounded queue disconnects slow consumers. Reconnect reloads dialog snapshots, compares each `max_event_sequence`, and requests changes for gaps.
+
+`teacher.progress.updated` carries `v`, `type`, `event_id`, `dialog_id` and
+`occurred_at`. Only the student who owns the Teacher turn and subscribes to
+that dialog receives it. Clients recover progress through the authenticated
+Teacher snapshot after reconnect. Progress frames have no event sequence.
 
 `connection.ready` contains `space_id` and a `dialogs` object whose keys are the actor's active dialog IDs and whose values are their current `max_event_sequence`. A typing client frame contains `dialog_id`; the server accepts it only while that connection has active membership. New-dialog/member events add subscriptions dynamically, and removal is delivered once before revocation.

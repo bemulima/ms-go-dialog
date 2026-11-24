@@ -28,6 +28,7 @@ server_events:
         - connection.ready
         - typing.started
         - typing.stopped
+        - teacher.progress.updated
         - error
         - ping
 client_events:

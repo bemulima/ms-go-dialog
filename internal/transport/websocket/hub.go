@@ -176,6 +176,43 @@ func (h *Hub) BroadcastEphemeral(payload []byte) {
 	h.broadcast(event.DialogID, append([]byte(nil), payload...))
 }
 
+// BroadcastTeacherProgress sends a cache invalidation only to the owner of a
+// currently subscribed dialog. NATS routing identity is not part of the frame.
+func (h *Hub) BroadcastTeacherProgress(payload []byte) {
+	var event struct {
+		V          int       `json:"v"`
+		EventID    uuid.UUID `json:"event_id"`
+		DialogID   uuid.UUID `json:"dialog_id"`
+		StudentID  uuid.UUID `json:"student_id"`
+		OccurredAt time.Time `json:"occurred_at"`
+	}
+	if len(payload) > 512 || json.Unmarshal(payload, &event) != nil || event.V != protocolVersion ||
+		event.EventID == uuid.Nil || event.DialogID == uuid.Nil || event.StudentID == uuid.Nil || event.OccurredAt.IsZero() {
+		return
+	}
+	if !h.publicVisible(event.DialogID, nil) {
+		return
+	}
+	frame, err := json.Marshal(map[string]any{
+		"v": event.V, "type": "teacher.progress.updated", "event_id": event.EventID,
+		"dialog_id": event.DialogID, "occurred_at": event.OccurredAt,
+	})
+	if err != nil {
+		return
+	}
+	h.mu.RLock()
+	var slow []*client
+	for item := range h.dialogs[event.DialogID] {
+		if item.session.UserID == event.StudentID && !item.push(frame) {
+			slow = append(slow, item)
+		}
+	}
+	h.mu.RUnlock()
+	for _, item := range slow {
+		h.unregister(item)
+	}
+}
+
 func (h *Hub) publicVisible(dialog uuid.UUID, message *uuid.UUID) bool {
 	if h.Visibility == nil {
 		return true
