@@ -35,3 +35,15 @@ that dialog receives it. Clients recover progress through the authenticated
 Teacher snapshot after reconnect. Progress frames have no event sequence.
 
 `connection.ready` contains `space_id` and a `dialogs` object whose keys are the actor's active dialog IDs and whose values are their current `max_event_sequence`. A typing client frame contains `dialog_id`; the server accepts it only while that connection has active membership. New-dialog/member events add subscriptions dynamically, and removal is delivered once before revocation.
+
+### Provisional Teacher responses
+
+Teacher publishes keyed events on `dialog.realtime.teacher-response.v1` using
+Core NATS. Dialog verifies the active regular Teacher conversation and source
+message, checks the space content policy, and forwards only to the learner's
+authorized subscription. The event identifies the originating message,
+response, fenced attempt, correlation, and per-attempt sequence. A delta
+contains a cumulative snapshot of the provisional text. The stream does not
+advance the durable Dialog cursor or carry a business receipt. On reconnect,
+Dialog can return the most recent active in-memory snapshot for 45 seconds.
+After completion, the regular message record is authoritative.

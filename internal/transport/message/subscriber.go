@@ -28,6 +28,7 @@ type RealtimeSink interface {
 	BroadcastLifecycle(domain.EventSubject, []byte)
 	BroadcastEphemeral([]byte)
 	BroadcastTeacherProgress([]byte)
+	BroadcastTeacherResponse([]byte)
 }
 type Subscription struct{ items []*natsgo.Subscription }
 
@@ -60,6 +61,14 @@ func SubscribeRealtime(conn *natsgo.Conn, sink RealtimeSink) (*Subscription, err
 		return nil, err
 	}
 	result.items = append(result.items, progress)
+	preview, err := conn.Subscribe("dialog.realtime.teacher-response.v1", func(message *natsgo.Msg) {
+		sink.BroadcastTeacherResponse(message.Data)
+	})
+	if err != nil {
+		_ = result.Close()
+		return nil, err
+	}
+	result.items = append(result.items, preview)
 	if err = conn.Flush(); err != nil {
 		_ = result.Close()
 		return nil, err
