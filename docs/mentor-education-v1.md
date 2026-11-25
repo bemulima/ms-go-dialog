@@ -96,6 +96,37 @@ and a `limit` of 1–20. Responses are private and use `Cache-Control: no-store`
 These reads use existing bindings and history and perform no provisioning,
 membership updates, or read-state mutations.
 
+## Confirmed Mentor MCP sends
+
+Mentor sends exact plain text to an existing Assignment or Cohort binding
+after the verified Mentor separately approves the text and destination in the
+first-party workspace. A private HTTPS capability uses the single
+`X-Mentor-Dialog-MCP-Write-Token` header, corresponding to
+`DIALOG_MENTOR_MCP_WRITE_TOKEN`. This token is distinct from the read, context,
+and contact credentials and requires educational access.
+
+- `POST /internal/v1/mentor-mcp/message-preview` validates the existing binding,
+  current actor and source revision, writable dialog, and message policy. It
+  returns 204.
+- `POST /internal/v1/mentor-mcp/message-send` takes the same fields plus the
+  exact `confirmation_id` accepted by Mentor. It returns
+  `{schema:"dialog.mentor-mcp-message-sent.v1",mentor_id,request_id,dialog_id,binding_id,message_id}`.
+
+Both routes accept exact JSON limited to 32 KiB with fields `mentor_id`,
+`request_id`, `kind`, `source_id`, `dialog_id`, `binding_id`,
+`expected_revision`, and `body`. UUIDs are canonical, the revision refers to
+the owning Assignment or Cohort, and text is nonblank and at most 2000 UTF-8
+bytes. The request accepts no browser credentials, participant headers,
+attachments, replies, or teacher context.
+
+New sends reuse Dialog's transaction, idempotency lock, and educational owner
+checks, including current consent, blocks and membership fences. The
+confirmation and the exact command identify an immutable owner receipt in
+migration 016. Dialog writes the receipt in the same transaction as the
+message. Exact retries return the original message ID even after edits or a
+lost response. A replay returns the receipt without reading retained message
+content. A different command with the same request ID conflicts.
+
 ## Abuse reports and moderation
 
 `POST /api/v1/message-report` accepts exact `{request_id,message_id,category,details}`,

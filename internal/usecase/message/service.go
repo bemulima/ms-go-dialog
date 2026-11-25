@@ -21,6 +21,7 @@ const (
 type Service struct {
 	Education             domain.MentorAccessGuard
 	MentorReads           repository.MentorRepository
+	MentorMCPReceipts     repository.MentorMCPMessageReceipts
 	Spaces                repository.SpaceRepository
 	Dialogs               repository.DialogRepository
 	Members               repository.MemberRepository
@@ -173,6 +174,10 @@ type MaterializeCanonicalStudentTurnInput struct {
 }
 
 func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput) (CreateResult, error) {
+	return s.create(ctx, actor, in, nil)
+}
+
+func (s Service) create(ctx context.Context, actor domain.Actor, in CreateInput, checkAccess func(*domain.MentorAccess) error) (CreateResult, error) {
 	if err := actor.Validate(); err != nil {
 		return CreateResult{}, err
 	}
@@ -193,6 +198,12 @@ func (s Service) Create(ctx context.Context, actor domain.Actor, in CreateInput)
 	ctx, access, err := s.mentorStart(ctx, actor.UserID, in.DialogID)
 	if err != nil {
 		return CreateResult{}, err
+	}
+
+	if checkAccess != nil {
+		if err := checkAccess(access); err != nil {
+			return CreateResult{}, err
+		}
 	}
 
 	var result CreateResult

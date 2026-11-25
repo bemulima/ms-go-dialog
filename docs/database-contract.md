@@ -86,3 +86,11 @@ or converting message data.
 ## Teacher policy source selection (015)
 
 Migration 015 adds nullable immutable `dialog_message.teacher_policy_selection`, bound to an existing Student-authored Teacher message. Its up migration uses the existing script transaction; down locks and refuses retained data. The [selector contract](teacher-policy-selection-v1.md) records replay, deletion, and deployment semantics. Source SQL has not been executed.
+
+## Mentor MCP message receipts
+
+Migration 016 adds `dialog_mentor_mcp_message_receipt`. The primary key is
+`(mentor_id, request_id)`. It stores the immutable command digest and unique
+reference to the committed message. The receipt and message commit together.
+Updates, deletes, and truncation are denied. Rollback requires an empty receipt
+table.

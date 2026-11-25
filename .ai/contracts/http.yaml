@@ -150,6 +150,18 @@ mentor_mcp_dialog_reads:
     message_body_limit_codepoints: 800
     access: current owner-fenced Mentor Assignment or Cohort binding and current author history
     effects: read only
+mentor_mcp_dialog_sends:
+    source_of_truth: docs/mentor-education-v1.md
+    preview: POST /internal/v1/mentor-mcp/message-preview
+    send: POST /internal/v1/mentor-mcp/message-send
+    token_header: X-Mentor-Dialog-MCP-Write-Token
+    token_configuration: DIALOG_MENTOR_MCP_WRITE_TOKEN
+    default_enabled: false
+    requires: DIALOG_MENTOR_EDUCATION_ENABLED
+    request_limit_bytes: 32768
+    message_body_limit_utf8_bytes: 2000
+    permission: mentor:dialogs:write with an exact first-party Mentor confirmation
+    owner_effect: existing educational message creation and atomic immutable send receipt
 abuse_reports:
     source_of_truth: docs/mentor-education-v1.md
     submit: POST /api/v1/message-report

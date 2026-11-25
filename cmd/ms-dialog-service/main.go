@@ -86,7 +86,7 @@ func run() error {
 	metrics := observability.NewMetrics()
 	messageService := &messageuc.Service{
 		TeacherMentorPolicyEnabled: cfg.TeacherMentorPolicyEnabled,
-		Education:                  education, MentorReads: mentorBindings,
+		Education:                  education, MentorReads: mentorBindings, MentorMCPReceipts: mentorBindings,
 		Spaces: spaces, Dialogs: dialogs, Members: members, Messages: messages, TeacherMessages: messages, CanonicalStudentTurns: canonicalStudentTurns,
 		Attachments: attachments, Outbox: outbox, Tx: tx,
 		Blocks: blocks, TeacherOrderingV2Enabled: cfg.DialogTeacherOrderingV2Enabled, CanonicalStudentTurnEnabled: cfg.DialogCanonicalStudentTurnEnabled,
@@ -177,6 +177,7 @@ func run() error {
 		dependencies.MentorContactService = &dialoguc.MentorContactService{Dialogs: dialogService, Enabled: cfg.MentorContactEnabled, SpaceKey: cfg.MentorContactSpaceKey}
 		dependencies.MentorEducationService = education
 		dependencies.MentorMCPReadToken = cfg.MentorMCPReadToken
+		dependencies.MentorMCPWriteToken = cfg.MentorMCPWriteToken
 		dependencies.ReportService = reportService
 	}
 	if modeHasRealtime(cfg.ServiceMode) {
