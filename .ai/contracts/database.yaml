@@ -12,6 +12,7 @@ owned_tables:
     - dialog_user_block
     - dialog_mentor_binding
     - dialog_mentor_read_state
+    - dialog_mentor_mcp_message_receipt
     - dialog_message_report
 invariants:
     - personal dialog is unique per unordered pair inside a space
@@ -78,3 +79,10 @@ teacher_policy_selection:
     lifecycle: optional immutable source intent retained after soft deletion
     rollback: exclusive lock and refusal while selected messages exist
     required_before_app_deploy: true
+
+mentor_mcp_message_receipts:
+    migration: db/migrations/016_mentor_mcp_message_receipts.up.sql
+    primary_key: [mentor_id, request_id]
+    immutable: true
+    message_and_receipt_commit: one Dialog transaction
+    rollback: requires empty receipt table

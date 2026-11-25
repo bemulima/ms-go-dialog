@@ -91,3 +91,11 @@ Migration `016_teacher_content_anchor` adds nullable `dialog_message.content_anc
 The value belongs to student-authored Teacher source messages and participates
 in idempotency comparison. Edits keep it and deletion clears it. Rollback locks
 the table and refuses to discard existing anchors.
+
+## Mentor MCP message receipts
+
+Migration 016 adds `dialog_mentor_mcp_message_receipt`. The primary key is
+`(mentor_id, request_id)`. It stores the immutable command digest and unique
+reference to the committed message. The receipt and message commit together.
+Updates, deletes, and truncation are denied. Rollback requires an empty receipt
+table.

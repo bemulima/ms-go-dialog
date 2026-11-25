@@ -41,6 +41,8 @@ type Config struct {
 	MentorAccessOrigin                string `envconfig:"DIALOG_MENTOR_ACCESS_ORIGIN" default:""`
 	MentorAccessToken                 string `envconfig:"DIALOG_MENTOR_ACCESS_TOKEN" default:""`
 	MentorAccessCAFile                string `envconfig:"DIALOG_MENTOR_ACCESS_CA_FILE" default:""`
+	MentorMCPReadToken                string `envconfig:"DIALOG_MENTOR_MCP_READ_TOKEN" default:""`
+	MentorMCPWriteToken               string `envconfig:"DIALOG_MENTOR_MCP_WRITE_TOKEN" default:""`
 	ServiceMode                       string `envconfig:"SERVICE_MODE" default:"all"`
 	ReadinessTimeoutSeconds           int    `envconfig:"READINESS_TIMEOUT_SECONDS" default:"2"`
 	ShutdownTimeoutSeconds            int    `envconfig:"SHUTDOWN_TIMEOUT_SECONDS" default:"10"`
@@ -121,6 +123,36 @@ func (c Config) Validate() error {
 			c.MentorInternalToken == c.InternalAPIToken || c.MentorInternalToken == c.UserServiceInternalToken || c.MentorInternalToken == c.FileStorageInternalToken ||
 			!regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{1,63}$`).MatchString(c.MentorContactSpaceKey) {
 			return fmt.Errorf("Mentor contact requires a distinct purpose token and an existing personal space key")
+		}
+	}
+	if c.MentorMCPReadToken != "" {
+		if !c.MentorEducationEnabled || len(c.MentorMCPReadToken) < 32 || len(c.MentorMCPReadToken) > 256 {
+			return fmt.Errorf("Mentor MCP dialog read requires educational context and a dedicated token")
+		}
+		for _, ch := range c.MentorMCPReadToken {
+			if ch < 33 || ch > 126 || ch == ',' {
+				return fmt.Errorf("invalid Mentor MCP dialog read token")
+			}
+		}
+		for _, other := range []string{c.MentorInternalToken, c.InternalAPIToken, c.UserServiceInternalToken, c.FileStorageInternalToken, c.MentorAccessToken} {
+			if c.MentorMCPReadToken == other {
+				return fmt.Errorf("Mentor MCP dialog read token must be distinct")
+			}
+		}
+	}
+	if c.MentorMCPWriteToken != "" {
+		if !c.MentorEducationEnabled || len(c.MentorMCPWriteToken) < 32 || len(c.MentorMCPWriteToken) > 256 {
+			return fmt.Errorf("Mentor MCP send requires educational context and a dedicated token")
+		}
+		for _, ch := range c.MentorMCPWriteToken {
+			if ch < 33 || ch > 126 || ch == ',' {
+				return fmt.Errorf("invalid Mentor MCP send token")
+			}
+		}
+		for _, other := range []string{c.MentorMCPReadToken, c.MentorInternalToken, c.InternalAPIToken, c.UserServiceInternalToken, c.FileStorageInternalToken, c.MentorAccessToken} {
+			if c.MentorMCPWriteToken == other {
+				return fmt.Errorf("Mentor MCP send token must be distinct")
+			}
 		}
 	}
 	if c.MentorEducationEnabled {

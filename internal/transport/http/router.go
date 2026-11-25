@@ -32,6 +32,8 @@ type RouterDependencies struct {
 	MentorInternalToken    string
 	MentorContactService   *dialoguc.MentorContactService
 	MentorEducationService *dialoguc.MentorEducationService
+	MentorMCPReadToken     string
+	MentorMCPWriteToken    string
 }
 
 // Metrics keeps the transport independent from the concrete observability implementation.
@@ -78,6 +80,19 @@ func NewRouter(deps RouterDependencies) http.Handler {
 				admin.Post("/message-report/{reportID}/resolve", reports.Resolve)
 			}
 		})
+	}
+	if deps.MentorMCPReadToken != "" && deps.MentorMCPReadToken != deps.InternalToken && deps.MentorMCPReadToken != deps.MentorInternalToken &&
+		deps.MentorEducationService != nil && deps.MentorEducationService.Enabled && deps.MessageService != nil && deps.UserRateLimiter != nil {
+		read := privatehandlers.MentorMCPReadHandler{Token: deps.MentorMCPReadToken, Contexts: deps.MentorEducationService, Messages: deps.MessageService, Limiter: deps.UserRateLimiter}
+		router.Post(privatehandlers.MentorMCPDialogsPath, read.ListDialogs)
+		router.Post(privatehandlers.MentorMCPMessagesPath, read.ListMessages)
+	}
+	if deps.MentorMCPWriteToken != "" && deps.MentorMCPWriteToken != deps.InternalToken && deps.MentorMCPWriteToken != deps.MentorInternalToken &&
+		deps.MentorMCPWriteToken != deps.MentorMCPReadToken && deps.MentorEducationService != nil && deps.MentorEducationService.Enabled &&
+		deps.MessageService != nil && deps.UserRateLimiter != nil {
+		send := privatehandlers.MentorMCPSendHandler{Token: deps.MentorMCPWriteToken, Messages: deps.MessageService, Limiter: deps.UserRateLimiter}
+		router.Post(privatehandlers.MentorMCPPreviewSendPath, send.Preview)
+		router.Post(privatehandlers.MentorMCPSendPath, send.Send)
 	}
 	router.Route("/internal/v1", func(internal chi.Router) {
 		if deps.InternalToken != "" && deps.DialogService != nil && deps.MessageService != nil {
