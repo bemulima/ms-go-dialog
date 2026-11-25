@@ -84,6 +84,7 @@ type CreateInput struct {
 	IdempotencyKey         uuid.UUID
 	LearningActionID       *uuid.UUID
 	LessonContext          *domain.LessonMessageContext
+	ContentAnchor          *domain.TeacherContentAnchor
 	TeacherPolicySelection *domain.TeacherPolicySelection
 }
 
@@ -187,6 +188,10 @@ func (s Service) create(ctx context.Context, actor domain.Actor, in CreateInput,
 	if err := uniqueIDs(in.AttachmentIDs); err != nil {
 		return CreateResult{}, err
 	}
+	if in.ContentAnchor != nil {
+		anchor := *in.ContentAnchor
+		in.ContentAnchor = &anchor
+	}
 	if in.TeacherPolicySelection != nil && !in.TeacherPolicySelection.Valid() {
 		return CreateResult{}, domain.ErrValidation
 	}
@@ -251,6 +256,9 @@ func (s Service) create(ctx context.Context, actor domain.Actor, in CreateInput,
 		if err := validateLearningContextBinding(dialogItem, in.LearningActionID, in.LessonContext); err != nil {
 			return err
 		}
+		if err := domain.ValidateTeacherContentAnchorBinding(dialogItem, in.ContentAnchor, in.LearningActionID, in.LessonContext); err != nil {
+			return err
+		}
 		if err := domain.ValidateTeacherPolicySelectionBinding(dialogItem, in.TeacherPolicySelection, in.LessonContext); err != nil {
 			return err
 		}
@@ -284,7 +292,7 @@ func (s Service) create(ctx context.Context, actor domain.Actor, in CreateInput,
 		eventSequence := dialogItem.MaxEventSequence + 1
 		item := domain.Message{
 			ID: s.newID(), DialogID: in.DialogID, AuthorType: domain.MessageAuthorUser, Channel: domain.MessageChannelWeb, SenderID: actor.UserID,
-			LearningActionID: in.LearningActionID, LessonContext: in.LessonContext, ReplyToMessageID: in.ReplyToMessageID,
+			LearningActionID: in.LearningActionID, LessonContext: in.LessonContext, ContentAnchor: in.ContentAnchor, ReplyToMessageID: in.ReplyToMessageID,
 			TeacherPolicySelection: in.TeacherPolicySelection,
 			Body:                   content.Body, Links: content.Links, Status: domain.MessageStatusActive, Version: 1,
 			MessageSequence: messageSequence, LastEventSequence: eventSequence, TeacherTurnSequence: teacherTurnSequence,
@@ -371,7 +379,7 @@ func (s Service) AppendStudentChannelMessage(ctx context.Context, in AppendStude
 		if err == nil {
 			if existing.DialogID != in.DialogID || existing.Body != in.Body || existing.Channel != in.Channel ||
 				existing.AuthorType != domain.MessageAuthorUser || existing.SenderID != in.StudentID ||
-				existing.LearningActionID != nil || existing.LessonContext != nil || existing.ReplyToMessageID != nil {
+				existing.LearningActionID != nil || existing.LessonContext != nil || existing.ContentAnchor != nil || existing.ReplyToMessageID != nil {
 				return domain.ErrIdempotencyConflict
 			}
 			result = CreateResult{View: View{Message: existing}}
@@ -635,7 +643,7 @@ func (s Service) resolveCanonicalStudentTurnReplay(ctx context.Context, identity
 	if err != nil || item.DialogID != identity.DialogID || item.AuthorType != domain.MessageAuthorUser ||
 		item.SenderID != identity.StudentID || item.Channel != domain.MessageChannelWeb || item.Body != body ||
 		item.ReplyToMessageID == nil || *item.ReplyToMessageID != identity.Interaction.SourcePromptMessageID ||
-		item.LearningActionID != nil || item.LessonContext != nil ||
+		item.LearningActionID != nil || item.LessonContext != nil || item.ContentAnchor != nil ||
 		item.IdempotencyKey != identity.CanonicalMessageCommandID {
 		return CreateResult{}, false, domain.ErrIdempotencyConflict
 	}
@@ -677,6 +685,9 @@ func (s Service) GetTeacherRequestContext(ctx context.Context, dialogID, persona
 		return TeacherRequestContext{}, domain.ErrMessageNotFound
 	}
 	if err := validateLearningContextBinding(dialogItem, source.LearningActionID, source.LessonContext); err != nil {
+		return TeacherRequestContext{}, err
+	}
+	if err := domain.ValidateTeacherContentAnchorBinding(dialogItem, source.ContentAnchor, source.LearningActionID, source.LessonContext); err != nil {
 		return TeacherRequestContext{}, err
 	}
 	if err := domain.ValidateTeacherPolicySelectionBinding(dialogItem, source.TeacherPolicySelection, source.LessonContext); err != nil {
@@ -1010,7 +1021,7 @@ func (s Service) Delete(ctx context.Context, actor domain.Actor, in DeleteInput)
 			return domain.ErrForbidden
 		}
 		eventSequence := dialogItem.MaxEventSequence + 1
-		item.Body, item.Links, item.LessonContext, item.AssistantUI, item.Status, item.LastEventSequence = "", nil, nil, nil, domain.MessageStatusDeleted, eventSequence
+		item.Body, item.Links, item.LessonContext, item.ContentAnchor, item.AssistantUI, item.Status, item.LastEventSequence = "", nil, nil, nil, nil, domain.MessageStatusDeleted, eventSequence
 		item.Version++
 		item.DeletedAt, item.UpdatedAt = &now, now
 		if err := s.Messages.MarkDeleted(txCtx, item, in.ExpectedVersion); err != nil {
@@ -1406,6 +1417,7 @@ func (s Service) resolveReplay(ctx context.Context, existing domain.Message, in 
 	if existing.DialogID != in.DialogID || existing.AuthorType != domain.MessageAuthorUser || existing.Channel != domain.MessageChannelWeb ||
 		existing.Body != in.Body || !sameUUID(existing.ReplyToMessageID, in.ReplyToMessageID) ||
 		!sameUUID(existing.LearningActionID, in.LearningActionID) || !sameLessonContext(existing.LessonContext, in.LessonContext) ||
+		!domain.TeacherContentAnchorsEqual(existing.ContentAnchor, in.ContentAnchor) ||
 		!domain.TeacherPolicySelectionsEqual(existing.TeacherPolicySelection, in.TeacherPolicySelection) ||
 		!sameAttachmentIDs(attachments, in.AttachmentIDs) {
 		return domain.ErrIdempotencyConflict

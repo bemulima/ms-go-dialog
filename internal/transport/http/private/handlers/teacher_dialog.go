@@ -70,15 +70,21 @@ func (h TeacherDialogHandler) RequestContext(w http.ResponseWriter, r *http.Requ
 	}
 	messages := make([]common.MessageResponse, 0, len(context.Messages))
 	for _, item := range context.Messages {
+		// Only the current source anchor is part of the Teacher request.
+		item.ContentAnchor = nil
 		messages = append(messages, common.NewMessageResponse(messageuc.View{Message: item}))
 	}
-	common.WriteJSON(w, http.StatusOK, map[string]any{
+	result := map[string]any{
 		"dialog_id": context.Dialog.ID, "student_id": context.Dialog.StudentID,
 		"personal_teacher_id": context.Dialog.PersonalTeacherID,
 		"context_type":        context.Dialog.TeacherContextType, "context_id": context.Dialog.ContextID,
 		"source_message_id": context.Source.ID, "learning_action_id": context.Source.LearningActionID,
 		"messages": messages,
-	})
+	}
+	if context.Source.ContentAnchor != nil {
+		result["content_anchor"] = context.Source.ContentAnchor
+	}
+	common.WriteJSON(w, http.StatusOK, result)
 }
 
 func (h TeacherDialogHandler) AssistantUISource(w http.ResponseWriter, r *http.Request) {

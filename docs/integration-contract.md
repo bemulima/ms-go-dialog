@@ -103,6 +103,27 @@ idempotency UUID derived from the provider update, and an active general
 teacher context. The command commits an ordinary student message and ordinary
 teacher request; Dialog remains the only history owner.
 
+Student messages can include one strict `content_anchor` using
+`teacher-content-anchor.v1`. The pin carries a closed kind, its matching UUIDs,
+and an immutable revision or lowercase SHA-256 digest. Course and module use
+the general Teacher dialog. A lesson, its exact example or its exact test
+question use the existing lesson dialog and keep the lesson binding. Tests
+identify both the assessment task and the individual question. Action contexts
+bind the exact Dialog artifact (the Practice workspace instance for Practice)
+and repeat the canonical `learning_action_id` for correlation with its owner.
+Existing `lesson_context` v1/v2 remains authoritative for lesson pin and text
+selection. Example/test anchors require overview mode and cannot take a text
+selection. Course pins may carry `language_code` (en/ru) to verify localized
+content across retries.
+
+The existing private request read adds an optional top-level `content_anchor`
+for the canonical source only. Ordinary message REST can echo the original
+anchor. Teacher request events and history entries in the private request read
+carry no anchor. Authorization and content/revision verification remain the
+content owner's responsibility. An anchor is a reference, never an access
+grant or an instruction to use another object's content. Enable browser
+production only after the Teacher consumer supports the additive field.
+
 Dialog checks binding, context, source authorship, content policy, and append idempotency. Teacher verifies the opaque `learning_action_id` against `ms-go-student`, applies deterministic pedagogy before any model invocation, and does not persist a competing conversation history.
 
 When an active student message is edited or deleted in an active teacher

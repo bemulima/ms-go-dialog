@@ -44,6 +44,7 @@ func (s Service) mentorViews(ctx context.Context, user, dialog uuid.UUID, items 
 			v.Message.Body = ""
 			v.Message.Links = nil
 			v.Message.LessonContext = nil
+			v.Message.ContentAnchor = nil
 			v.Message.AssistantUI = nil
 			v.Attachments = nil
 			v.Message.ReplyToMessageID = nil

@@ -25,6 +25,7 @@ invariants:
     - task and project teacher requests retain the opaque learning_action_id supplied on the source message
     - lesson teacher requests retain an exact v1 timestamp or v2 frozen assignment overview/selection anchor only on the user source message
     - v1 and v2 lesson_id equals the lesson teacher dialog context_id; legacy revision/selection anchors remain readable and replayable
+    - migration 016 stores optional immutable source content_anchor; edits retain it, deletion clears it, and rollback refuses to discard existing anchors
     - body updates retain the immutable lesson_context; message deletion clears it together with user content
     - assistant_ui is nullable JSONB limited to PersonalTeacher-authored non-deleted messages and the assistant-ui.v1 envelope
     - max_teacher_turn_sequence and nullable dialog_message.teacher_turn_sequence form a private Dialog-owned dense V2 teacher-request order, never a derived message/event/timestamp/frontend order or public projection
