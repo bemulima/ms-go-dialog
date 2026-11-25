@@ -13,16 +13,16 @@ func TestTeacherPolicySelectionScanRetainsExactIntentAndRejectsNull(t *testing.T
 	now := time.Now().UTC()
 	sender, action := uuid.New(), uuid.New()
 	a, b := uuid.NewString(), uuid.NewString()
-	row := staticRow{uuid.New(), uuid.New(), domain.MessageAuthorUser, domain.MessageChannelWeb, &sender, (*uuid.UUID)(nil), &action, []byte(nil), []byte(nil), (*uuid.UUID)(nil), "question", []byte(`[]`), domain.MessageStatusActive, 1, int64(2), int64(3), (*int64)(nil), uuid.New(), (*time.Time)(nil), (*time.Time)(nil), now, now, (*uuid.UUID)(nil), int64(0), (*uuid.UUID)(nil), []byte(`{"kind":"OFFER","offering_id":"` + a + `","assignment_id":"` + b + `"}`)}
+	row := staticRow{uuid.New(), uuid.New(), domain.MessageAuthorUser, domain.MessageChannelWeb, &sender, (*uuid.UUID)(nil), &action, []byte(nil), []byte(nil), (*uuid.UUID)(nil), "question", []byte(`[]`), domain.MessageStatusActive, 1, int64(2), int64(3), (*int64)(nil), uuid.New(), (*time.Time)(nil), (*time.Time)(nil), now, now, (*uuid.UUID)(nil), int64(0), (*uuid.UUID)(nil), []byte(`{"kind":"OFFER","offering_id":"` + a + `","assignment_id":"` + b + `"}`), []byte(nil)}
 	got, e := scanMessage(row)
 	if e != nil || got.TeacherPolicySelection == nil || got.TeacherPolicySelection.OfferingID != a || got.TeacherPolicySelection.AssignmentID != b {
 		t.Fatalf("scanner lost selection %v", e)
 	}
-	row[len(row)-1] = []byte(`null`)
+	row[len(row)-2] = []byte(`null`)
 	if _, e = scanMessage(row); e == nil {
 		t.Fatal("stored JSON null silently treated as no selection")
 	}
-	row[len(row)-1] = []byte(nil)
+	row[len(row)-2] = []byte(nil)
 	got, e = scanMessage(row)
 	if e != nil || got.TeacherPolicySelection != nil {
 		t.Fatal("legacy SQL NULL changed")

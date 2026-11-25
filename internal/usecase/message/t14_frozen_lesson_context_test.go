@@ -38,7 +38,11 @@ func testT14FrozenLessonSourceReplayAndProjection(t *testing.T, mode domain.Less
 		anchor.SelectedText = &selected
 	}
 	actor := domain.Actor{UserID: studentID, Role: "STUDENT"}
-	input := CreateInput{DialogID: dialogID, Body: "Explain frozen lesson", IdempotencyKey: uuid.New(), LessonContext: anchor}
+	typedAnchor := &domain.TeacherContentAnchor{
+		Schema: domain.TeacherContentAnchorSchema, Kind: "LESSON", CourseID: course.String(),
+		LessonID: lesson.String(), ContentRevision: anchor.ContentRevision, ContentDigest: anchor.ContentDigest,
+	}
+	input := CreateInput{ContentAnchor: typedAnchor, DialogID: dialogID, Body: "Explain frozen lesson", IdempotencyKey: uuid.New(), LessonContext: anchor}
 	foreign := *anchor
 	foreignLesson := uuid.New()
 	foreign.LessonID = &foreignLesson
@@ -51,7 +55,7 @@ func testT14FrozenLessonSourceReplayAndProjection(t *testing.T, mode domain.Less
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !domain.LessonMessageContextsEqual(created.View.Message.LessonContext, anchor) {
+	if !domain.LessonMessageContextsEqual(created.View.Message.LessonContext, anchor) || !domain.TeacherContentAnchorsEqual(created.View.Message.ContentAnchor, typedAnchor) {
 		t.Fatal("source anchor changed")
 	}
 	replay, err := service.Create(context.Background(), actor, input)
@@ -78,9 +82,16 @@ func testT14FrozenLessonSourceReplayAndProjection(t *testing.T, mode domain.Less
 			}
 		})
 	}
+	changedAnchor := *typedAnchor
+	changedAnchor.ContentDigest = "sha256:" + strings.Repeat("b", 64)
+	changed := input
+	changed.ContentAnchor = &changedAnchor
+	if _, err := service.Create(context.Background(), actor, changed); !errors.Is(err, domain.ErrIdempotencyConflict) {
+		t.Fatalf("changed typed anchor replay: %v", err)
+	}
 	messages.windowItems = []domain.Message{created.View.Message}
 	request, err := service.GetTeacherRequestContext(context.Background(), dialogID, teacherID, created.View.Message.ID, 0)
-	if err != nil || !domain.LessonMessageContextsEqual(request.Source.LessonContext, anchor) {
+	if err != nil || !domain.LessonMessageContextsEqual(request.Source.LessonContext, anchor) || !domain.TeacherContentAnchorsEqual(request.Source.ContentAnchor, typedAnchor) {
 		t.Fatalf("private context lost anchor: %v", err)
 	}
 	for _, event := range outbox.items {

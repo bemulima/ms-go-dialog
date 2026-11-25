@@ -86,3 +86,8 @@ or converting message data.
 ## Teacher policy source selection (015)
 
 Migration 015 adds nullable immutable `dialog_message.teacher_policy_selection`, bound to an existing Student-authored Teacher message. Its up migration uses the existing script transaction; down locks and refuses retained data. The [selector contract](teacher-policy-selection-v1.md) records replay, deletion, and deployment semantics. Source SQL has not been executed.
+
+Migration `016_teacher_content_anchor` adds nullable `dialog_message.content_anchor`.
+The value belongs to student-authored Teacher source messages and participates
+in idempotency comparison. Edits keep it and deletion clears it. Rollback locks
+the table and refuses to discard existing anchors.

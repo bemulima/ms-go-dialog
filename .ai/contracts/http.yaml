@@ -83,6 +83,15 @@ teacher_dialog:
         binding: lesson_id must equal the dialog context_id
         immutability: create replay compares the complete anchor; update rejects the field; delete clears it
         compatibility: legacy content_revision plus selected_text remains readable, replayable, and temporarily create-compatible
+    content_anchor:
+        schema: teacher-content-anchor.v1
+        optional: true
+        kinds: [COURSE, MODULE, LESSON, EXAMPLE, TEST, LESSON_TASK, PRACTICE_TASK, PROJECT]
+        pins: canonical UUID or UTC RFC3339Nano content_revision and/or lowercase sha256 content_digest
+        scope: exact typed course/module/lesson/artifact/task UUIDs and optional en/ru language_code
+        binding: COURSE/MODULE in general Teacher; EXAMPLE/TEST/LESSON in matching lesson; action contexts match the Dialog artifact and learning_action_id
+        teacher_read: top-level field for the canonical source only; absent from prior messages and durable request events
+        authority: Dialog verifies format, author, binding, and immutable replay; Teacher verifies owner ACL and revision before generation
     response_append: idempotent per personal_teacher_id and key; source message is the reply target
     channel_append: trusted Telegram adapter only; exact general binding and deterministic UUID idempotency key
     assistant_ui:

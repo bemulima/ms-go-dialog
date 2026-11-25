@@ -16,6 +16,7 @@ type messageCreateRequest struct {
 	IdempotencyKey         uuid.UUID                    `json:"idempotency_key"`
 	LearningActionID       *uuid.UUID                   `json:"learning_action_id"`
 	LessonContext          *domain.LessonMessageContext `json:"lesson_context"`
+	ContentAnchor          json.RawMessage              `json:"content_anchor"`
 	TeacherPolicySelection json.RawMessage              `json:"teacher_policy_selection"`
 }
 
@@ -36,7 +37,7 @@ func (r *messageCreateRequest) UnmarshalJSON(raw []byte) error {
 		}
 		seen[key] = true
 		switch key {
-		case "dialog_id", "reply_to_message_id", "body", "attachment_ids", "idempotency_key", "learning_action_id", "lesson_context", "teacher_policy_selection":
+		case "dialog_id", "reply_to_message_id", "body", "attachment_ids", "idempotency_key", "learning_action_id", "lesson_context", "teacher_policy_selection", "content_anchor":
 		default:
 			return domain.ErrValidation
 		}

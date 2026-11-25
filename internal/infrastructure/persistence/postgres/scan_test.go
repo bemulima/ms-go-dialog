@@ -31,7 +31,7 @@ func TestScanMessageCarriesCanonicalAssistantUI(t *testing.T) {
 		messageID, dialogID, domain.MessageAuthorPersonalTeacher, domain.MessageChannelWeb,
 		(*uuid.UUID)(nil), &teacherID, &actionID, []byte(nil), assistantUI, &replyID,
 		"plain fallback", []byte(`[]`), domain.MessageStatusActive, 1, int64(2), int64(2), (*int64)(nil), key,
-		(*time.Time)(nil), (*time.Time)(nil), now, now, (*uuid.UUID)(nil), int64(0), (*uuid.UUID)(nil), []byte(nil),
+		(*time.Time)(nil), (*time.Time)(nil), now, now, (*uuid.UUID)(nil), int64(0), (*uuid.UUID)(nil), []byte(nil), []byte(nil),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -53,7 +53,7 @@ func TestScanMessageCarriesPrivateTeacherTurnSequence(t *testing.T) {
 		messageID, dialogID, domain.MessageAuthorUser, domain.MessageChannelWeb,
 		&senderID, (*uuid.UUID)(nil), (*uuid.UUID)(nil), []byte(nil), []byte(nil), (*uuid.UUID)(nil),
 		"source", []byte(`[]`), domain.MessageStatusActive, 1, int64(9), int64(12), &teacherTurnSequence, key,
-		(*time.Time)(nil), (*time.Time)(nil), now, now, (*uuid.UUID)(nil), int64(0), (*uuid.UUID)(nil), []byte(nil),
+		(*time.Time)(nil), (*time.Time)(nil), now, now, (*uuid.UUID)(nil), int64(0), (*uuid.UUID)(nil), []byte(nil), []byte(nil),
 	})
 	if err != nil || item.TeacherTurnSequence == nil || *item.TeacherTurnSequence != teacherTurnSequence {
 		t.Fatalf("teacher turn sequence scan mismatch: item=%+v err=%v", item, err)
@@ -68,7 +68,7 @@ func TestScanMessageReplaysLegacyAndVersionedLessonContexts(t *testing.T) {
 			messageID, dialogID, domain.MessageAuthorUser, domain.MessageChannelWeb,
 			&senderID, (*uuid.UUID)(nil), (*uuid.UUID)(nil), lessonContext, []byte(nil), (*uuid.UUID)(nil),
 			"question", []byte(`[]`), domain.MessageStatusActive, 1, int64(1), int64(1), (*int64)(nil), key,
-			(*time.Time)(nil), (*time.Time)(nil), now, now, (*uuid.UUID)(nil), int64(0), (*uuid.UUID)(nil), []byte(nil),
+			(*time.Time)(nil), (*time.Time)(nil), now, now, (*uuid.UUID)(nil), int64(0), (*uuid.UUID)(nil), []byte(nil), []byte(nil),
 		}
 	}
 

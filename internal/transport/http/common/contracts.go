@@ -105,6 +105,7 @@ type MessageResponse struct {
 	PersonalTeacherID      *uuid.UUID                     `json:"personal_teacher_id,omitempty"`
 	LearningActionID       *uuid.UUID                     `json:"learning_action_id,omitempty"`
 	LessonContext          *domain.LessonMessageContext   `json:"lesson_context,omitempty"`
+	ContentAnchor          *domain.TeacherContentAnchor   `json:"content_anchor,omitempty"`
 	TeacherPolicySelection *domain.TeacherPolicySelection `json:"teacher_policy_selection,omitempty"`
 	AssistantUI            json.RawMessage                `json:"assistant_ui,omitempty"`
 	ReplyToMessageID       *uuid.UUID                     `json:"reply_to_message_id"`
@@ -131,6 +132,7 @@ func NewMessageResponse(view message.View) MessageResponse {
 		ID: view.Message.ID, DialogID: view.Message.DialogID, AuthorType: view.Message.AuthorType, Channel: view.Message.Channel,
 		SenderID: UUIDPointer(view.Message.SenderID), PersonalTeacherID: UUIDPointer(view.Message.PersonalTeacherID), LearningActionID: view.Message.LearningActionID,
 		LessonContext:          view.Message.LessonContext,
+		ContentAnchor:          view.Message.ContentAnchor,
 		TeacherPolicySelection: view.Message.TeacherPolicySelection,
 		AssistantUI:            view.Message.AssistantUI,
 		ReplyToMessageID:       view.Message.ReplyToMessageID, Body: view.Message.Body, Links: view.Message.Links,

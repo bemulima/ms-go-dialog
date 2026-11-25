@@ -73,17 +73,17 @@ func scanMember(row pgx.Row) (domain.Member, error) {
 
 const messageColumns = `id, dialog_id, author_type, channel, sender_id, personal_teacher_id, learning_action_id, lesson_context, assistant_ui, reply_to_message_id, body, links,
 	status, version, message_sequence, last_event_sequence, teacher_turn_sequence, idempotency_key,
-edited_at, deleted_at, created_at, updated_at, mentor_binding_id, mentor_context_revision, mentor_author_membership_id, teacher_policy_selection`
+edited_at, deleted_at, created_at, updated_at, mentor_binding_id, mentor_context_revision, mentor_author_membership_id, teacher_policy_selection, content_anchor`
 
 func scanMessage(row pgx.Row) (domain.Message, error) {
 	var item domain.Message
 	var links []byte
-	var lessonContext, assistantUI, teacherSelection []byte
+	var lessonContext, assistantUI, teacherSelection, anchorRaw []byte
 	var senderID, personalTeacherID, mentorAuthor *uuid.UUID
 	err := row.Scan(
 		&item.ID, &item.DialogID, &item.AuthorType, &item.Channel, &senderID, &personalTeacherID, &item.LearningActionID, &lessonContext, &assistantUI, &item.ReplyToMessageID, &item.Body, &links,
 		&item.Status, &item.Version, &item.MessageSequence, &item.LastEventSequence, &item.TeacherTurnSequence,
-		&item.IdempotencyKey, &item.EditedAt, &item.DeletedAt, &item.CreatedAt, &item.UpdatedAt, &item.MentorBindingID, &item.MentorContextRevision, &mentorAuthor, &teacherSelection,
+		&item.IdempotencyKey, &item.EditedAt, &item.DeletedAt, &item.CreatedAt, &item.UpdatedAt, &item.MentorBindingID, &item.MentorContextRevision, &mentorAuthor, &teacherSelection, &anchorRaw,
 	)
 	if err != nil {
 		return domain.Message{}, mapError(err)
@@ -109,6 +109,16 @@ func scanMessage(row pgx.Row) (domain.Message, error) {
 	}
 	if err := json.Unmarshal(links, &item.Links); err != nil {
 		return domain.Message{}, err
+	}
+	if len(anchorRaw) > 0 {
+		if item.AuthorType != domain.MessageAuthorUser || item.MentorBindingID != nil || item.Status == domain.MessageStatusDeleted {
+			return domain.Message{}, domain.ErrValidation
+		}
+		var anchor domain.TeacherContentAnchor
+		if err := json.Unmarshal(anchorRaw, &anchor); err != nil {
+			return domain.Message{}, err
+		}
+		item.ContentAnchor = &anchor
 	}
 	if len(lessonContext) > 0 {
 		if err := json.Unmarshal(lessonContext, &item.LessonContext); err != nil {
