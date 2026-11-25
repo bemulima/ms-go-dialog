@@ -54,6 +54,52 @@ func TestHubActivationOrdersReadyBeforeBufferedLifecycle(t *testing.T) {
 	}
 }
 
+func TestHubTeacherProgressRequiresOwnerAndCurrentDialogMembership(t *testing.T) {
+	hub := NewHub(5, 8)
+	dialog, space, owner := uuid.New(), uuid.New(), uuid.New()
+	register := func(user, subscribedDialog uuid.UUID) *client {
+		t.Helper()
+		item, err := hub.register(realtimeuc.Session{
+			UserID: user, SpaceID: space, DialogSequences: map[uuid.UUID]int64{subscribedDialog: 1},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		hub.activate(item)
+		t.Cleanup(func() { hub.unregister(item) })
+		return item
+	}
+	authorized := register(owner, dialog)
+	otherMember := register(uuid.New(), dialog)
+	otherDialog := register(owner, uuid.New())
+	payload, err := json.Marshal(map[string]any{
+		"v": 1, "event_id": uuid.New(), "student_id": owner, "dialog_id": dialog, "occurred_at": time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hub.BroadcastTeacherProgress(payload)
+	select {
+	case frame := <-authorized.send:
+		if frameType(t, frame) != "teacher.progress.updated" {
+			t.Fatalf("unexpected frame type: %s", frame)
+		}
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(frame, &fields) != nil || len(fields) != 5 || fields["student_id"] != nil || fields["event_sequence"] != nil {
+			t.Fatalf("frame contains unexpected routing data: %s", frame)
+		}
+	default:
+		t.Fatal("owner did not receive progress notification")
+	}
+	for _, item := range []*client{otherMember, otherDialog} {
+		select {
+		case <-item.send:
+			t.Fatal("notification escaped the scoped subscription")
+		default:
+		}
+	}
+}
+
 func TestHubLifecycleIsIsolatedByDialog(t *testing.T) {
 	hub := NewHub(5, 8)
 	spaceID, dialogID, otherDialogID := uuid.New(), uuid.New(), uuid.New()

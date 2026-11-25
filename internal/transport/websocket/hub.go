@@ -21,6 +21,8 @@ type Hub struct {
 	dialogs               map[uuid.UUID]map[*client]struct{}
 	users                 map[uuid.UUID]map[*client]struct{}
 	userCounts            map[uuid.UUID]int
+	teacherPreviews       map[uuid.UUID]teacherResponsePreview
+	teacherPreviewExpiry  *time.Timer
 	maxConnectionsPerUser int
 	queueSize             int
 	closed                bool
@@ -44,7 +46,7 @@ func NewHub(maxConnectionsPerUser, queueSize int) *Hub {
 	if queueSize < 1 {
 		queueSize = 64
 	}
-	return &Hub{dialogs: make(map[uuid.UUID]map[*client]struct{}), users: make(map[uuid.UUID]map[*client]struct{}), userCounts: make(map[uuid.UUID]int), maxConnectionsPerUser: maxConnectionsPerUser, queueSize: queueSize}
+	return &Hub{dialogs: make(map[uuid.UUID]map[*client]struct{}), users: make(map[uuid.UUID]map[*client]struct{}), userCounts: make(map[uuid.UUID]int), teacherPreviews: make(map[uuid.UUID]teacherResponsePreview), maxConnectionsPerUser: maxConnectionsPerUser, queueSize: queueSize}
 }
 func (h *Hub) register(session realtimeuc.Session) (*client, error) {
 	h.mu.Lock()
@@ -133,6 +135,12 @@ func (h *Hub) BroadcastLifecycle(subject domain.EventSubject, payload []byte) {
 				}
 			}
 		}
+	case domain.EventDialogClosed:
+		delete(h.teacherPreviews, route.DialogID)
+	case domain.EventDialogMessageDeleted, domain.EventDialogMessageHidden:
+		if identity.MessageID != nil && h.teacherPreviews[route.DialogID].MessageID == *identity.MessageID {
+			delete(h.teacherPreviews, route.DialogID)
+		}
 	case domain.EventDialogMemberAdded:
 		for item := range h.users[route.UserID] {
 			if item.session.SpaceID == route.SpaceID {
@@ -147,6 +155,9 @@ func (h *Hub) BroadcastLifecycle(subject domain.EventSubject, payload []byte) {
 		}
 	}
 	if subject == domain.EventDialogMemberRemoved {
+		if h.teacherPreviews[route.DialogID].StudentID == route.UserID {
+			delete(h.teacherPreviews, route.DialogID)
+		}
 		for item := range h.users[route.UserID] {
 			h.removeDialogLocked(item, route.DialogID)
 		}
@@ -174,6 +185,43 @@ func (h *Hub) BroadcastEphemeral(payload []byte) {
 		return
 	}
 	h.broadcast(event.DialogID, append([]byte(nil), payload...))
+}
+
+// BroadcastTeacherProgress sends a cache invalidation only to the owner of a
+// currently subscribed dialog. NATS routing identity is not part of the frame.
+func (h *Hub) BroadcastTeacherProgress(payload []byte) {
+	var event struct {
+		V          int       `json:"v"`
+		EventID    uuid.UUID `json:"event_id"`
+		DialogID   uuid.UUID `json:"dialog_id"`
+		StudentID  uuid.UUID `json:"student_id"`
+		OccurredAt time.Time `json:"occurred_at"`
+	}
+	if len(payload) > 512 || json.Unmarshal(payload, &event) != nil || event.V != protocolVersion ||
+		event.EventID == uuid.Nil || event.DialogID == uuid.Nil || event.StudentID == uuid.Nil || event.OccurredAt.IsZero() {
+		return
+	}
+	if !h.publicVisible(event.DialogID, nil) {
+		return
+	}
+	frame, err := json.Marshal(map[string]any{
+		"v": event.V, "type": "teacher.progress.updated", "event_id": event.EventID,
+		"dialog_id": event.DialogID, "occurred_at": event.OccurredAt,
+	})
+	if err != nil {
+		return
+	}
+	h.mu.RLock()
+	var slow []*client
+	for item := range h.dialogs[event.DialogID] {
+		if item.session.UserID == event.StudentID && !item.push(frame) {
+			slow = append(slow, item)
+		}
+	}
+	h.mu.RUnlock()
+	for _, item := range slow {
+		h.unregister(item)
+	}
 }
 
 func (h *Hub) publicVisible(dialog uuid.UUID, message *uuid.UUID) bool {
@@ -237,6 +285,11 @@ func (h *Hub) Close() {
 		return
 	}
 	h.closed = true
+	if h.teacherPreviewExpiry != nil {
+		h.teacherPreviewExpiry.Stop()
+		h.teacherPreviewExpiry = nil
+	}
+	clear(h.teacherPreviews)
 	items := make([]*client, 0)
 	for _, clients := range h.users {
 		for item := range clients {

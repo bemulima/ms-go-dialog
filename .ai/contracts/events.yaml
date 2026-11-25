@@ -140,3 +140,4 @@ message_created:
 ephemeral:
     transport: Core NATS
     subject: dialog.realtime.typing.<dialog_uuid>
+    teacher_progress_subject: dialog.realtime.teacher-progress.v1

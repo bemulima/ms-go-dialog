@@ -150,7 +150,7 @@ func run() error {
 	var websocketHandler http.Handler
 	if modeHasRealtime(cfg.ServiceMode) {
 		hub = websocketadapter.NewHub(cfg.WSMaxConnectionsPerUser, cfg.WSQueueSize)
-		hub.Visibility = realtimeuc.PublicVisibility{Bindings: mentorBindings, Messages: messages}
+		hub.Visibility = realtimeuc.PublicVisibility{Bindings: mentorBindings, Messages: messages, Dialogs: dialogs, Spaces: spaces}
 		websocketHandler = websocketadapter.Handler{Tickets: realtimeService, Hub: hub, Typing: natsClient, Metrics: metrics, MaxFrameBytes: cfg.WSMaxFrameBytes}
 		subscription, err = messageadapter.SubscribeRealtime(natsClient.Conn, hub)
 		if err != nil {

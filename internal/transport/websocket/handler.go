@@ -80,7 +80,7 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.Metrics.WebSocketOpened()
 		defer h.Metrics.WebSocketClosed()
 	}
-	initial := h.Hub.activate(item, readyFrame(session.SpaceID, session.DialogSequences, h.now()))
+	initial := h.Hub.activateWithTeacherPreview(item, readyFrame(session.SpaceID, session.DialogSequences, h.now()))
 	writerDone := make(chan struct{})
 	go func() { defer close(writerDone); h.writeLoop(connection, item, initial); _ = connection.Close() }()
 	h.readLoop(r.Context(), connection, item)

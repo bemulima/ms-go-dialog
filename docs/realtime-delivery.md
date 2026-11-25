@@ -18,6 +18,11 @@ port before test-only creation; the coordinator owns the broker's lifecycle.
 
 Lifecycle subjects use the `dialog.*` namespace. Realtime instances subscribe without a shared queue group so every instance can deliver to its own local connections. Ephemeral typing uses Core NATS subject `dialog.realtime.typing.<dialog_uuid>` and is never stored in the outbox.
 
+Teacher publishes a cache invalidation on the exact Core NATS subject
+`dialog.realtime.teacher-progress.v1` after durable job changes. The envelope
+contains version, event ID, dialog ID, student ID and occurrence time. Dialog
+uses the student ID only for routing. This subject stays outside JetStream.
+
 `dialog.teacher.requested` is durable in the same stream but is not a WebSocket lifecycle event. It is consumed by Teacher only. The normal `dialog.message.created` event provides browser realtime for both the source student message and the later teacher response.
 
 `dialog.teacher.context-mutated` schema v1 is also durable and Teacher-only,

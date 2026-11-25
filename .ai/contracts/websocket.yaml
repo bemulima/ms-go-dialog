@@ -28,6 +28,7 @@ server_events:
         - connection.ready
         - typing.started
         - typing.stopped
+        - teacher.progress.updated
         - error
         - ping
 client_events:
@@ -43,3 +44,11 @@ mentor_education:
     source_of_truth: docs/mentor-education-v1.md
     payload_delivery: denied on generic websocket; use current-owner HTTP polling
     durable_fence: check message binding and protected Cohort before any lifecycle or ephemeral fanout
+
+teacher_response_preview_v1:
+    transport: dialog.v1, existing ticket and origin checks
+    events: [teacher.response.started, teacher.response.delta, teacher.response.completed, teacher.response.failed, teacher.response.cancelled]
+    owner_scope: active membership and matching student in a regular Teacher dialog
+    sequence: independent of the durable event cursor and fenced by the processing attempt
+    reconnect: latest active snapshot or text-free terminal state, best-effort in-memory for up to 45 seconds
+    final_answer: recover the canonical message by the existing durable Dialog mechanism
