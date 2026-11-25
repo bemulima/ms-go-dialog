@@ -64,6 +64,38 @@ signed URL issuance checks current access again after FileStorage responds.
 Previously issued URL bytes retain FileStorage's existing short expiry; this
 change does not revoke a downloaded copy or an already issued URL.
 
+## Mentor MCP reads
+
+Mentor's HTTPS client uses `POST /internal/v1/mentor-mcp/dialogs` and
+`POST /internal/v1/mentor-mcp/dialog-messages` with one
+`X-Mentor-Dialog-MCP-Read-Token`. `DIALOG_MENTOR_MCP_READ_TOKEN` enables both
+routes when educational access is enabled. It is distinct from Dialog's other
+purpose tokens. Mentor supplies `mentor_id` from the verified MCP delegation
+and rechecks that Mentor is active after Dialog responds. Dialog uses the
+existing current-access callback for consent, blocks, membership, and history
+floors. Requests do not accept browser credentials or actor headers.
+
+Both routes require exact JSON within 1024 bytes, no query or content encoding,
+and a `limit` of 1–20. Responses are private and use `Cache-Control: no-store`.
+
+- Dialog list accepts `mentor_id`, `cursor`, and `limit`. It returns
+  `{schema:"dialog.mentor-mcp-dialogs.v1",mentor_id,items,next_cursor?}`.
+  Items contain `dialog_id`, `binding_id`, `kind`, and `source_id` for
+  existing Assignment or Cohort bindings owned by the Mentor. Pass an empty
+  cursor initially. A returned cursor is opaque, authenticated, and bound to
+  the Mentor. Follow it even when all scanned items were inaccessible.
+- Message history accepts `mentor_id`, `dialog_id`, `binding_id`,
+  `before_sequence`, and `limit`. It returns
+  `{schema:"dialog.mentor-mcp-messages.v1",mentor_id,dialog_id,binding_id,items,next_before_sequence?}`.
+  Start with an empty string for the newest page. Follow the returned decimal
+  string to read older pages. Each item contains `message_id`, `sender_id`,
+  `body`, `body_truncated`, and `sent_at`. The body is plain text capped at
+  800 Unicode code points. Current access and message status govern visibility
+  throughout paging.
+
+These reads use existing bindings and history and perform no provisioning,
+membership updates, or read-state mutations.
+
 ## Abuse reports and moderation
 
 `POST /api/v1/message-report` accepts exact `{request_id,message_id,category,details}`,

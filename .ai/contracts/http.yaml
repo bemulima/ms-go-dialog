@@ -137,6 +137,19 @@ mentor_education:
     owner_token_header: X-Mentor-Dialog-Token
     default_enabled: false
     context_page_limit: 30
+mentor_mcp_dialog_reads:
+    source_of_truth: docs/mentor-education-v1.md
+    list: POST /internal/v1/mentor-mcp/dialogs
+    history: POST /internal/v1/mentor-mcp/dialog-messages
+    token_header: X-Mentor-Dialog-MCP-Read-Token
+    token_configuration: DIALOG_MENTOR_MCP_READ_TOKEN
+    default_enabled: false
+    requires: DIALOG_MENTOR_EDUCATION_ENABLED
+    request_limit_bytes: 1024
+    page_limit: 20
+    message_body_limit_codepoints: 800
+    access: current owner-fenced Mentor Assignment or Cohort binding and current author history
+    effects: read only
 abuse_reports:
     source_of_truth: docs/mentor-education-v1.md
     submit: POST /api/v1/message-report

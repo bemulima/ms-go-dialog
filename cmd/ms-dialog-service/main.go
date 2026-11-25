@@ -176,6 +176,7 @@ func run() error {
 		dependencies.MentorInternalToken = cfg.MentorInternalToken
 		dependencies.MentorContactService = &dialoguc.MentorContactService{Dialogs: dialogService, Enabled: cfg.MentorContactEnabled, SpaceKey: cfg.MentorContactSpaceKey}
 		dependencies.MentorEducationService = education
+		dependencies.MentorMCPReadToken = cfg.MentorMCPReadToken
 		dependencies.ReportService = reportService
 	}
 	if modeHasRealtime(cfg.ServiceMode) {
