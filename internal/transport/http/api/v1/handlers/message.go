@@ -31,10 +31,19 @@ func (h MessageHandler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 		selection = &value
 	}
+	var anchor *domain.TeacherContentAnchor
+	if len(request.ContentAnchor) > 0 {
+		var value domain.TeacherContentAnchor
+		if json.Unmarshal(request.ContentAnchor, &value) != nil {
+			common.WriteError(w, r, domain.ErrValidation)
+			return
+		}
+		anchor = &value
+	}
 	result, err := h.Service.Create(r.Context(), middleware.Actor(r), messageuc.CreateInput{
 		DialogID: request.DialogID, ReplyToMessageID: request.ReplyToMessageID,
 		Body: request.Body, AttachmentIDs: request.AttachmentIDs, IdempotencyKey: request.IdempotencyKey,
-		LearningActionID: request.LearningActionID, LessonContext: request.LessonContext, TeacherPolicySelection: selection,
+		LearningActionID: request.LearningActionID, LessonContext: request.LessonContext, ContentAnchor: anchor, TeacherPolicySelection: selection,
 	})
 	if err != nil {
 		common.WriteError(w, r, err)

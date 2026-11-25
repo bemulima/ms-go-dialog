@@ -54,6 +54,7 @@ teacher_requested:
     excludes:
         - message body
         - lesson_context
+        - content_anchor
         - mastery
         - dialog history
     canonical_v2:
@@ -96,6 +97,7 @@ teacher_requested:
             - assistant_ui
             - message body
             - lesson_context
+            - content_anchor
             - mastery
             - dialog history
         runtime: direct source producer is gated by DIALOG_TEACHER_ORDERING_V2_ENABLED; trusted canonical action materialization additionally requires DIALOG_CANONICAL_STUDENT_TURN_ENABLED and never emits V1

@@ -382,6 +382,7 @@ type Message struct {
 	PersonalTeacherID        uuid.UUID
 	LearningActionID         *uuid.UUID
 	LessonContext            *LessonMessageContext
+	ContentAnchor            *TeacherContentAnchor
 	TeacherPolicySelection   *TeacherPolicySelection
 	AssistantUI              json.RawMessage
 	ReplyToMessageID         *uuid.UUID
@@ -406,7 +407,7 @@ func (m Message) Validate() error {
 	if m.TeacherPolicySelection != nil && (!m.TeacherPolicySelection.Valid() || m.MentorBindingID != nil || m.AuthorType != MessageAuthorUser || m.Channel != MessageChannelWeb) {
 		return ErrValidation
 	}
-	if (m.MentorBindingID == nil) != (m.MentorContextRevision == 0 && m.MentorAuthorMembershipID == uuid.Nil) || m.MentorBindingID != nil && (*m.MentorBindingID == uuid.Nil || m.MentorContextRevision < 1 || m.MentorAuthorMembershipID == uuid.Nil || m.AuthorType != MessageAuthorUser || m.LearningActionID != nil || m.LessonContext != nil || len(m.AssistantUI) > 0) {
+	if (m.MentorBindingID == nil) != (m.MentorContextRevision == 0 && m.MentorAuthorMembershipID == uuid.Nil) || m.MentorBindingID != nil && (*m.MentorBindingID == uuid.Nil || m.MentorContextRevision < 1 || m.MentorAuthorMembershipID == uuid.Nil || m.AuthorType != MessageAuthorUser || m.LearningActionID != nil || m.LessonContext != nil || m.ContentAnchor != nil || len(m.AssistantUI) > 0) {
 		return ErrValidation
 	}
 	if m.ID == uuid.Nil || m.DialogID == uuid.Nil || !m.AuthorType.Valid() || !m.Channel.Valid() || m.IdempotencyKey == uuid.Nil ||
@@ -420,6 +421,9 @@ func (m Message) Validate() error {
 	}
 	if m.LearningActionID != nil && *m.LearningActionID == uuid.Nil {
 		return fmt.Errorf("%w: invalid learning action", ErrValidation)
+	}
+	if m.ContentAnchor != nil && (!m.ContentAnchor.Valid() || m.AuthorType != MessageAuthorUser || m.Status == MessageStatusDeleted) {
+		return fmt.Errorf("%w: invalid teacher content anchor", ErrValidation)
 	}
 	if m.LessonContext != nil {
 		normalized, err := NormalizeLessonMessageContext(m.LessonContext)
